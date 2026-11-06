@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 
 from app.config import settings
-from app.routers import chat_router, health_router, students_router
+from app.routers import chat_router, health_router, students_router, voice_router
 
 app = FastAPI(
     title="Recruiting Platform API",
@@ -27,6 +27,7 @@ app.add_middleware(
 app.include_router(health_router)
 app.include_router(chat_router)
 app.include_router(students_router)
+app.include_router(voice_router)
 
 
 def custom_openapi():
