@@ -115,3 +115,4 @@ def recompute_score(
     logger.info(f"Recomputed score for student {student_id}: {score_result.score} (trigger: {trigger})")
 
     return score_result
+

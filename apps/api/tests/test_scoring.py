@@ -239,3 +239,4 @@ def test_breakdown_source_reflects_provenance():
     assert source_map["First full-time job"] == "user_said"
     assert any("full year" in k and source_map[k] == "system" for k in source_map)
     assert source_map["Documents pre-verified"] == "system"
+

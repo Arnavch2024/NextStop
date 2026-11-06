@@ -78,3 +78,4 @@ def test_score_endpoint_reflects_score_event_history(client, mock_supabase):
     pdata = prof_res.json()
     assert len(pdata["education"]) == 1
     assert pdata["education"][0]["level"] == "twelfth"
+

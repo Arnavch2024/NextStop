@@ -98,3 +98,4 @@ def get_transcriber(provider: Optional[str] = None) -> Transcriber:
             _default_transcriber = WhisperTranscriber()
 
     return _default_transcriber
+

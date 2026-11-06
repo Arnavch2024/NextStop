@@ -72,3 +72,4 @@ async def transcribe_audio(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"Transcription failed: {str(exc)}",
         )
+

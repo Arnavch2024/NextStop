@@ -175,3 +175,4 @@ def parse_resume(
             client=sb,
         )
         raise exc
+

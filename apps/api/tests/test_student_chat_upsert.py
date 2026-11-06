@@ -156,3 +156,4 @@ def test_student_chat_turn_with_injected_data(client, mock_supabase):
     assert len(data["records_created"]) == 1
     assert data["records_created"][0]["table"] == "internships"
     assert data["records_created"][0]["op"] == "created"
+

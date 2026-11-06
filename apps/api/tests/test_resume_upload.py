@@ -108,3 +108,4 @@ def test_upload_resume_success(client, mock_supabase):
     assert get_res.status_code == 200
     assert get_res.json()["document_id"] == doc_id
     assert "signed_url" in get_res.json()
+
