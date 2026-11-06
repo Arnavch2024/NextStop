@@ -85,6 +85,29 @@ class FakeQueryBuilder:
         return mock_res
 
 
+class FakeStorageBucket:
+    def __init__(self, bucket_name: str):
+        self.bucket_name = bucket_name
+        self.files = {}
+
+    def upload(self, path: str, file_bytes: Any, file_options: Any = None):
+        self.files[path] = file_bytes
+        return {"Key": f"{self.bucket_name}/{path}"}
+
+    def create_signed_url(self, path: str, expires_in: int = 3600):
+        return {"signedURL": f"https://mock-storage.local/{self.bucket_name}/{path}?token=mock-token"}
+
+
+class FakeStorageClient:
+    def __init__(self):
+        self.buckets = {}
+
+    def from_(self, bucket_name: str):
+        if bucket_name not in self.buckets:
+            self.buckets[bucket_name] = FakeStorageBucket(bucket_name)
+        return self.buckets[bucket_name]
+
+
 class MockSupabaseClient:
     def __init__(self):
         self.store: Dict[str, List[Dict[str, Any]]] = {
@@ -106,9 +129,16 @@ class MockSupabaseClient:
             "contacts": [],
             "raw_events": [],
             "agent_runs": [],
+            "education": [],
+            "internships": [],
+            "jobs": [],
+            "skills": [],
+            "documents": [],
+            "score_events": [],
         }
         self.auth = MagicMock()
         self.auth.get_user.side_effect = self._mock_get_user
+        self.storage = FakeStorageClient()
 
     def _mock_get_user(self, token: str):
         if token == "valid-token-student":

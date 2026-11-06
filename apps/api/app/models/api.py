@@ -49,3 +49,38 @@ class ChatResponse(BaseModel):
     reply: str
     steps: List[AgentStep] = Field(default_factory=list)
     records_created: List[RecordRef] = Field(default_factory=list)
+
+
+# --- Day 2 Models for Student Slice ---
+
+class BreakdownItemModel(BaseModel):
+    reason: str
+    points: int
+    source: str = Field(description="'resume' | 'user_said' | 'system'")
+
+
+class ScoreResponse(BaseModel):
+    score: int
+    breakdown: List[BreakdownItemModel]
+    next_best_actions: List[str]
+
+
+class ResumeResponse(BaseModel):
+    document_id: str
+    signed_url: str
+    records_created: List[RecordRef]
+    missing_fields: List[str]
+    score: ScoreResponse
+
+
+class StudentProfileResponse(BaseModel):
+    student: Optional[Dict[str, Any]] = None
+    education: List[Dict[str, Any]] = Field(default_factory=list)
+    internships: List[Dict[str, Any]] = Field(default_factory=list)
+    jobs: List[Dict[str, Any]] = Field(default_factory=list)
+    skills: List[Dict[str, Any]] = Field(default_factory=list)
+    documents: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class TranscribeResponse(BaseModel):
+    text: str

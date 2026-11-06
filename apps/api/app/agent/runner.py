@@ -26,7 +26,7 @@ from app.models.api import (
     ChatResponse,
     RecordRef,
 )
-from app.models.db import UserProfile
+from app.models.db import ProfileRole, UserProfile
 
 MAX_AGENT_ITERATIONS = 5
 
@@ -141,7 +141,47 @@ def run_agent_loop(
 
     try:
         # 2. Build history and Gemini config
-        system_prompt = get_system_prompt_for_role(user.role)
+        student_data = None
+        missing_fields = None
+
+        if user.role == ProfileRole.STUDENT:
+            try:
+                stu_res = sb.table("students").select("*").eq("profile_id", user.id).execute()
+                if stu_res.data and len(stu_res.data) > 0:
+                    student_row = stu_res.data[0]
+                    student_id = str(student_row["id"])
+                    edu_rows = sb.table("education").select("*").eq("student_id", student_id).execute().data or []
+                    intern_rows = sb.table("internships").select("*").eq("student_id", student_id).execute().data or []
+                    job_rows = sb.table("jobs").select("*").eq("student_id", student_id).execute().data or []
+                    skill_rows = sb.table("skills").select("*").eq("student_id", student_id).execute().data or []
+
+                    student_data = {
+                        "student": student_row,
+                        "education": edu_rows,
+                        "internships": intern_rows,
+                        "jobs": job_rows,
+                        "skills": skill_rows,
+                    }
+                    missing = []
+                    if not student_row.get("college_id"):
+                        missing.append("college")
+                    if not student_row.get("degree"):
+                        missing.append("degree")
+                    if not student_row.get("batch_year"):
+                        missing.append("batch_year")
+                    if not any(e.get("level") in ("tenth", "twelfth") for e in edu_rows):
+                        missing.append("high_school_score")
+                    if not any(e.get("level") == "bachelors" for e in edu_rows):
+                        missing.append("bachelors_score")
+                    if not skill_rows:
+                        missing.append("skills")
+                    missing_fields = missing
+            except Exception as e:
+                logger.warning(f"Could not load student context for prompt: {e}")
+
+        system_prompt = get_system_prompt_for_role(
+            user.role, student_data=student_data, missing_fields=missing_fields
+        )
         history = load_recent_events(user.id, limit=50, client=sb)
         contents = build_gemini_contents_from_history(history, message)
 

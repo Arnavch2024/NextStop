@@ -17,6 +17,34 @@ class AgentRunStatus(str, Enum):
     FAILED = "failed"
 
 
+class EducationLevel(str, Enum):
+    TENTH = "tenth"
+    TWELFTH = "twelfth"
+    BACHELORS = "bachelors"
+    MASTERS = "masters"
+    OTHER = "other"
+
+
+class ScoreScale(str, Enum):
+    PERCENTAGE = "percentage"
+    GPA10 = "gpa10"
+    CGPA10 = "cgpa10"
+    CGPA4 = "cgpa4"
+
+
+class DocumentKind(str, Enum):
+    RESUME = "resume"
+    ID_PROOF = "id_proof"
+    CERTIFICATE = "certificate"
+    OTHER = "other"
+
+
+class VerificationStatus(str, Enum):
+    PENDING = "pending"
+    PRE_VERIFIED = "pre_verified"
+    REJECTED = "rejected"
+
+
 class UserProfile(BaseModel):
     id: str
     role: Optional[ProfileRole] = None
@@ -32,6 +60,8 @@ class StudentUpsertData(BaseModel):
     batch_year: int = Field(..., description="Must be graduating batch 2027 or 2028")
     degree: Optional[str] = None
     college_id: Optional[str] = None
+    source: Optional[str] = Field(default="user_said")
+    confidence: Optional[float] = Field(default=1.0, ge=0.0, le=1.0)
 
     @field_validator("batch_year")
     @classmethod
@@ -44,11 +74,15 @@ class StudentUpsertData(BaseModel):
 class CollegeUpsertData(BaseModel):
     name: str = Field(..., min_length=1)
     city: str = Field(default="Mumbai", min_length=1)
+    source: Optional[str] = Field(default="user_said")
+    confidence: Optional[float] = Field(default=1.0, ge=0.0, le=1.0)
 
 
 class CompanyUpsertData(BaseModel):
     name: str = Field(..., min_length=1)
     industry: Optional[str] = None
+    source: Optional[str] = Field(default="user_said")
+    confidence: Optional[float] = Field(default=1.0, ge=0.0, le=1.0)
 
 
 class ContactUpsertData(BaseModel):
@@ -57,6 +91,67 @@ class ContactUpsertData(BaseModel):
     title: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
+    source: Optional[str] = Field(default="user_said")
+    confidence: Optional[float] = Field(default=1.0, ge=0.0, le=1.0)
+
+
+class EducationUpsertData(BaseModel):
+    level: str = Field(..., description="Level: tenth, twelfth, bachelors, masters, other")
+    institution: Optional[str] = None
+    degree: Optional[str] = None
+    branch: Optional[str] = None
+    board_or_university: Optional[str] = None
+    score_value: Optional[float] = None
+    score_scale: Optional[str] = None  # percentage, gpa10, cgpa10, cgpa4
+    start_year: Optional[int] = None
+    end_year: Optional[int] = None
+    source: Optional[str] = Field(default="user_said")
+    confidence: Optional[float] = Field(default=1.0, ge=0.0, le=1.0)
+
+    @field_validator("level")
+    @classmethod
+    def validate_level(cls, v: str) -> str:
+        lvl = str(v).lower().strip()
+        if lvl in ("10th", "tenth", "ssc", "x", "10"):
+            return "tenth"
+        if lvl in ("12th", "twelfth", "hsc", "xii", "12", "junior college"):
+            return "twelfth"
+        if lvl in ("bachelors", "undergraduate", "bachelor", "btech", "b.tech", "be", "b.e", "bsc", "b.sc", "bms", "b.m.s"):
+            return "bachelors"
+        if lvl in ("masters", "postgraduate", "master", "mtech", "m.tech", "msc", "m.sc", "mba", "m.b.a"):
+            return "masters"
+        if lvl in ("tenth", "twelfth", "bachelors", "masters", "other"):
+            return lvl
+        return "other"
+
+
+class InternshipUpsertData(BaseModel):
+    company: Optional[str] = None
+    company_id: Optional[str] = None
+    role: Optional[str] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    duration_months: Optional[float] = None
+    source: Optional[str] = Field(default="user_said")
+    confidence: Optional[float] = Field(default=1.0, ge=0.0, le=1.0)
+
+
+class JobUpsertData(BaseModel):
+    company: Optional[str] = None
+    company_id: Optional[str] = None
+    role: Optional[str] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    duration_months: Optional[float] = None
+    source: Optional[str] = Field(default="user_said")
+    confidence: Optional[float] = Field(default=1.0, ge=0.0, le=1.0)
+
+
+class SkillUpsertData(BaseModel):
+    name: str = Field(..., min_length=1)
+    proficiency: Optional[str] = None
+    source: Optional[str] = Field(default="user_said")
+    confidence: Optional[float] = Field(default=1.0, ge=0.0, le=1.0)
 
 
 TABLE_VALIDATORS = {
@@ -64,7 +159,10 @@ TABLE_VALIDATORS = {
     "colleges": CollegeUpsertData,
     "companies": CompanyUpsertData,
     "contacts": ContactUpsertData,
+    "education": EducationUpsertData,
+    "internships": InternshipUpsertData,
+    "jobs": JobUpsertData,
+    "skills": SkillUpsertData,
 }
 
 ALLOWED_TABLES = set(TABLE_VALIDATORS.keys())
-
