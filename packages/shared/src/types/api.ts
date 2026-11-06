@@ -34,3 +34,114 @@ export interface ChatResponse {
   records_created: RecordRef[];
 }
 
+export interface TranscribeResponse {
+  text: string;
+}
+
+export interface BreakdownItem {
+  reason: string;
+  points: number;
+  source: 'resume' | 'user_said' | 'system';
+}
+
+export interface ScoreResponse {
+  score: number;
+  breakdown: BreakdownItem[];
+  next_best_actions: string[];
+}
+
+export interface ResumeResponse {
+  document_id: string;
+  signed_url: string;
+  records_created: RecordRef[];
+  missing_fields: string[];
+  score: ScoreResponse;
+}
+
+export interface StudentRecord {
+  id: string;
+  profile_id: string;
+  college_id?: string | null;
+  full_name: string;
+  batch_year: number;
+  degree?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface EducationRecord {
+  id: string;
+  student_id: string;
+  profile_id: string;
+  level: 'tenth' | 'twelfth' | 'bachelors' | 'masters' | 'other';
+  institution?: string | null;
+  degree?: string | null;
+  branch?: string | null;
+  board_or_university?: string | null;
+  score_value?: number | null;
+  score_scale?: 'percentage' | 'gpa10' | 'cgpa10' | 'cgpa4' | null;
+  start_year?: number | null;
+  end_year?: number | null;
+  source: string;
+  confidence: number;
+}
+
+export interface InternshipRecord {
+  id: string;
+  student_id: string;
+  profile_id: string;
+  company?: string | null;
+  company_id?: string | null;
+  role?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  duration_months?: number | null;
+  source: string;
+  confidence: number;
+}
+
+export interface JobRecord {
+  id: string;
+  student_id: string;
+  profile_id: string;
+  company?: string | null;
+  company_id?: string | null;
+  role?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  duration_months?: number | null;
+  source: string;
+  confidence: number;
+}
+
+export interface SkillRecord {
+  id: string;
+  student_id: string;
+  profile_id: string;
+  name: string;
+  proficiency?: string | null;
+  source: string;
+  confidence: number;
+}
+
+export interface DocumentRecord {
+  id: string;
+  student_id: string;
+  profile_id: string;
+  kind: 'resume' | 'id_proof' | 'certificate' | 'other';
+  storage_path: string;
+  file_name?: string | null;
+  mime_type?: string | null;
+  size_bytes?: number | null;
+  verification_status: 'pending' | 'pre_verified' | 'rejected';
+  uploaded_at: string;
+}
+
+export interface StudentProfile {
+  student: StudentRecord | null;
+  education: EducationRecord[];
+  internships: InternshipRecord[];
+  jobs: JobRecord[];
+  skills: SkillRecord[];
+  documents: DocumentRecord[];
+}
