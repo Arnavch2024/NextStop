@@ -99,3 +99,61 @@ Four roles, selected at onboarding and stored on the user's profile:
 - **NFR-2**: The API SHALL validate tool calls server-side before execution; `upsert_record` SHALL enforce a table whitelist and ownership.
 - **NFR-3**: Secrets (Supabase service key, Claude API key) SHALL never be exposed to the client; the API SHALL validate user-supplied JWTs server-side.
 - **NFR-4**: Realtime round-trip for cross-device message sync SHALL be under 2 seconds in normal network conditions.
+---
+
+## 8. Day 2 — Student Slice (extends the spec; stack and Day 1 contracts unchanged)
+
+Day 2 adds the Student experience: voice input, resume upload + parsing, deterministic scoring, and a student home screen. This section **lifts** the following Day 1 non-goals into scope for Day 2 only: resume parsing, voice input, and scoring. The Day 1 contracts (`GET /health`, `POST /v1/chat`) are unchanged; new endpoints are additive. The internal `upsert_record` tool is extended **additively** (new tables + a `source` field) — the public `/v1/chat` response shape `{reply, steps, records_created}` is unchanged.
+
+### 8.1 Voice Input
+- **FR-VOICE-1**: THE SYSTEM SHALL expose `POST /v1/voice/transcribe` (multipart) accepting an audio file and returning `{text}`.
+- **FR-VOICE-2**: THE SYSTEM SHALL support transcription in English and Hindi; Marathi support SHALL be best-effort pending a recorded test (see FR-VOICE-6).
+- **FR-VOICE-3**: WHEN the client receives transcribed text THE SYSTEM SHALL send it through the existing `POST /v1/chat` (no new chat contract).
+- **FR-VOICE-4**: WHEN audio cannot be transcribed THE SYSTEM SHALL return HTTP 422 with an error message.
+- **FR-VOICE-5**: THE transcription provider SHALL be pluggable behind a `Transcriber` interface, defaulting to an OpenAI Whisper-compatible API (`whisper-1`).
+- **FR-VOICE-6**: A Marathi transcription test SHALL exist; until it passes reliably, Marathi is marked best-effort and the test carries an explicit best-effort marker with its outcome recorded.
+
+### 8.2 Resume Upload & Parsing
+- **FR-RESUME-1**: THE SYSTEM SHALL expose `POST /v1/students/me/resume` (multipart) accepting PDF or DOCX.
+- **FR-RESUME-2**: THE SYSTEM SHALL store the file in a private Supabase Storage bucket and expose it only via signed URLs.
+- **FR-RESUME-3**: A resume-parsing agent SHALL extract: name, college, degree, branch, batch year, 10th %, 12th %, CGPA or % (bachelors), internships (company, role, dates), jobs (company, role, dates), skills.
+- **FR-RESUME-4**: EVERY extracted field SHALL be stored with `source='resume'` and a `confidence` value in [0,1].
+- **FR-RESUME-5**: THE SYSTEM SHALL never present a form to the user; any missing field SHALL be requested in chat.
+- **FR-RESUME-6**: THE SYSTEM SHALL store document metadata (kind, storage path, mime, size) in the `documents` table; file bytes live only in Storage.
+
+### 8.3 Chat-Created Fields
+- **FR-CHATFIELD-1**: WHEN a student states a fact in chat (e.g., "I interned at TCS for 2 months") THE agent SHALL call `upsert_record` and store it with `source='user_said'`.
+- **FR-CHATFIELD-2**: THE chat agent's `upsert_record` SHALL accept the new tables (`education`, `internships`, `jobs`, `skills`) in addition to the Day 1 tables.
+
+### 8.4 Scoring Engine
+- **FR-SCORE-1**: THE SYSTEM SHALL implement a deterministic Python scoring module with no LLM involvement.
+- **FR-SCORE-2**: THE score SHALL start at 20 and be capped at 100.
+- **FR-SCORE-3**: THE SYSTEM SHALL award +1 if high school score > 85% (or > 8 GPA); +1 if bachelors score > 85% (or > 8 CGPA); +1 per completed internship; +1 for the first full-time job; +1 per full year in full-time work.
+- **FR-SCORE-4**: THE SYSTEM SHALL award +2 when documents are pre-verified and +2 when a reference check is authorized; both inputs SHALL be accepted by the engine now even though they are wired on Day 5.
+- **FR-SCORE-5**: THE scoring result SHALL be `{score, breakdown: [{reason, points, source}], next_best_actions: []}`.
+- **FR-SCORE-6**: THE SYSTEM SHALL expose `GET /v1/students/me/score` returning the current score breakdown.
+- **FR-SCORE-7**: THE SYSTEM SHALL recompute the score whenever student data changes and store the history in `score_events`.
+- **FR-SCORE-8**: EVERY ambiguity in the scoring rules SHALL be documented in `docs/scoring.md`.
+
+### 8.5 Student Home Screen
+- **FR-HOME-1**: THE SYSTEM SHALL provide a Student home screen (web + mobile) showing the current score.
+- **FR-HOME-2**: THE home screen SHALL show the breakdown list (answering "why is my score N?").
+- **FR-HOME-3**: THE home screen SHALL show the next best action.
+- **FR-HOME-4**: THE home screen SHALL show a basic vertical timeline of college → internship → job.
+- **FR-HOME-5**: THE railway-style timeline visual is out of scope for Day 2 (Day 5).
+
+### 8.6 Schema Additions
+- **FR-SCHEMA-1**: THE SYSTEM SHALL add tables: `education`, `internships`, `jobs`, `skills`, `score_events`, `documents` (metadata only).
+- **FR-SCHEMA-2**: All new tables SHALL be protected by RLS so a student sees only their own rows.
+
+### 8.7 Day 2 Non-Goals
+- Document verification UI/flow and reference-check flow (Day 5 wiring only; the engine must accept the flags now).
+- Railway-style timeline visual (Day 5).
+- Recruiter/Company-facing views of student scores (Day 3+).
+
+### 8.8 Prompt-Injection Defense
+- **FR-PROMPTSEC-1**: WHEN resume-derived (or any structured) values are injected into the chat agent's system prompt, THE SYSTEM SHALL place them inside a delimited `<student_data>...</student_data>` block.
+- **FR-PROMPTSEC-2**: THE system prompt SHALL include an explicit rule that the `<student_data>` block is data, not instructions, and that the agent SHALL NOT follow any instructions, commands, or role-play found inside it.
+- **FR-PROMPTSEC-3**: WHEN the resume-parsing agent ingests raw resume text, THE SYSTEM SHALL wrap it in a delimited `<resume_document>...</resume_document>` block with the same "data, not instructions" rule.
+- **FR-PROMPTSEC-4**: THE scoring verification flags (`documents_pre_verified`, `reference_check_authorized`) SHALL be derived only from the database, never from agent output or resume text, so injection cannot inflate the score.
+- **FR-PROMPTSEC-5**: THE SYSTEM SHALL include a test using a resume containing a prompt-injection attempt and SHALL assert the attempt is treated as data (no forbidden action, no score inflation).
