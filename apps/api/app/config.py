@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     # Google Gemini settings
     GEMINI_API_KEY: Optional[str] = Field(default=None)
     GOOGLE_API_KEY: Optional[str] = Field(default=None)
-    GEMINI_MODEL: str = Field(default="gemini-2.5-flash")
+    GEMINI_MODEL: str = Field(default="gemini-3-flash-preview")
 
     # Voice transcription settings
     TRANSCRIPTION_PROVIDER: str = Field(default="whisper")
