@@ -39,10 +39,20 @@ class WhisperTranscriber(Transcriber):
         self,
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
+        model: Optional[str] = None,
     ):
         self.api_key = api_key or settings.TRANSCRIPTION_API_KEY or os.environ.get("OPENAI_API_KEY") or "mock-key"
         self.base_url = base_url or settings.TRANSCRIPTION_BASE_URL
         self._client: Optional[OpenAI] = None
+
+        if model:
+            self.model = model
+        elif settings.TRANSCRIPTION_MODEL:
+            self.model = settings.TRANSCRIPTION_MODEL
+        elif self.base_url and "groq.com" in self.base_url.lower():
+            self.model = "whisper-large-v3-turbo"
+        else:
+            self.model = "whisper-1"
 
     @property
     def client(self) -> OpenAI:
@@ -68,7 +78,7 @@ class WhisperTranscriber(Transcriber):
 
         file_tuple = (file_name, audio_bytes, mime_type)
         create_kwargs = {
-            "model": "whisper-1",
+            "model": self.model,
             "file": file_tuple,
             "prompt": "English, Hindi, Marathi bilingual or trilingual recruiting conversation",
         }

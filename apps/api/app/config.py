@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     TRANSCRIPTION_PROVIDER: str = Field(default="whisper")
     TRANSCRIPTION_API_KEY: Optional[str] = Field(default=None)
     TRANSCRIPTION_BASE_URL: Optional[str] = Field(default=None)
+    TRANSCRIPTION_MODEL: Optional[str] = Field(default=None)
     TRANSCRIPTION_MAX_BYTES: int = Field(default=25 * 1024 * 1024)  # 25MB
     
     # Server settings
