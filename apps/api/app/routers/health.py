@@ -1,4 +1,5 @@
 from fastapi import APIRouter
+
 from app.models.api import HealthResponse
 
 router = APIRouter(tags=["Health"])
@@ -13,4 +14,3 @@ router = APIRouter(tags=["Health"])
 async def health_check() -> HealthResponse:
     """Returns ok status for uptime monitors."""
     return HealthResponse(status="ok", version="0.1.0")
-

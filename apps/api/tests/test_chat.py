@@ -1,8 +1,7 @@
 from unittest.mock import MagicMock, patch
-from google.genai import types
-import pytest
 
-from app.agent.runner import get_gemini_client
+from google.genai import types
+
 from app.models.api import AgentStepType
 
 
@@ -140,4 +139,3 @@ def test_chat_max_iterations_safety(client, mock_supabase):
     assert len(data["steps"]) >= 5
     runs = mock_supabase.store["agent_runs"]
     assert runs[0]["status"] == "completed"
-

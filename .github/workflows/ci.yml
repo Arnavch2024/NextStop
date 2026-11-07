@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api:
+    name: API (FastAPI)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/api
+    env:
+      SUPABASE_URL: https://example.supabase.co
+      SUPABASE_ANON_KEY: dummy-anon-key-not-real
+      SUPABASE_SERVICE_KEY: dummy-service-key-not-real
+      GEMINI_API_KEY: dummy-gemini-key-not-real
+      TRANSCRIPTION_API_KEY: dummy-whisper-key-not-real
+      ENVIRONMENT: test
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: apps/api/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run ruff linter
+        run: ruff check .
+
+      - name: Run ruff format check
+        run: ruff format --check .
+
+      - name: Run pytest
+        run: pytest -v
+
+  web-mobile:
+    name: Web & Mobile (Next.js & Expo)
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: dummy-anon-key-not-real
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared package
+        run: pnpm --filter @recruiting/shared build
+
+      - name: Lint web
+        run: pnpm --filter @recruiting/web lint
+
+      - name: Lint monorepo JS/TS (mobile & shared)
+        run: pnpm exec eslint apps/mobile packages/shared
+
+      - name: Typecheck packages (shared, web, mobile)
+        run: |
+          pnpm --filter @recruiting/shared exec tsc --noEmit
+          pnpm --filter @recruiting/web exec tsc --noEmit
+          pnpm --filter @recruiting/mobile exec tsc --noEmit
+
+      - name: Build web application
+        run: pnpm --filter @recruiting/web build

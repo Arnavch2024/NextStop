@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel, Field
 
 
@@ -16,7 +17,7 @@ class ChatRequest(BaseModel):
         min_length=1,
         max_length=4000,
         description="User text message to the agent",
-        json_schema_extra={"example": "I'm Riya at St. Xavier's, batch 2027, BSc CS"}
+        json_schema_extra={"example": "I'm Riya at St. Xavier's, batch 2027, BSc CS"},
     )
 
 
@@ -52,6 +53,7 @@ class ChatResponse(BaseModel):
 
 
 # --- Day 2 Models for Student Slice ---
+
 
 class BreakdownItemModel(BaseModel):
     reason: str

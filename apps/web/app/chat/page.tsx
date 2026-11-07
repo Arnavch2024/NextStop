@@ -1,9 +1,9 @@
-'use client';
+"use client";
 
-import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
-import { getSupabaseBrowserClient, API_BASE_URL } from '@/lib/supabase';
-import { chat, AgentStep, RecordRef, RawEvent } from '@recruiting/shared';
+import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
+import { getSupabaseBrowserClient, API_BASE_URL } from "@/lib/supabase";
+import { chat, AgentStep, RecordRef, RawEvent } from "@recruiting/shared";
 import {
   Send,
   Mic,
@@ -16,11 +16,11 @@ import {
   CheckCircle2,
   Loader2,
   Sparkles,
-} from 'lucide-react';
+} from "lucide-react";
 
 interface ChatItem {
   id: string;
-  sender: 'user' | 'agent';
+  sender: "user" | "agent";
   text: string;
   steps?: AgentStep[];
   records?: RecordRef[];
@@ -36,9 +36,11 @@ export default function ChatPage() {
   const [role, setRole] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatItem[]>([]);
-  const [inputText, setInputText] = useState('');
+  const [inputText, setInputText] = useState("");
   const [isSending, setIsSending] = useState(false);
-  const [expandedSteps, setExpandedSteps] = useState<Record<string, boolean>>({});
+  const [expandedSteps, setExpandedSteps] = useState<Record<string, boolean>>(
+    {}
+  );
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -46,25 +48,27 @@ export default function ChatPage() {
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!session) {
-        router.replace('/login');
+        router.replace("/login");
         return;
       }
       setSessionToken(session.access_token);
       setUserId(session.user.id);
 
       const { data: profile } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', session.user.id)
+        .from("profiles")
+        .select("*")
+        .eq("id", session.user.id)
         .single();
 
       if (!profile || !profile.role) {
-        router.replace('/onboarding');
+        router.replace("/onboarding");
         return;
       }
 
       setRole(profile.role);
-      setDisplayName(profile.display_name || session.user.email?.split('@')[0] || 'User');
+      setDisplayName(
+        profile.display_name || session.user.email?.split("@")[0] || "User"
+      );
 
       // Load initial message history from raw_events
       loadInitialHistory(session.user.id);
@@ -73,18 +77,18 @@ export default function ChatPage() {
 
   async function loadInitialHistory(actorId: string) {
     const { data: events, error } = await supabase
-      .from('raw_events')
-      .select('*')
-      .eq('actor_id', actorId)
-      .in('source', ['user_message', 'agent_message'])
-      .order('created_at', { ascending: true })
+      .from("raw_events")
+      .select("*")
+      .eq("actor_id", actorId)
+      .in("source", ["user_message", "agent_message"])
+      .order("created_at", { ascending: true })
       .limit(100);
 
     if (events && !error) {
       const items: ChatItem[] = events.map((ev: RawEvent) => ({
         id: ev.id,
-        sender: ev.source === 'user_message' ? 'user' : 'agent',
-        text: ev.payload?.message || '',
+        sender: ev.source === "user_message" ? "user" : "agent",
+        text: ev.payload?.message || "",
         timestamp: ev.created_at,
       }));
       setMessages(items);
@@ -98,16 +102,19 @@ export default function ChatPage() {
     const channel = supabase
       .channel(`raw_events_${userId}`)
       .on(
-        'postgres_changes',
+        "postgres_changes",
         {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'raw_events',
+          event: "INSERT",
+          schema: "public",
+          table: "raw_events",
           filter: `actor_id=eq.${userId}`,
         },
         (payload) => {
           const newEvent = payload.new as RawEvent;
-          if (newEvent.source === 'user_message' || newEvent.source === 'agent_message') {
+          if (
+            newEvent.source === "user_message" ||
+            newEvent.source === "agent_message"
+          ) {
             setMessages((prev) => {
               // Avoid duplicate if already locally appended
               if (prev.some((m) => m.id === newEvent.id)) return prev;
@@ -115,8 +122,8 @@ export default function ChatPage() {
                 ...prev,
                 {
                   id: newEvent.id,
-                  sender: newEvent.source === 'user_message' ? 'user' : 'agent',
-                  text: newEvent.payload?.message || '',
+                  sender: newEvent.source === "user_message" ? "user" : "agent",
+                  text: newEvent.payload?.message || "",
                   timestamp: newEvent.created_at,
                 },
               ];
@@ -133,7 +140,7 @@ export default function ChatPage() {
 
   // Scroll to bottom on new messages
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isSending]);
 
   // 3. Send Message to Agent
@@ -142,7 +149,7 @@ export default function ChatPage() {
     if (!inputText.trim() || isSending || !sessionToken) return;
 
     const text = inputText.trim();
-    setInputText('');
+    setInputText("");
     setIsSending(true);
 
     const tempUserId = `user-${Date.now()}`;
@@ -151,7 +158,7 @@ export default function ChatPage() {
       ...prev,
       {
         id: tempUserId,
-        sender: 'user',
+        sender: "user",
         text,
         timestamp: new Date().toISOString(),
       },
@@ -165,7 +172,7 @@ export default function ChatPage() {
         ...prev,
         {
           id: agentId,
-          sender: 'agent',
+          sender: "agent",
           text: response.reply,
           steps: response.steps,
           records: response.records_created,
@@ -177,8 +184,8 @@ export default function ChatPage() {
         ...prev,
         {
           id: `error-${Date.now()}`,
-          sender: 'agent',
-          text: `Error connecting to agent: ${err.message || 'Please verify API service.'}`,
+          sender: "agent",
+          text: `Error connecting to agent: ${err.message || "Please verify API service."}`,
           timestamp: new Date().toISOString(),
         },
       ]);
@@ -189,7 +196,7 @@ export default function ChatPage() {
 
   async function handleSignOut() {
     await supabase.auth.signOut();
-    router.replace('/login');
+    router.replace("/login");
   }
 
   function toggleSteps(id: string) {
@@ -205,11 +212,13 @@ export default function ChatPage() {
             <Sparkles className="h-5 w-5" />
           </div>
           <div>
-            <h1 className="text-sm font-bold text-slate-900">Campus Recruiting Agent</h1>
+            <h1 className="text-sm font-bold text-slate-900">
+              Campus Recruiting Agent
+            </h1>
             <div className="flex items-center gap-2">
               <span className="text-xs text-slate-500">{displayName}</span>
               <span className="rounded-full bg-indigo-100 px-2 py-0.2 text-[10px] font-semibold text-indigo-700 capitalize">
-                {role?.replace('_', ' ')}
+                {role?.replace("_", " ")}
               </span>
             </div>
           </div>
@@ -236,20 +245,24 @@ export default function ChatPage() {
                 Welcome to your Recruiting Assistant!
               </h2>
               <p className="mx-auto mt-1 max-w-sm text-xs text-slate-500">
-                Type your details naturally (e.g. your college, batch, degree, or company). The agent automatically builds structured records on your behalf.
+                Type your details naturally (e.g. your college, batch, degree,
+                or company). The agent automatically builds structured records
+                on your behalf.
               </p>
             </div>
           )}
 
           {messages.map((item) => {
-            const isUser = item.sender === 'user';
+            const isUser = item.sender === "user";
             const isExpanded = !!expandedSteps[item.id];
-            const hasStepsOrRecords = (item.steps && item.steps.length > 0) || (item.records && item.records.length > 0);
+            const hasStepsOrRecords =
+              (item.steps && item.steps.length > 0) ||
+              (item.records && item.records.length > 0);
 
             return (
               <div
                 key={item.id}
-                className={`flex gap-3 ${isUser ? 'justify-end' : 'justify-start'}`}
+                className={`flex gap-3 ${isUser ? "justify-end" : "justify-start"}`}
               >
                 {!isUser && (
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-white">
@@ -260,11 +273,13 @@ export default function ChatPage() {
                 <div
                   className={`max-w-[85%] sm:max-w-xl rounded-2xl p-4 text-sm ${
                     isUser
-                      ? 'bg-indigo-600 text-white'
-                      : 'border border-slate-200 bg-white text-slate-800 shadow-sm'
+                      ? "bg-indigo-600 text-white"
+                      : "border border-slate-200 bg-white text-slate-800 shadow-sm"
                   }`}
                 >
-                  <p className="whitespace-pre-wrap leading-relaxed">{item.text}</p>
+                  <p className="whitespace-pre-wrap leading-relaxed">
+                    {item.text}
+                  </p>
 
                   {/* Agent Steps / Tool Calls Inspection Accordion */}
                   {hasStepsOrRecords && (
@@ -292,18 +307,28 @@ export default function ChatPage() {
                       {isExpanded && (
                         <div className="mt-2 space-y-2 rounded-lg bg-slate-50 p-2.5 font-mono text-[11px] text-slate-700">
                           {item.records?.map((rec, i) => (
-                            <div key={i} className="flex items-center gap-1.5 text-emerald-600 font-sans">
+                            <div
+                              key={i}
+                              className="flex items-center gap-1.5 text-emerald-600 font-sans"
+                            >
                               <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
                               <span>
-                                {rec.op.toUpperCase()}: <strong className="font-semibold">{rec.table}</strong> ({rec.id})
+                                {rec.op.toUpperCase()}:{" "}
+                                <strong className="font-semibold">
+                                  {rec.table}
+                                </strong>{" "}
+                                ({rec.id})
                               </span>
                             </div>
                           ))}
 
                           {item.steps?.map((step, idx) => (
-                            <div key={idx} className="border-t border-slate-200 pt-1.5">
+                            <div
+                              key={idx}
+                              className="border-t border-slate-200 pt-1.5"
+                            >
                               <div className="font-semibold text-slate-600">
-                                [{step.type}] {step.tool || ''}
+                                [{step.type}] {step.tool || ""}
                               </div>
                               {step.input && (
                                 <pre className="mt-1 overflow-x-auto text-[10px] text-slate-600">
@@ -345,7 +370,10 @@ export default function ChatPage() {
 
       {/* Input Composer */}
       <footer className="border-t border-slate-200 bg-white p-4">
-        <form onSubmit={handleSend} className="mx-auto flex max-w-3xl items-center gap-2">
+        <form
+          onSubmit={handleSend}
+          className="mx-auto flex max-w-3xl items-center gap-2"
+        >
           {/* Voice Input Affordance - Disabled with Day 2 Badge */}
           <div className="relative group">
             <button
@@ -375,7 +403,11 @@ export default function ChatPage() {
             disabled={!inputText.trim() || isSending}
             className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-600 text-white transition hover:bg-indigo-700 disabled:opacity-50"
           >
-            {isSending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-4 w-4" />}
+            {isSending ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <Send className="h-4 w-4" />
+            )}
           </button>
         </form>
       </footer>

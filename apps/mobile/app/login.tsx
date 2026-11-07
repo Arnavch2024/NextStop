@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -9,16 +9,16 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-} from 'react-native';
-import { useRouter } from 'expo-router';
-import { getMobileSupabaseClient } from '../lib/supabase';
+} from "react-native";
+import { useRouter } from "expo-router";
+import { getMobileSupabaseClient } from "../lib/supabase";
 
 export default function LoginScreen() {
   const router = useRouter();
   const supabase = getMobileSupabaseClient();
 
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [isSignUp, setIsSignUp] = useState(false);
   const [useMagicLink, setUseMagicLink] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -35,34 +35,37 @@ export default function LoginScreen() {
       if (useMagicLink) {
         const { error } = await supabase.auth.signInWithOtp({ email });
         if (error) throw error;
-        setInfoMsg('Magic link sent to your email! Please open it to sign in.');
+        setInfoMsg("Magic link sent to your email! Please open it to sign in.");
       } else if (isSignUp) {
         const { data, error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
 
         if (data.session) {
-          router.replace('/onboarding');
+          router.replace("/onboarding");
         } else {
-          setInfoMsg('Account created! Please check your email to verify.');
+          setInfoMsg("Account created! Please check your email to verify.");
         }
       } else {
-        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
         if (error) throw error;
 
         const { data: profile } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', data.user.id)
+          .from("profiles")
+          .select("role")
+          .eq("id", data.user.id)
           .single();
 
         if (!profile || !profile.role) {
-          router.replace('/onboarding');
+          router.replace("/onboarding");
         } else {
-          router.replace('/chat');
+          router.replace("/chat");
         }
       }
     } catch (err: any) {
-      setErrorMsg(err.message || 'Authentication failed.');
+      setErrorMsg(err.message || "Authentication failed.");
     } finally {
       setLoading(false);
     }
@@ -70,13 +73,15 @@ export default function LoginScreen() {
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
       style={styles.container}
     >
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.card}>
           <Text style={styles.title}>Campus Recruiting</Text>
-          <Text style={styles.subtitle}>Mumbai College Batches 2027 & 2028</Text>
+          <Text style={styles.subtitle}>
+            Mumbai College Batches 2027 & 2028
+          </Text>
 
           {errorMsg && (
             <View style={styles.errorBox}>
@@ -122,7 +127,11 @@ export default function LoginScreen() {
               <ActivityIndicator color="#fff" />
             ) : (
               <Text style={styles.buttonText}>
-                {useMagicLink ? 'Send Magic Link' : isSignUp ? 'Create Account' : 'Sign In'}
+                {useMagicLink
+                  ? "Send Magic Link"
+                  : isSignUp
+                    ? "Create Account"
+                    : "Sign In"}
               </Text>
             )}
           </TouchableOpacity>
@@ -132,7 +141,9 @@ export default function LoginScreen() {
             onPress={() => setUseMagicLink(!useMagicLink)}
           >
             <Text style={styles.switchText}>
-              {useMagicLink ? 'Sign in with Password instead' : 'Sign in with Magic Link'}
+              {useMagicLink
+                ? "Sign in with Password instead"
+                : "Sign in with Magic Link"}
             </Text>
           </TouchableOpacity>
 
@@ -142,7 +153,9 @@ export default function LoginScreen() {
               onPress={() => setIsSignUp(!isSignUp)}
             >
               <Text style={styles.switchSubtext}>
-                {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
+                {isSignUp
+                  ? "Already have an account? Sign In"
+                  : "Don't have an account? Sign Up"}
               </Text>
             </TouchableOpacity>
           )}
@@ -155,100 +168,100 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: "#f8fafc",
   },
   scroll: {
     flexGrow: 1,
-    justifyContent: 'center',
+    justifyContent: "center",
     padding: 24,
   },
   card: {
-    backgroundColor: '#ffffff',
+    backgroundColor: "#ffffff",
     borderRadius: 20,
     padding: 24,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
-    shadowColor: '#000',
+    borderColor: "#e2e8f0",
+    shadowColor: "#000",
     shadowOpacity: 0.05,
     shadowRadius: 10,
     elevation: 2,
   },
   title: {
     fontSize: 24,
-    fontWeight: '700',
-    color: '#0f172a',
-    textAlign: 'center',
+    fontWeight: "700",
+    color: "#0f172a",
+    textAlign: "center",
   },
   subtitle: {
     fontSize: 13,
-    color: '#64748b',
-    textAlign: 'center',
+    color: "#64748b",
+    textAlign: "center",
     marginTop: 4,
     marginBottom: 20,
   },
   label: {
     fontSize: 11,
-    fontWeight: '700',
-    color: '#475569',
+    fontWeight: "700",
+    color: "#475569",
     marginBottom: 6,
     marginTop: 12,
   },
   input: {
-    backgroundColor: '#ffffff',
+    backgroundColor: "#ffffff",
     borderWidth: 1,
-    borderColor: '#cbd5e1',
+    borderColor: "#cbd5e1",
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 14,
-    color: '#0f172a',
+    color: "#0f172a",
   },
   button: {
-    backgroundColor: '#4f46e5',
+    backgroundColor: "#4f46e5",
     borderRadius: 12,
     paddingVertical: 14,
-    alignItems: 'center',
+    alignItems: "center",
     marginTop: 20,
   },
   buttonDisabled: {
     opacity: 0.6,
   },
   buttonText: {
-    color: '#ffffff',
+    color: "#ffffff",
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   switchButton: {
     marginTop: 16,
-    alignItems: 'center',
+    alignItems: "center",
   },
   switchText: {
-    color: '#4f46e5',
+    color: "#4f46e5",
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   switchSubtext: {
-    color: '#64748b',
+    color: "#64748b",
     fontSize: 12,
   },
   errorBox: {
-    backgroundColor: '#fef2f2',
+    backgroundColor: "#fef2f2",
     padding: 10,
     borderRadius: 8,
     marginBottom: 10,
   },
   errorText: {
-    color: '#dc2626',
+    color: "#dc2626",
     fontSize: 13,
   },
   infoBox: {
-    backgroundColor: '#ecfdf5',
+    backgroundColor: "#ecfdf5",
     padding: 10,
     borderRadius: 8,
     marginBottom: 10,
   },
   infoText: {
-    color: '#047857',
+    color: "#047857",
     fontSize: 13,
   },
 });

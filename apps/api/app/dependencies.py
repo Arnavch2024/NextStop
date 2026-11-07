@@ -1,4 +1,5 @@
 from typing import Optional
+
 from fastapi import Depends, HTTPException, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from supabase import Client
@@ -64,4 +65,3 @@ def get_current_user(
             detail="Invalid or expired access token",
             headers={"WWW-Authenticate": "Bearer"},
         )
-

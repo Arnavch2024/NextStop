@@ -242,4 +242,3 @@ def compute_score(inp: ScoreInput) -> ScoreResult:
         breakdown=breakdown,
         next_best_actions=actions[:3],
     )
-

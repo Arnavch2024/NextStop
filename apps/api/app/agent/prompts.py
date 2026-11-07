@@ -1,5 +1,6 @@
 import json
 from typing import Any, Dict, List, Optional
+
 from app.models.db import ProfileRole
 
 BASE_AGENT_INSTRUCTIONS = """You are the conversational recruiting platform assistant for Mumbai colleges.

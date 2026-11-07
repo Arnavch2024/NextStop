@@ -1,4 +1,5 @@
 """Scoring package for recruiting platform MVP."""
+
 from app.scoring.engine import (
     BreakdownItem,
     EducationItem,
@@ -26,4 +27,3 @@ __all__ = [
     "load_student_for_scoring",
     "recompute_score",
 ]
-

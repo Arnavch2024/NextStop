@@ -1,13 +1,11 @@
 from typing import Any, Dict, List
 from unittest.mock import MagicMock
+
 import pytest
 from fastapi.testclient import TestClient
-from google.genai import types
 
-from app.agent.runner import get_gemini_client
 from app.db.supabase import get_supabase_client
 from app.main import app
-from app.models.db import ProfileRole, UserProfile
 
 
 class FakeQueryBuilder:
@@ -63,6 +61,7 @@ class FakeQueryBuilder:
                 new_row = dict(item)
                 if "id" not in new_row:
                     import uuid
+
                     new_row["id"] = str(uuid.uuid4())
                 rows.append(new_row)
                 created.append(new_row)
@@ -175,4 +174,3 @@ def client(mock_supabase):
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
-

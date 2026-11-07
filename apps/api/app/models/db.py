@@ -1,6 +1,7 @@
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Optional
+
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -54,6 +55,7 @@ class UserProfile(BaseModel):
 
 
 # --- Schemas for upsert_record tool validation ---
+
 
 class StudentUpsertData(BaseModel):
     full_name: str = Field(..., min_length=1)
@@ -116,7 +118,19 @@ class EducationUpsertData(BaseModel):
             return "tenth"
         if lvl in ("12th", "twelfth", "hsc", "xii", "12", "junior college"):
             return "twelfth"
-        if lvl in ("bachelors", "undergraduate", "bachelor", "btech", "b.tech", "be", "b.e", "bsc", "b.sc", "bms", "b.m.s"):
+        if lvl in (
+            "bachelors",
+            "undergraduate",
+            "bachelor",
+            "btech",
+            "b.tech",
+            "be",
+            "b.e",
+            "bsc",
+            "b.sc",
+            "bms",
+            "b.m.s",
+        ):
             return "bachelors"
         if lvl in ("masters", "postgraduate", "master", "mtech", "m.tech", "msc", "m.sc", "mba", "m.b.a"):
             return "masters"

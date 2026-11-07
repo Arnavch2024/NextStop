@@ -1,12 +1,11 @@
 from datetime import date
-import pytest
+
 from app.scoring.engine import (
     EducationItem,
     InternshipItem,
     JobItem,
     ScoreInput,
     compute_score,
-    months_between,
 )
 
 
@@ -23,10 +22,7 @@ def test_base_score_empty():
 def test_cap_at_100():
     # Construct input with massive points:
     # 20 base + 1 hs + 1 bachelors + 90 completed internships + 1 job + 10 years
-    internships = [
-        InternshipItem(company=f"Comp{i}", end_date="2024-01-01", source="resume")
-        for i in range(90)
-    ]
+    internships = [InternshipItem(company=f"Comp{i}", end_date="2024-01-01", source="resume") for i in range(90)]
     inp = ScoreInput(
         today=date(2025, 1, 1),
         education=[
@@ -34,9 +30,7 @@ def test_cap_at_100():
             EducationItem(level="bachelors", score_value=9.0, score_scale="cgpa10"),
         ],
         internships=internships,
-        jobs=[
-            JobItem(company="Tech Corp", start_date="2010-01-01", end_date="2020-01-01")
-        ],
+        jobs=[JobItem(company="Tech Corp", start_date="2010-01-01", end_date="2020-01-01")],
         documents_pre_verified=True,
         reference_check_authorized=True,
     )
@@ -45,9 +39,7 @@ def test_cap_at_100():
 
 
 def test_hs_exactly_85_pct_no_points():
-    inp = ScoreInput(
-        education=[EducationItem(level="twelfth", score_value=85.0, score_scale="percentage")]
-    )
+    inp = ScoreInput(education=[EducationItem(level="twelfth", score_value=85.0, score_scale="percentage")])
     res = compute_score(inp)
     assert res.score == 20  # Base only
 
@@ -64,35 +56,27 @@ def test_hs_above_85_pct_one_point():
 
 
 def test_hs_exactly_8_gpa_no_points():
-    inp = ScoreInput(
-        education=[EducationItem(level="twelfth", score_value=8.0, score_scale="gpa10")]
-    )
+    inp = ScoreInput(education=[EducationItem(level="twelfth", score_value=8.0, score_scale="gpa10")])
     res = compute_score(inp)
     assert res.score == 20
 
 
 def test_hs_above_8_gpa_one_point():
-    inp = ScoreInput(
-        education=[EducationItem(level="twelfth", score_value=8.01, score_scale="gpa10")]
-    )
+    inp = ScoreInput(education=[EducationItem(level="twelfth", score_value=8.01, score_scale="gpa10")])
     res = compute_score(inp)
     assert res.score == 21
 
 
 def test_cgpa4_exactly_3_2_no_points():
     # 3.2 * 2.5 = 8.0 -> not > 8.0
-    inp = ScoreInput(
-        education=[EducationItem(level="twelfth", score_value=3.2, score_scale="cgpa4")]
-    )
+    inp = ScoreInput(education=[EducationItem(level="twelfth", score_value=3.2, score_scale="cgpa4")])
     res = compute_score(inp)
     assert res.score == 20
 
 
 def test_cgpa4_above_3_2_one_point():
     # 3.21 * 2.5 = 8.025 > 8.0 -> +1
-    inp = ScoreInput(
-        education=[EducationItem(level="twelfth", score_value=3.21, score_scale="cgpa4")]
-    )
+    inp = ScoreInput(education=[EducationItem(level="twelfth", score_value=3.21, score_scale="cgpa4")])
     res = compute_score(inp)
     assert res.score == 21
 
@@ -103,12 +87,8 @@ def test_missing_data_no_crash():
             EducationItem(level="twelfth", score_value=None, score_scale=None),
             EducationItem(level="bachelors", score_value=None, score_scale="percentage"),
         ],
-        internships=[
-            InternshipItem(company=None, role=None, start_date=None, end_date=None)
-        ],
-        jobs=[
-            JobItem(company=None, role=None, start_date=None, end_date=None)
-        ],
+        internships=[InternshipItem(company=None, role=None, start_date=None, end_date=None)],
+        jobs=[JobItem(company=None, role=None, start_date=None, end_date=None)],
     )
     res = compute_score(inp)
     # Base 20 + 1 for first-job (len(jobs) >= 1) = 21
@@ -121,9 +101,9 @@ def test_completed_vs_ongoing_internship():
         today=today,
         internships=[
             InternshipItem(company="TCS", end_date="2025-05-31"),  # completed (< today)
-            InternshipItem(company="Infosys", end_date=None),      # ongoing (no end_date)
-            InternshipItem(company="Wipro", end_date="2025-07-01"), # future
-        ]
+            InternshipItem(company="Infosys", end_date=None),  # ongoing (no end_date)
+            InternshipItem(company="Wipro", end_date="2025-07-01"),  # future
+        ],
     )
     res = compute_score(inp)
     # Base 20 + 1 for completed TCS internship = 21
@@ -152,8 +132,8 @@ def test_full_year_flooring_11mo():
     inp = ScoreInput(
         today=today,
         jobs=[
-            JobItem(company="Acme", start_date="2024-01-01", end_date="2024-12-01"), # 11 months
-        ]
+            JobItem(company="Acme", start_date="2024-01-01", end_date="2024-12-01"),  # 11 months
+        ],
     )
     res = compute_score(inp)
     # Base 20 + 1 first job + 0 full years = 21
@@ -167,8 +147,8 @@ def test_full_year_flooring_12mo():
     inp = ScoreInput(
         today=today,
         jobs=[
-            JobItem(company="Acme", start_date="2024-01-01", end_date="2025-01-01"), # 12 months
-        ]
+            JobItem(company="Acme", start_date="2024-01-01", end_date="2025-01-01"),  # 12 months
+        ],
     )
     res = compute_score(inp)
     # Base 20 + 1 first job + 1 full year = 22
@@ -183,8 +163,8 @@ def test_full_year_flooring_24mo():
     inp = ScoreInput(
         today=today,
         jobs=[
-            JobItem(company="Acme", start_date="2023-01-01", end_date="2025-01-01"), # 24 months
-        ]
+            JobItem(company="Acme", start_date="2023-01-01", end_date="2025-01-01"),  # 24 months
+        ],
     )
     res = compute_score(inp)
     # Base 20 + 1 first job + 2 full years = 23
@@ -239,4 +219,3 @@ def test_breakdown_source_reflects_provenance():
     assert source_map["First full-time job"] == "user_said"
     assert any("full year" in k and source_map[k] == "system" for k in source_map)
     assert source_map["Documents pre-verified"] == "system"
-

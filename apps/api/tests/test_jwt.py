@@ -1,4 +1,3 @@
-from unittest.mock import MagicMock
 from app.logger import redact_secret_string
 
 
@@ -28,4 +27,3 @@ def test_redact_secrets_in_logs():
     redacted_key = redact_secret_string(api_key_log)
     assert "AIzaSyAbc123456789xyz" not in redacted_key
     assert "REDACTED" in redacted_key
-

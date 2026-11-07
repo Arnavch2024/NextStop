@@ -1,16 +1,16 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { getSupabaseBrowserClient } from '@/lib/supabase';
-import { Mail, Lock, ArrowRight, Loader2, Sparkles } from 'lucide-react';
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { getSupabaseBrowserClient } from "@/lib/supabase";
+import { Mail, Lock, ArrowRight, Loader2, Sparkles } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
   const supabase = getSupabaseBrowserClient();
 
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [isSignUp, setIsSignUp] = useState(false);
   const [useMagicLink, setUseMagicLink] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -34,7 +34,7 @@ export default function LoginPage() {
           },
         });
         if (error) throw error;
-        setInfoMsg('Check your email for the magic login link!');
+        setInfoMsg("Check your email for the magic login link!");
       } else if (isSignUp) {
         const { data, error } = await supabase.auth.signUp({
           email,
@@ -43,9 +43,11 @@ export default function LoginPage() {
         if (error) throw error;
 
         if (data.session) {
-          router.replace('/onboarding');
+          router.replace("/onboarding");
         } else {
-          setInfoMsg('Account created! Please check your email to verify your address or log in.');
+          setInfoMsg(
+            "Account created! Please check your email to verify your address or log in."
+          );
         }
       } else {
         const { data, error } = await supabase.auth.signInWithPassword({
@@ -56,19 +58,21 @@ export default function LoginPage() {
 
         // Check if role is set
         const { data: profile } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', data.user.id)
+          .from("profiles")
+          .select("role")
+          .eq("id", data.user.id)
           .single();
 
         if (!profile || !profile.role) {
-          router.replace('/onboarding');
+          router.replace("/onboarding");
         } else {
-          router.replace('/chat');
+          router.replace("/chat");
         }
       }
     } catch (err: any) {
-      setErrorMsg(err?.message || 'Authentication failed. Please check your credentials.');
+      setErrorMsg(
+        err?.message || "Authentication failed. Please check your credentials."
+      );
     } finally {
       setLoading(false);
     }
@@ -147,7 +151,13 @@ export default function LoginPage() {
               <Loader2 className="h-5 w-5 animate-spin" />
             ) : (
               <>
-                <span>{useMagicLink ? 'Send Magic Link' : isSignUp ? 'Create Account' : 'Sign In'}</span>
+                <span>
+                  {useMagicLink
+                    ? "Send Magic Link"
+                    : isSignUp
+                      ? "Create Account"
+                      : "Sign In"}
+                </span>
                 <ArrowRight className="h-4 w-4" />
               </>
             )}
@@ -160,7 +170,9 @@ export default function LoginPage() {
             onClick={() => setUseMagicLink(!useMagicLink)}
             className="font-medium text-indigo-600 hover:underline"
           >
-            {useMagicLink ? 'Sign in with Password instead' : 'Sign in with Magic Link'}
+            {useMagicLink
+              ? "Sign in with Password instead"
+              : "Sign in with Magic Link"}
           </button>
 
           {!useMagicLink && (
@@ -169,7 +181,9 @@ export default function LoginPage() {
               onClick={() => setIsSignUp(!isSignUp)}
               className="text-slate-600 hover:underline"
             >
-              {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
+              {isSignUp
+                ? "Already have an account? Sign In"
+                : "Don't have an account? Sign Up"}
             </button>
           )}
         </div>

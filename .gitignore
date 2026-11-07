@@ -1,21 +1,29 @@
+# Dependencies
 node_modules
 .pnpm-store
+
+# Build outputs
 dist
 .next
 out
 .expo
+
+# Python virtual environment and caches
 .venv
 __pycache__
 *.pyc
 *.pyo
-.env
-.env.local
-.DS_Store
-*.log
-.turbo
 .pytest_cache
 .mypy_cache
 .ruff_cache
-*.tsbuildinfo
-pnpm-lock.yaml
 
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Logs and system
+*.log
+.DS_Store
+.turbo
+*.tsbuildinfo

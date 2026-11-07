@@ -37,4 +37,3 @@ __all__ = [
     "ALLOWED_TABLES",
     "TABLE_VALIDATORS",
 ]
-

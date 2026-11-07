@@ -1,6 +1,6 @@
-import json
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
+
 from google import genai
 from google.genai import types
 from supabase import Client
@@ -76,11 +76,7 @@ def build_gemini_contents_from_history(
             contents.append(
                 types.Content(
                     role="model",
-                    parts=[
-                        types.Part(
-                            function_call=types.FunctionCall(name=name, args=args)
-                        )
-                    ],
+                    parts=[types.Part(function_call=types.FunctionCall(name=name, args=args))],
                 )
             )
         elif source == "tool_result":
@@ -89,19 +85,15 @@ def build_gemini_contents_from_history(
             contents.append(
                 types.Content(
                     role="user",
-                    parts=[
-                        types.Part(
-                            function_response=types.FunctionResponse(
-                                name=name, response=result
-                            )
-                        )
-                    ],
+                    parts=[types.Part(function_response=types.FunctionResponse(name=name, response=result))],
                 )
             )
 
     # If the current message is not the last user turn, append it
-    if not contents or contents[-1].role != "user" or (
-        contents[-1].parts and getattr(contents[-1].parts[0], "text", None) != current_message
+    if (
+        not contents
+        or contents[-1].role != "user"
+        or (contents[-1].parts and getattr(contents[-1].parts[0], "text", None) != current_message)
     ):
         contents.append(
             types.Content(
@@ -179,9 +171,7 @@ def run_agent_loop(
             except Exception as e:
                 logger.warning(f"Could not load student context for prompt: {e}")
 
-        system_prompt = get_system_prompt_for_role(
-            user.role, student_data=student_data, missing_fields=missing_fields
-        )
+        system_prompt = get_system_prompt_for_role(user.role, student_data=student_data, missing_fields=missing_fields)
         history = load_recent_events(user.id, limit=50, client=sb)
         contents = build_gemini_contents_from_history(history, message)
 
@@ -329,4 +319,3 @@ def run_agent_loop(
             client=sb,
         )
         raise exc
-

@@ -114,4 +114,3 @@ def test_upsert_company_and_contact(mock_supabase):
     )
     assert res_contact_update["op"] == "updated"
     assert res_contact_update["id"] == res_contact["id"]
-

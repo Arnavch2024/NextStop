@@ -2,9 +2,10 @@
  * Supabase Database Schemas matching the design spec & 001_init.sql
  */
 
-export type ProfileRole = 'student' | 'placement_officer' | 'company' | 'recruiter';
+export type ProfileRole =
+  "student" | "placement_officer" | "company" | "recruiter";
 
-export type AgentRunStatus = 'running' | 'completed' | 'failed';
+export type AgentRunStatus = "running" | "completed" | "failed";
 
 export interface Profile {
   id: string;
@@ -55,7 +56,8 @@ export interface Student {
   updated_at: string;
 }
 
-export type RawEventSource = 'user_message' | 'agent_message' | 'tool_call' | 'tool_result';
+export type RawEventSource =
+  "user_message" | "agent_message" | "tool_call" | "tool_result";
 
 export interface RawEvent {
   id: string;
@@ -74,4 +76,3 @@ export interface AgentRun {
   created_at: string;
   updated_at: string;
 }
-

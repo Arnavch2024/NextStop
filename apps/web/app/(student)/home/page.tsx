@@ -1,15 +1,15 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { getSupabaseBrowserClient, API_BASE_URL } from '@/lib/supabase';
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { getSupabaseBrowserClient, API_BASE_URL } from "@/lib/supabase";
 import {
   getStudentScore,
   getStudentProfile,
   ScoreResponse,
   StudentProfile,
-} from '@recruiting/shared';
+} from "@recruiting/shared";
 import {
   Award,
   BookOpen,
@@ -22,7 +22,7 @@ import {
   MessageSquare,
   Sparkles,
   TrendingUp,
-} from 'lucide-react';
+} from "lucide-react";
 
 export default function StudentHomePage() {
   const router = useRouter();
@@ -43,7 +43,7 @@ export default function StudentHomePage() {
         } = await supabase.auth.getSession();
 
         if (!session) {
-          router.replace('/login');
+          router.replace("/login");
           return;
         }
 
@@ -60,7 +60,7 @@ export default function StudentHomePage() {
         }
       } catch (err: any) {
         if (isMounted) {
-          setError(err.message || 'Failed to load profile and score.');
+          setError(err.message || "Failed to load profile and score.");
           setLoading(false);
         }
       }
@@ -78,7 +78,9 @@ export default function StudentHomePage() {
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-          <p className="text-sm text-slate-500 font-medium">Loading your profile...</p>
+          <p className="text-sm text-slate-500 font-medium">
+            Loading your profile...
+          </p>
         </div>
       </div>
     );
@@ -115,9 +117,13 @@ export default function StudentHomePage() {
       <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-bold text-slate-900">Student Dashboard</h1>
+            <h1 className="text-lg font-bold text-slate-900">
+              Student Dashboard
+            </h1>
             <p className="text-xs text-slate-500">
-              {student?.full_name ? `${student.full_name} • Batch ${student.batch_year}` : 'Campus Recruiting'}
+              {student?.full_name
+                ? `${student.full_name} • Batch ${student.batch_year}`
+                : "Campus Recruiting"}
             </p>
           </div>
           <Link
@@ -142,8 +148,12 @@ export default function StudentHomePage() {
                 <Award className="w-5 h-5 text-amber-500" />
               </div>
               <div className="mt-4 flex items-baseline gap-2">
-                <span className="text-5xl font-extrabold text-blue-600">{score}</span>
-                <span className="text-sm font-semibold text-slate-400">/ 100</span>
+                <span className="text-5xl font-extrabold text-blue-600">
+                  {score}
+                </span>
+                <span className="text-sm font-semibold text-slate-400">
+                  / 100
+                </span>
               </div>
             </div>
 
@@ -164,7 +174,8 @@ export default function StudentHomePage() {
                 <span>Next Best Action</span>
               </div>
               <p className="mt-2 text-base font-medium text-slate-800">
-                {nextActions[0] || 'Your profile is looking great! Chat with the assistant to keep it updated.'}
+                {nextActions[0] ||
+                  "Your profile is looking great! Chat with the assistant to keep it updated."}
               </p>
             </div>
             <div className="mt-4">
@@ -183,20 +194,29 @@ export default function StudentHomePage() {
         <section className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
           <div className="flex items-center gap-2 mb-4">
             <TrendingUp className="w-5 h-5 text-blue-600" />
-            <h2 className="text-base font-bold text-slate-900">Why is my score {score}?</h2>
+            <h2 className="text-base font-bold text-slate-900">
+              Why is my score {score}?
+            </h2>
           </div>
 
           <div className="divide-y divide-slate-100">
             {breakdown.map((item, idx) => (
-              <div key={idx} className="py-3 flex items-center justify-between text-sm">
+              <div
+                key={idx}
+                className="py-3 flex items-center justify-between text-sm"
+              >
                 <div className="flex items-center gap-3">
                   <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-                  <span className="font-medium text-slate-800">{item.reason}</span>
+                  <span className="font-medium text-slate-800">
+                    {item.reason}
+                  </span>
                   <span className="text-[11px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 font-mono">
                     {item.source}
                   </span>
                 </div>
-                <span className="font-bold text-emerald-600">+{item.points}</span>
+                <span className="font-bold text-emerald-600">
+                  +{item.points}
+                </span>
               </div>
             ))}
           </div>
@@ -219,7 +239,9 @@ export default function StudentHomePage() {
         <section className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
           <div className="flex items-center gap-2 mb-6">
             <Calendar className="w-5 h-5 text-indigo-600" />
-            <h2 className="text-base font-bold text-slate-900">Profile Timeline</h2>
+            <h2 className="text-base font-bold text-slate-900">
+              Profile Timeline
+            </h2>
           </div>
 
           <div className="relative pl-6 border-l-2 border-indigo-200 space-y-6">
@@ -234,12 +256,14 @@ export default function StudentHomePage() {
                   </span>
                   {edu.score_value && (
                     <span className="text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                      {edu.score_value} {edu.score_scale || ''}
+                      {edu.score_value} {edu.score_scale || ""}
                     </span>
                   )}
                 </div>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  {edu.institution || edu.board_or_university || 'Institution not specified'}
+                  {edu.institution ||
+                    edu.board_or_university ||
+                    "Institution not specified"}
                 </p>
               </div>
             ))}
@@ -251,12 +275,15 @@ export default function StudentHomePage() {
                 <div className="flex items-baseline gap-2">
                   <Briefcase className="w-4 h-4 text-indigo-600 inline" />
                   <span className="font-semibold text-slate-900 text-sm">
-                    {intn.role || 'Intern'} at {intn.company || 'Company'}
+                    {intn.role || "Intern"} at {intn.company || "Company"}
                   </span>
-                  <span className="text-[11px] text-slate-400 font-mono">Internship</span>
+                  <span className="text-[11px] text-slate-400 font-mono">
+                    Internship
+                  </span>
                 </div>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  {intn.start_date || ''} {intn.end_date ? `— ${intn.end_date}` : '— Ongoing'}
+                  {intn.start_date || ""}{" "}
+                  {intn.end_date ? `— ${intn.end_date}` : "— Ongoing"}
                 </p>
               </div>
             ))}
@@ -268,25 +295,30 @@ export default function StudentHomePage() {
                 <div className="flex items-baseline gap-2">
                   <Briefcase className="w-4 h-4 text-emerald-600 inline" />
                   <span className="font-semibold text-slate-900 text-sm">
-                    {job.role || 'Role'} at {job.company || 'Company'}
+                    {job.role || "Role"} at {job.company || "Company"}
                   </span>
-                  <span className="text-[11px] text-slate-400 font-mono">Full-time</span>
+                  <span className="text-[11px] text-slate-400 font-mono">
+                    Full-time
+                  </span>
                 </div>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  {job.start_date || ''} {job.end_date ? `— ${job.end_date}` : '— Present'}
+                  {job.start_date || ""}{" "}
+                  {job.end_date ? `— ${job.end_date}` : "— Present"}
                 </p>
               </div>
             ))}
 
-            {education.length === 0 && internships.length === 0 && jobs.length === 0 && (
-              <div className="text-sm text-slate-400 italic">
-                No timeline records yet. Share your education and internship details in chat!
-              </div>
-            )}
+            {education.length === 0 &&
+              internships.length === 0 &&
+              jobs.length === 0 && (
+                <div className="text-sm text-slate-400 italic">
+                  No timeline records yet. Share your education and internship
+                  details in chat!
+                </div>
+              )}
           </div>
         </section>
       </main>
     </div>
   );
 }
-

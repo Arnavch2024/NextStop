@@ -1,7 +1,7 @@
-import { useEffect } from 'react';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
-import { useRouter } from 'expo-router';
-import { getMobileSupabaseClient } from '../lib/supabase';
+import { useEffect } from "react";
+import { View, ActivityIndicator, StyleSheet } from "react-native";
+import { useRouter } from "expo-router";
+import { getMobileSupabaseClient } from "../lib/supabase";
 
 export default function IndexScreen() {
   const router = useRouter();
@@ -10,20 +10,20 @@ export default function IndexScreen() {
     const supabase = getMobileSupabaseClient();
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!session) {
-        router.replace('/login');
+        router.replace("/login");
         return;
       }
 
       const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', session.user.id)
+        .from("profiles")
+        .select("role")
+        .eq("id", session.user.id)
         .single();
 
       if (!profile || !profile.role) {
-        router.replace('/onboarding');
+        router.replace("/onboarding");
       } else {
-        router.replace('/chat');
+        router.replace("/chat");
       }
     });
   }, [router]);
@@ -38,8 +38,8 @@ export default function IndexScreen() {
 const styles = StyleSheet.create({
   center: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f8fafc',
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#f8fafc",
   },
 });

@@ -1,9 +1,9 @@
-from typing import Any, Dict, List, Optional
+from typing import List
+
 from supabase import Client
 
 from app.logger import logger
 from app.scoring.engine import (
-    BreakdownItem,
     EducationItem,
     InternshipItem,
     JobItem,
@@ -22,7 +22,7 @@ def load_student_for_scoring(supabase: Client, student_id: str) -> ScoreInput:
     # 1. Fetch education records
     edu_res = supabase.table("education").select("*").eq("student_id", student_id).execute()
     edu_items: List[EducationItem] = []
-    for r in (edu_res.data or []):
+    for r in edu_res.data or []:
         val = r.get("score_value")
         score_val = float(val) if val is not None else None
         edu_items.append(
@@ -40,7 +40,7 @@ def load_student_for_scoring(supabase: Client, student_id: str) -> ScoreInput:
     # 2. Fetch internships
     int_res = supabase.table("internships").select("*").eq("student_id", student_id).execute()
     int_items: List[InternshipItem] = []
-    for r in (int_res.data or []):
+    for r in int_res.data or []:
         int_items.append(
             InternshipItem(
                 company=r.get("company"),
@@ -54,7 +54,7 @@ def load_student_for_scoring(supabase: Client, student_id: str) -> ScoreInput:
     # 3. Fetch jobs
     job_res = supabase.table("jobs").select("*").eq("student_id", student_id).execute()
     job_items: List[JobItem] = []
-    for r in (job_res.data or []):
+    for r in job_res.data or []:
         job_items.append(
             JobItem(
                 company=r.get("company"),
@@ -67,9 +67,7 @@ def load_student_for_scoring(supabase: Client, student_id: str) -> ScoreInput:
 
     # 4. Check documents for pre_verified status (any pre-verified document)
     doc_res = supabase.table("documents").select("verification_status").eq("student_id", student_id).execute()
-    documents_pre_verified = any(
-        r.get("verification_status") == "pre_verified" for r in (doc_res.data or [])
-    )
+    documents_pre_verified = any(r.get("verification_status") == "pre_verified" for r in (doc_res.data or []))
 
     # 5. Reference check authorized flag (defaults False until Day 5)
     reference_check_authorized = False
@@ -115,4 +113,3 @@ def recompute_score(
     logger.info(f"Recomputed score for student {student_id}: {score_result.score} (trigger: {trigger})")
 
     return score_result
-

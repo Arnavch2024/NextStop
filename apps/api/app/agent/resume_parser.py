@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
+
 from google import genai
 from google.genai import types
 from supabase import Client
@@ -175,4 +176,3 @@ def parse_resume(
             client=sb,
         )
         raise exc
-

@@ -1,7 +1,7 @@
-from abc import ABC, abstractmethod
-import io
 import os
+from abc import ABC, abstractmethod
 from typing import Optional
+
 from openai import OpenAI
 
 from app.config import settings
@@ -108,4 +108,3 @@ def get_transcriber(provider: Optional[str] = None) -> Transcriber:
             _default_transcriber = WhisperTranscriber()
 
     return _default_transcriber
-

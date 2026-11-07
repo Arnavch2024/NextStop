@@ -21,4 +21,3 @@ __all__ = [
     "UPSERT_RECORD_TOOL_NAME",
     "UPSERT_RECORD_DECLARATION",
 ]
-

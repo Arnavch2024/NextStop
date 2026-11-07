@@ -1,0 +1,8 @@
+pnpm exec lint-staged
+if command -v pre-commit >/dev/null 2>&1; then
+  pre-commit run
+elif [ -f apps/api/.venv/Scripts/pre-commit ]; then
+  apps/api/.venv/Scripts/pre-commit run
+elif [ -f apps/api/.venv/bin/pre-commit ]; then
+  apps/api/.venv/bin/pre-commit run
+fi

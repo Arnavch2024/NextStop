@@ -12,7 +12,7 @@ export interface ChatRequest {
   message: string;
 }
 
-export type AgentStepType = 'tool_call' | 'tool_result' | 'final_reply';
+export type AgentStepType = "tool_call" | "tool_result" | "final_reply";
 
 export interface AgentStep {
   type: AgentStepType;
@@ -25,7 +25,7 @@ export interface AgentStep {
 export interface RecordRef {
   table: string;
   id?: string | null;
-  op: 'created' | 'updated';
+  op: "created" | "updated";
 }
 
 export interface ChatResponse {
@@ -41,7 +41,7 @@ export interface TranscribeResponse {
 export interface BreakdownItem {
   reason: string;
   points: number;
-  source: 'resume' | 'user_said' | 'system';
+  source: "resume" | "user_said" | "system";
 }
 
 export interface ScoreResponse {
@@ -73,13 +73,13 @@ export interface EducationRecord {
   id: string;
   student_id: string;
   profile_id: string;
-  level: 'tenth' | 'twelfth' | 'bachelors' | 'masters' | 'other';
+  level: "tenth" | "twelfth" | "bachelors" | "masters" | "other";
   institution?: string | null;
   degree?: string | null;
   branch?: string | null;
   board_or_university?: string | null;
   score_value?: number | null;
-  score_scale?: 'percentage' | 'gpa10' | 'cgpa10' | 'cgpa4' | null;
+  score_scale?: "percentage" | "gpa10" | "cgpa10" | "cgpa4" | null;
   start_year?: number | null;
   end_year?: number | null;
   source: string;
@@ -128,12 +128,12 @@ export interface DocumentRecord {
   id: string;
   student_id: string;
   profile_id: string;
-  kind: 'resume' | 'id_proof' | 'certificate' | 'other';
+  kind: "resume" | "id_proof" | "certificate" | "other";
   storage_path: string;
   file_name?: string | null;
   mime_type?: string | null;
   size_bytes?: number | null;
-  verification_status: 'pending' | 'pre_verified' | 'rejected';
+  verification_status: "pending" | "pre_verified" | "rejected";
   uploaded_at: string;
 }
 

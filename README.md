@@ -27,12 +27,12 @@
 
 ### Prerequisites
 
-| Tool | Version |
-|------|---------|
-| Node.js | ≥ 20 |
-| pnpm | ≥ 9 |
-| Python | 3.12 |
-| Supabase CLI | latest |
+| Tool         | Version |
+| ------------ | ------- |
+| Node.js      | ≥ 20    |
+| pnpm         | ≥ 9     |
+| Python       | 3.12    |
+| Supabase CLI | latest  |
 
 ### 1. Install dependencies
 
@@ -57,15 +57,15 @@ cp apps/mobile/.env.example apps/mobile/.env
 
 Fill in the values:
 
-| App | Variable | Description |
-|-----|----------|-------------|
-| api | `SUPABASE_URL` | Your Supabase project URL |
-| api | `SUPABASE_ANON_KEY` | Supabase anon/public key |
-| api | `SUPABASE_SERVICE_KEY` | Supabase service-role key (**server-side only**) |
-| api | `GEMINI_API_KEY` | Google AI Studio API key |
-| web/mobile | `NEXT_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_URL` | Same Supabase URL |
-| web/mobile | `NEXT_PUBLIC_SUPABASE_ANON_KEY` / `EXPO_PUBLIC_SUPABASE_ANON_KEY` | Same anon key |
-| web/mobile | `NEXT_PUBLIC_API_BASE_URL` / `EXPO_PUBLIC_API_BASE_URL` | URL of `apps/api` (e.g. `http://localhost:8000`) |
+| App        | Variable                                                          | Description                                      |
+| ---------- | ----------------------------------------------------------------- | ------------------------------------------------ |
+| api        | `SUPABASE_URL`                                                    | Your Supabase project URL                        |
+| api        | `SUPABASE_ANON_KEY`                                               | Supabase anon/public key                         |
+| api        | `SUPABASE_SERVICE_KEY`                                            | Supabase service-role key (**server-side only**) |
+| api        | `GEMINI_API_KEY`                                                  | Google AI Studio API key                         |
+| web/mobile | `NEXT_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_URL`           | Same Supabase URL                                |
+| web/mobile | `NEXT_PUBLIC_SUPABASE_ANON_KEY` / `EXPO_PUBLIC_SUPABASE_ANON_KEY` | Same anon key                                    |
+| web/mobile | `NEXT_PUBLIC_API_BASE_URL` / `EXPO_PUBLIC_API_BASE_URL`           | URL of `apps/api` (e.g. `http://localhost:8000`) |
 
 ### 3. Apply the database migration
 
@@ -91,6 +91,43 @@ pnpm --filter @recruiting/web dev
 
 # Mobile (in another terminal)
 pnpm --filter @recruiting/mobile start   # then press 'i' for iOS, 'a' for Android
+```
+
+---
+
+## Run locally (CI parity)
+
+To run the exact checks that run in GitHub Actions CI:
+
+### 1. API checks (FastAPI)
+
+```bash
+cd apps/api
+# Lint & formatting verification
+ruff check .
+ruff format --check .
+
+# Run test suite
+pytest -v
+```
+
+### 2. Web & Mobile checks (Next.js & Expo)
+
+```bash
+# Build shared types
+pnpm --filter @recruiting/shared build
+
+# Linting
+pnpm --filter @recruiting/web lint
+pnpm exec eslint apps/mobile packages/shared
+
+# Typecheck all packages
+pnpm --filter @recruiting/shared exec tsc --noEmit
+pnpm --filter @recruiting/web exec tsc --noEmit
+pnpm --filter @recruiting/mobile exec tsc --noEmit
+
+# Production web build
+pnpm --filter @recruiting/web build
 ```
 
 ---
@@ -158,26 +195,26 @@ Browser / Mobile App
 
 ### Agent Roles
 
-| Role | Can do via chat |
-|------|----------------|
-| **Student** | Update own profile, view opportunities |
-| **Placement Officer** | Manage college contacts & students |
-| **Company** | Update company profile, contacts |
-| **Recruiter** | Query across companies and students |
+| Role                  | Can do via chat                        |
+| --------------------- | -------------------------------------- |
+| **Student**           | Update own profile, view opportunities |
+| **Placement Officer** | Manage college contacts & students     |
+| **Company**           | Update company profile, contacts       |
+| **Recruiter**         | Query across companies and students    |
 
 ---
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| API | FastAPI 0.111, Python 3.12, Uvicorn |
-| LLM | Google Gemini 2.5 Flash (`google-genai`) |
-| Auth / DB | Supabase (Postgres + RLS + Realtime + Auth) |
-| Web | Next.js 14, React 18, Tailwind CSS, TypeScript |
-| Mobile | Expo 51, expo-router 3.5, React Native |
-| Monorepo | pnpm workspaces, Turborepo |
-| Types | `packages/shared` (`@recruiting/shared`) |
+| Layer     | Technology                                     |
+| --------- | ---------------------------------------------- |
+| API       | FastAPI 0.111, Python 3.12, Uvicorn            |
+| LLM       | Google Gemini 2.5 Flash (`google-genai`)       |
+| Auth / DB | Supabase (Postgres + RLS + Realtime + Auth)    |
+| Web       | Next.js 14, React 18, Tailwind CSS, TypeScript |
+| Mobile    | Expo 51, expo-router 3.5, React Native         |
+| Monorepo  | pnpm workspaces, Turborepo                     |
+| Types     | `packages/shared` (`@recruiting/shared`)       |
 
 ---
 
@@ -188,4 +225,3 @@ Browser / Mobile App
 - RLS policies ensure users can only read/write their own rows
 - `upsert_record` tool enforces an explicit allow-list of tables and Pydantic-validated schemas
 - `batch_year` is restricted to 2027 or 2028 at the API layer
-

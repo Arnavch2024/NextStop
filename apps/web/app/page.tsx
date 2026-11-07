@@ -1,8 +1,8 @@
-'use client';
+"use client";
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { getSupabaseBrowserClient } from '@/lib/supabase';
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { getSupabaseBrowserClient } from "@/lib/supabase";
 
 export default function HomePage() {
   const router = useRouter();
@@ -11,21 +11,21 @@ export default function HomePage() {
     const supabase = getSupabaseBrowserClient();
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!session) {
-        router.replace('/login');
+        router.replace("/login");
         return;
       }
 
       // Check profile role
       const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', session.user.id)
+        .from("profiles")
+        .select("role")
+        .eq("id", session.user.id)
         .single();
 
       if (!profile || !profile.role) {
-        router.replace('/onboarding');
+        router.replace("/onboarding");
       } else {
-        router.replace('/chat');
+        router.replace("/chat");
       }
     });
   }, [router]);

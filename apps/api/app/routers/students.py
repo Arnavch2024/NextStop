@@ -1,10 +1,11 @@
 import io
 import os
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import List
+
 import docx
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 import pypdf
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from supabase import Client
 
 from app.agent.resume_parser import parse_resume
@@ -13,12 +14,11 @@ from app.dependencies import get_current_user
 from app.logger import logger
 from app.models.api import (
     BreakdownItemModel,
-    RecordRef,
     ResumeResponse,
     ScoreResponse,
     StudentProfileResponse,
 )
-from app.models.db import ProfileRole, UserProfile
+from app.models.db import UserProfile
 from app.scoring.loader import recompute_score
 
 router = APIRouter(prefix="/v1/students/me", tags=["students"])
@@ -38,9 +38,8 @@ def extract_text_from_file(file_bytes: bytes, mime_type: str, filename: str) -> 
         reader = pypdf.PdfReader(io.BytesIO(file_bytes))
         pages_text = [p.extract_text() or "" for p in reader.pages]
         return "\n".join(pages_text).strip()
-    elif (
-        mime_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        or fname.endswith(".docx")
+    elif mime_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" or fname.endswith(
+        ".docx"
     ):
         doc = docx.Document(io.BytesIO(file_bytes))
         paragraphs = [p.text for p in doc.paragraphs]
@@ -55,12 +54,14 @@ def get_or_create_student_id(supabase: Client, user: UserProfile) -> str:
         return str(res.data[0]["id"])
 
     new_id = str(uuid.uuid4())
-    supabase.table("students").insert({
-        "id": new_id,
-        "profile_id": user.id,
-        "full_name": user.display_name or "Student",
-        "batch_year": 2027,
-    }).execute()
+    supabase.table("students").insert(
+        {
+            "id": new_id,
+            "profile_id": user.id,
+            "full_name": user.display_name or "Student",
+            "batch_year": 2027,
+        }
+    ).execute()
     return new_id
 
 
@@ -80,12 +81,10 @@ def compute_missing_fields(supabase: Client, student_id: str) -> List[str]:
     edu_res = supabase.table("education").select("level, score_value").eq("student_id", student_id).execute()
     edu_rows = edu_res.data or []
     has_hs = any(
-        r.get("level") in ("tenth", "twelfth", "10th", "12th") and r.get("score_value") is not None
-        for r in edu_rows
+        r.get("level") in ("tenth", "twelfth", "10th", "12th") and r.get("score_value") is not None for r in edu_rows
     )
     has_bachelors = any(
-        r.get("level") in ("bachelors", "undergraduate") and r.get("score_value") is not None
-        for r in edu_rows
+        r.get("level") in ("bachelors", "undergraduate") and r.get("score_value") is not None for r in edu_rows
     )
     if not has_hs:
         missing.append("high_school_score")
@@ -106,7 +105,9 @@ def create_signed_url_helper(supabase: Client, bucket: str, path: str) -> str:
         if storage_client and hasattr(storage_client, "from_"):
             res = storage_client.from_(bucket).create_signed_url(path, 3600)
             if isinstance(res, dict):
-                return res.get("signedURL") or res.get("signed_url") or f"https://mock-storage.supabase.co/{bucket}/{path}"
+                return (
+                    res.get("signedURL") or res.get("signed_url") or f"https://mock-storage.supabase.co/{bucket}/{path}"
+                )
             return str(res)
     except Exception as exc:
         logger.info(f"Storage signed URL creation handled: {exc}")
@@ -135,10 +136,7 @@ async def upload_resume(
     ext = os.path.splitext(filename)[1].lower()
 
     # 1. Validate MIME
-    is_valid_mime = (
-        content_type in ALLOWED_RESUME_MIMES
-        or ext in (".pdf", ".docx")
-    )
+    is_valid_mime = content_type in ALLOWED_RESUME_MIMES or ext in (".pdf", ".docx")
     if not is_valid_mime:
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
@@ -150,7 +148,9 @@ async def upload_resume(
     # 2. Validate Size
     if len(file_bytes) > MAX_FILE_SIZE:
         raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE if hasattr(status, "HTTP_413_REQUEST_ENTITY_TOO_LARGE") else 413,
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
+            if hasattr(status, "HTTP_413_REQUEST_ENTITY_TOO_LARGE")
+            else 413,
             detail="File size exceeds the 5MB limit.",
         )
 
@@ -176,17 +176,19 @@ async def upload_resume(
 
     # 6. Insert documents metadata row
     doc_id = str(uuid.uuid4())
-    supabase.table("documents").insert({
-        "id": doc_id,
-        "student_id": student_id,
-        "profile_id": user.id,
-        "kind": "resume",
-        "storage_path": storage_path,
-        "file_name": filename,
-        "mime_type": content_type,
-        "size_bytes": len(file_bytes),
-        "verification_status": "pending",
-    }).execute()
+    supabase.table("documents").insert(
+        {
+            "id": doc_id,
+            "student_id": student_id,
+            "profile_id": user.id,
+            "kind": "resume",
+            "storage_path": storage_path,
+            "file_name": filename,
+            "mime_type": content_type,
+            "size_bytes": len(file_bytes),
+            "verification_status": "pending",
+        }
+    ).execute()
 
     # 7. Write raw_event (capped text in payload)
     write_raw_event(
@@ -222,8 +224,7 @@ async def upload_resume(
         score=ScoreResponse(
             score=score_res.score,
             breakdown=[
-                BreakdownItemModel(reason=b.reason, points=b.points, source=b.source)
-                for b in score_res.breakdown
+                BreakdownItemModel(reason=b.reason, points=b.points, source=b.source) for b in score_res.breakdown
             ],
             next_best_actions=score_res.next_best_actions,
         ),
@@ -237,13 +238,7 @@ async def get_resume_signed_url(
     supabase: Client = Depends(get_supabase_client),
 ):
     """Returns a fresh signed URL for a student's resume document."""
-    res = (
-        supabase.table("documents")
-        .select("*")
-        .eq("id", document_id)
-        .eq("profile_id", user.id)
-        .execute()
-    )
+    res = supabase.table("documents").select("*").eq("id", document_id).eq("profile_id", user.id).execute()
     if not res.data or len(res.data) == 0:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -295,10 +290,7 @@ async def get_student_score(
     score_res = recompute_score(supabase, student_id, trigger="manual")
     return ScoreResponse(
         score=score_res.score,
-        breakdown=[
-            BreakdownItemModel(reason=b.reason, points=b.points, source=b.source)
-            for b in score_res.breakdown
-        ],
+        breakdown=[BreakdownItemModel(reason=b.reason, points=b.points, source=b.source) for b in score_res.breakdown],
         next_best_actions=score_res.next_best_actions,
     )
 

@@ -1,6 +1,6 @@
-from typing import Any, Dict, List, Optional
 import uuid
-from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
+
 from supabase import Client, create_client
 
 from app.config import settings
@@ -53,12 +53,14 @@ def create_agent_run(actor_id: str, client: Optional[Client] = None) -> str:
     cli = client or get_supabase_client()
     run_id = str(uuid.uuid4())
     try:
-        cli.table("agent_runs").insert({
-            "id": run_id,
-            "profile_id": actor_id,
-            "status": "running",
-            "steps": [],
-        }).execute()
+        cli.table("agent_runs").insert(
+            {
+                "id": run_id,
+                "profile_id": actor_id,
+                "status": "running",
+                "steps": [],
+            }
+        ).execute()
     except Exception as exc:
         logger.warning(f"Could not write agent_runs record {run_id}: {exc}")
     return run_id
@@ -73,10 +75,12 @@ def close_agent_run(
     """Updates an agent_runs record with final status and steps."""
     cli = client or get_supabase_client()
     try:
-        cli.table("agent_runs").update({
-            "status": status,
-            "steps": steps,
-        }).eq("id", run_id).execute()
+        cli.table("agent_runs").update(
+            {
+                "status": status,
+                "steps": steps,
+            }
+        ).eq("id", run_id).execute()
     except Exception as exc:
         logger.warning(f"Could not update agent_runs {run_id}: {exc}")
 
@@ -92,13 +96,15 @@ def write_raw_event(
     cli = client or get_supabase_client()
     event_id = str(uuid.uuid4())
     try:
-        cli.table("raw_events").insert({
-            "id": event_id,
-            "actor_id": actor_id,
-            "source": source,
-            "payload": payload,
-            "source_url": source_url,
-        }).execute()
+        cli.table("raw_events").insert(
+            {
+                "id": event_id,
+                "actor_id": actor_id,
+                "source": source,
+                "payload": payload,
+                "source_url": source_url,
+            }
+        ).execute()
     except Exception as exc:
         logger.warning(f"Could not write raw_event {source}: {exc}")
     return event_id
@@ -126,4 +132,3 @@ def load_recent_events(
     except Exception as exc:
         logger.warning(f"Error loading recent events for user {actor_id}: {exc}")
         return []
-

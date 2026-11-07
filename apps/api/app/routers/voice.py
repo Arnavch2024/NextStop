@@ -1,4 +1,5 @@
 import os
+
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
 from app.config import settings
@@ -29,9 +30,14 @@ async def transcribe_audio(
     ext = os.path.splitext(filename)[1].lower()
 
     # Validate mime
-    is_valid_mime = (
-        content_type in ALLOWED_AUDIO_MIMES
-        or ext in (".mp3", ".wav", ".m4a", ".webm", ".ogg", ".flac", ".mp4")
+    is_valid_mime = content_type in ALLOWED_AUDIO_MIMES or ext in (
+        ".mp3",
+        ".wav",
+        ".m4a",
+        ".webm",
+        ".ogg",
+        ".flac",
+        ".mp4",
     )
     if not is_valid_mime:
         logger.warning(f"Rejected unsupported audio MIME: {content_type} ({filename})")
@@ -52,7 +58,9 @@ async def transcribe_audio(
     # Size check (25MB Whisper limit)
     if len(audio_bytes) > settings.TRANSCRIPTION_MAX_BYTES:
         raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE if hasattr(status, "HTTP_413_REQUEST_ENTITY_TOO_LARGE") else 413,
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
+            if hasattr(status, "HTTP_413_REQUEST_ENTITY_TOO_LARGE")
+            else 413,
             detail=f"Audio file size exceeds limit of {settings.TRANSCRIPTION_MAX_BYTES} bytes.",
         )
 
@@ -72,4 +80,3 @@ async def transcribe_audio(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"Transcription failed: {str(exc)}",
         )
-

@@ -15,4 +15,3 @@ __all__ = [
     "write_raw_event",
     "load_recent_events",
 ]
-

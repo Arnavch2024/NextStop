@@ -1,7 +1,3 @@
-import pytest
-from app.models.db import ProfileRole, UserProfile
-
-
 def test_score_endpoint_returns_base_score(client, mock_supabase):
     response = client.get(
         "/v1/students/me/score",
@@ -39,22 +35,26 @@ def test_profile_endpoint_returns_empty_lists(client, mock_supabase):
 def test_score_endpoint_reflects_score_event_history(client, mock_supabase):
     # Setup student
     student_id = "student-test-123"
-    mock_supabase.store["students"].append({
-        "id": student_id,
-        "profile_id": "user-123",
-        "full_name": "Riya Sharma",
-        "batch_year": 2027,
-    })
+    mock_supabase.store["students"].append(
+        {
+            "id": student_id,
+            "profile_id": "user-123",
+            "full_name": "Riya Sharma",
+            "batch_year": 2027,
+        }
+    )
     # Add education
-    mock_supabase.store["education"].append({
-        "id": "edu-1",
-        "student_id": student_id,
-        "profile_id": "user-123",
-        "level": "twelfth",
-        "score_value": 92.0,
-        "score_scale": "percentage",
-        "source": "resume",
-    })
+    mock_supabase.store["education"].append(
+        {
+            "id": "edu-1",
+            "student_id": student_id,
+            "profile_id": "user-123",
+            "level": "twelfth",
+            "score_value": 92.0,
+            "score_scale": "percentage",
+            "source": "resume",
+        }
+    )
 
     # Call /score -> computes and stores event
     res = client.get(
@@ -78,4 +78,3 @@ def test_score_endpoint_reflects_score_event_history(client, mock_supabase):
     pdata = prof_res.json()
     assert len(pdata["education"]) == 1
     assert pdata["education"][0]["level"] == "twelfth"
-

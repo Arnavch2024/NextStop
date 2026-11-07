@@ -1,16 +1,14 @@
 import io
 from unittest.mock import MagicMock, patch
-import docx
-from google.genai import types
-import pypdf
-import pytest
 
-from app.models.api import AgentStepType
+import docx
+import pypdf
+from google.genai import types
 
 
 def create_sample_pdf_bytes(text: str = "Riya Sharma\nSt. Xavier's Mumbai\nBSc CS 2027") -> bytes:
     writer = pypdf.PdfWriter()
-    page = writer.add_blank_page(width=200, height=200)
+    _ = writer.add_blank_page(width=200, height=200)
     # Using pypdf annotations or simple writer
     stream = io.BytesIO()
     writer.write(stream)
@@ -108,4 +106,3 @@ def test_upload_resume_success(client, mock_supabase):
     assert get_res.status_code == 200
     assert get_res.json()["document_id"] == doc_id
     assert "signed_url" in get_res.json()
-

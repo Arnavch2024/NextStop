@@ -1,10 +1,10 @@
-import './globals.css';
-import type { Metadata } from 'next';
-import { ReactNode } from 'react';
+import "./globals.css";
+import type { Metadata } from "next";
+import { ReactNode } from "react";
 
 export const metadata: Metadata = {
-  title: 'Mumbai College Recruiting Platform',
-  description: 'Voice and text conversational campus recruiting platform',
+  title: "Mumbai College Recruiting Platform",
+  description: "Voice and text conversational campus recruiting platform",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
@@ -16,4 +16,3 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     </html>
   );
 }
-

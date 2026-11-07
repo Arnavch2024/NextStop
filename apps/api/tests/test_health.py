@@ -5,4 +5,3 @@ def test_health_endpoint(client):
     assert data["status"] == "ok"
     assert data["version"] == "0.1.0"
     assert "time" in data
-

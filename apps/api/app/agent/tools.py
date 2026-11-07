@@ -1,5 +1,6 @@
 import uuid
-from typing import Any, Dict, Optional
+from typing import Any, Dict
+
 from google.genai import types
 from pydantic import ValidationError
 from supabase import Client
@@ -72,12 +73,7 @@ def handle_upsert(
             clean_data.setdefault("source", "user_said")
             clean_data.setdefault("confidence", 1.0)
 
-            existing = (
-                supabase_client.table("students")
-                .select("id")
-                .eq("profile_id", user_id)
-                .execute()
-            )
+            existing = supabase_client.table("students").select("id").eq("profile_id", user_id).execute()
             if existing.data and len(existing.data) > 0:
                 rec_id = str(existing.data[0]["id"])
                 supabase_client.table("students").update(clean_data).eq("id", rec_id).execute()
@@ -121,12 +117,7 @@ def handle_upsert(
             clean_data["owner_id"] = user_id
             comp_name = clean_data.get("name", "").strip()
 
-            existing = (
-                supabase_client.table("companies")
-                .select("id, name")
-                .ilike("name", comp_name)
-                .execute()
-            )
+            existing = supabase_client.table("companies").select("id, name").ilike("name", comp_name).execute()
             if existing.data and len(existing.data) > 0:
                 rec_id = str(existing.data[0]["id"])
                 supabase_client.table("companies").update(clean_data).eq("id", rec_id).execute()
@@ -168,12 +159,7 @@ def handle_upsert(
 
         elif table in ("education", "internships", "jobs", "skills"):
             # Ownership enforcement: find student_id where profile_id = user.id
-            stu_res = (
-                supabase_client.table("students")
-                .select("id")
-                .eq("profile_id", user_id)
-                .execute()
-            )
+            stu_res = supabase_client.table("students").select("id").eq("profile_id", user_id).execute()
             if not stu_res.data:
                 logger.warning(f"No student record found for profile_id {user_id}")
                 return {"error": "no_student_record", "table": table}
@@ -242,10 +228,7 @@ def handle_upsert(
                 comp = clean_data.get("company") or ""
                 role = clean_data.get("role") or ""
                 all_existing = (
-                    supabase_client.table("jobs")
-                    .select("id, company, role")
-                    .eq("student_id", student_id)
-                    .execute()
+                    supabase_client.table("jobs").select("id, company, role").eq("student_id", student_id).execute()
                 )
                 match = next(
                     (
@@ -270,12 +253,7 @@ def handle_upsert(
 
             elif table == "skills":
                 name = clean_data.get("name") or ""
-                all_existing = (
-                    supabase_client.table("skills")
-                    .select("id, name")
-                    .eq("student_id", student_id)
-                    .execute()
-                )
+                all_existing = supabase_client.table("skills").select("id, name").eq("student_id", student_id).execute()
                 match = next(
                     (
                         r

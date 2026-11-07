@@ -1,5 +1,5 @@
-from unittest.mock import MagicMock
 import pytest
+
 from app.main import app
 from app.voice.transcriber import Transcriber, get_transcriber
 
@@ -69,4 +69,3 @@ def test_transcribe_bad_audio_returns_422(client, mock_transcriber):
         files={"audio": ("document.pdf", b"pdf-content-not-audio-bytes-at-all", "application/pdf")},
     )
     assert bad_mime_res.status_code == 422
-

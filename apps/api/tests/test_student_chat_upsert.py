@@ -1,9 +1,8 @@
 from unittest.mock import MagicMock, patch
+
 from google.genai import types
-import pytest
 
 from app.agent.tools import handle_upsert
-from app.models.api import AgentStepType
 from app.models.db import ProfileRole, UserProfile
 
 
@@ -117,14 +116,16 @@ def test_upsert_internship_and_job(mock_supabase):
 
 def test_student_chat_turn_with_injected_data(client, mock_supabase):
     # Setup initial student data
-    mock_supabase.store["students"].append({
-        "id": "student-123",
-        "profile_id": "user-123",
-        "full_name": "Riya Sharma",
-        "batch_year": 2027,
-        "degree": "BSc CS",
-        "college_id": None,
-    })
+    mock_supabase.store["students"].append(
+        {
+            "id": "student-123",
+            "profile_id": "user-123",
+            "full_name": "Riya Sharma",
+            "batch_year": 2027,
+            "degree": "BSc CS",
+            "college_id": None,
+        }
+    )
 
     mock_gemini = MagicMock()
     # Turn 1: tool call upsert internship
@@ -156,4 +157,3 @@ def test_student_chat_turn_with_injected_data(client, mock_supabase):
     assert len(data["records_created"]) == 1
     assert data["records_created"][0]["table"] == "internships"
     assert data["records_created"][0]["op"] == "created"
-

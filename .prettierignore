@@ -1,0 +1,11 @@
+node_modules
+dist
+.next
+.expo
+.venv
+__pycache__
+*.pyc
+*.py
+.turbo
+.pytest_cache
+pnpm-lock.yaml

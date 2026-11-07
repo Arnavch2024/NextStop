@@ -23,4 +23,3 @@ def test_openapi_schema(client):
     assert "ChatResponse" in schemas
     assert "AgentStep" in schemas
     assert "RecordRef" in schemas
-

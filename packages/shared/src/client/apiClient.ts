@@ -6,7 +6,7 @@ import type {
   ScoreResponse,
   StudentProfile,
   TranscribeResponse,
-} from '../types/api';
+} from "../types/api";
 
 export class ApiError extends Error {
   status: number;
@@ -14,7 +14,7 @@ export class ApiError extends Error {
 
   constructor(status: number, message: string, data?: any) {
     super(message);
-    this.name = 'ApiError';
+    this.name = "ApiError";
     this.status = status;
     this.data = data;
   }
@@ -24,7 +24,7 @@ export class ApiError extends Error {
  * Strips trailing slashes from base URL.
  */
 function cleanBaseUrl(base: string): string {
-  return base.replace(/\/+$/, '');
+  return base.replace(/\/+$/, "");
 }
 
 /**
@@ -33,15 +33,19 @@ function cleanBaseUrl(base: string): string {
 export async function health(baseUrl: string): Promise<HealthResponse> {
   const url = `${cleanBaseUrl(baseUrl)}/health`;
   const res = await fetch(url, {
-    method: 'GET',
+    method: "GET",
     headers: {
-      'Accept': 'application/json',
+      Accept: "application/json",
     },
   });
 
   if (!res.ok) {
     const errorBody = await res.json().catch(() => ({}));
-    throw new ApiError(res.status, `Health check failed with status ${res.status}`, errorBody);
+    throw new ApiError(
+      res.status,
+      `Health check failed with status ${res.status}`,
+      errorBody
+    );
   }
 
   return (await res.json()) as HealthResponse;
@@ -50,23 +54,28 @@ export async function health(baseUrl: string): Promise<HealthResponse> {
 /**
  * Conversational agent endpoint: POST /v1/chat
  */
-export async function chat(baseUrl: string, message: string, token: string): Promise<ChatResponse> {
+export async function chat(
+  baseUrl: string,
+  message: string,
+  token: string
+): Promise<ChatResponse> {
   const url = `${cleanBaseUrl(baseUrl)}/v1/chat`;
   const body: ChatRequest = { message };
 
   const res = await fetch(url, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      'Authorization': `Bearer ${token}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify(body),
   });
 
   if (!res.ok) {
     const errorBody = await res.json().catch(() => ({}));
-    const message = errorBody?.detail || `API request failed with status ${res.status}`;
+    const message =
+      errorBody?.detail || `API request failed with status ${res.status}`;
     throw new ApiError(res.status, message, errorBody);
   }
 
@@ -76,19 +85,26 @@ export async function chat(baseUrl: string, message: string, token: string): Pro
 /**
  * Student score endpoint: GET /v1/students/me/score
  */
-export async function getStudentScore(baseUrl: string, token: string): Promise<ScoreResponse> {
+export async function getStudentScore(
+  baseUrl: string,
+  token: string
+): Promise<ScoreResponse> {
   const url = `${cleanBaseUrl(baseUrl)}/v1/students/me/score`;
   const res = await fetch(url, {
-    method: 'GET',
+    method: "GET",
     headers: {
-      'Accept': 'application/json',
-      'Authorization': `Bearer ${token}`,
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`,
     },
   });
 
   if (!res.ok) {
     const errorBody = await res.json().catch(() => ({}));
-    throw new ApiError(res.status, errorBody?.detail || 'Failed to fetch student score', errorBody);
+    throw new ApiError(
+      res.status,
+      errorBody?.detail || "Failed to fetch student score",
+      errorBody
+    );
   }
 
   return (await res.json()) as ScoreResponse;
@@ -97,19 +113,26 @@ export async function getStudentScore(baseUrl: string, token: string): Promise<S
 /**
  * Student profile endpoint: GET /v1/students/me/profile
  */
-export async function getStudentProfile(baseUrl: string, token: string): Promise<StudentProfile> {
+export async function getStudentProfile(
+  baseUrl: string,
+  token: string
+): Promise<StudentProfile> {
   const url = `${cleanBaseUrl(baseUrl)}/v1/students/me/profile`;
   const res = await fetch(url, {
-    method: 'GET',
+    method: "GET",
     headers: {
-      'Accept': 'application/json',
-      'Authorization': `Bearer ${token}`,
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`,
     },
   });
 
   if (!res.ok) {
     const errorBody = await res.json().catch(() => ({}));
-    throw new ApiError(res.status, errorBody?.detail || 'Failed to fetch student profile', errorBody);
+    throw new ApiError(
+      res.status,
+      errorBody?.detail || "Failed to fetch student profile",
+      errorBody
+    );
   }
 
   return (await res.json()) as StudentProfile;
@@ -126,19 +149,23 @@ export async function transcribeAudio(
 ): Promise<TranscribeResponse> {
   const url = `${cleanBaseUrl(baseUrl)}/v1/voice/transcribe`;
   const formData = new FormData();
-  formData.append('audio', audioBlob, filename);
+  formData.append("audio", audioBlob, filename);
 
   const res = await fetch(url, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Authorization': `Bearer ${token}`,
+      Authorization: `Bearer ${token}`,
     },
     body: formData,
   });
 
   if (!res.ok) {
     const errorBody = await res.json().catch(() => ({}));
-    throw new ApiError(res.status, errorBody?.detail || 'Transcription failed', errorBody);
+    throw new ApiError(
+      res.status,
+      errorBody?.detail || "Transcription failed",
+      errorBody
+    );
   }
 
   return (await res.json()) as TranscribeResponse;

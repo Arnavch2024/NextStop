@@ -197,4 +197,3 @@ do $$ begin
     on conflict (id) do nothing;
   end if;
 end $$;
-
