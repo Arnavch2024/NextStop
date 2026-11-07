@@ -2,11 +2,21 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { getSupabaseBrowserClient, API_BASE_URL } from "@/lib/supabase";
-import { chat, AgentStep, RecordRef, RawEvent } from "@recruiting/shared";
+import {
+  chat,
+  transcribeAudio,
+  uploadResume,
+  AgentStep,
+  RecordRef,
+  RawEvent,
+  ResumeResponse,
+} from "@recruiting/shared";
 import {
   Send,
   Mic,
+  Square,
   Bot,
   User,
   LogOut,
@@ -16,6 +26,13 @@ import {
   CheckCircle2,
   Loader2,
   Sparkles,
+  Paperclip,
+  FileText,
+  AlertCircle,
+  Smartphone,
+  X,
+  ArrowRight,
+  RefreshCw,
 } from "lucide-react";
 
 interface ChatItem {
@@ -24,6 +41,7 @@ interface ChatItem {
   text: string;
   steps?: AgentStep[];
   records?: RecordRef[];
+  resumeSummary?: ResumeResponse;
   timestamp: string;
 }
 
@@ -42,10 +60,58 @@ export default function ChatPage() {
     {}
   );
 
+  // Voice recording state
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+
+  // Resume upload state
+  const [isConsentOpen, setIsConsentOpen] = useState(false);
+  const [isUploadingResume, setIsUploadingResume] = useState(false);
+  const [resumeError, setResumeError] = useState<string | null>(null);
+
+  // Cross-device sync toast state
+  const [crossDeviceToast, setCrossDeviceToast] = useState<string | null>(null);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recordIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Show temporary toast
+  function showToast(message: string) {
+    setCrossDeviceToast(message);
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    toastTimeoutRef.current = setTimeout(() => {
+      setCrossDeviceToast(null);
+    }, 4500);
+  }
 
   // 1. Check Session & Load Profile
   useEffect(() => {
+    async function loadInitialHistory(actorId: string) {
+      const { data: events, error } = await supabase
+        .from("raw_events")
+        .select("*")
+        .eq("actor_id", actorId)
+        .in("source", ["user_message", "agent_message"])
+        .order("created_at", { ascending: true })
+        .limit(100);
+
+      if (events && !error) {
+        const items: ChatItem[] = events.map((ev: RawEvent) => ({
+          id: ev.id,
+          sender: ev.source === "user_message" ? "user" : "agent",
+          text: ev.payload?.message || "",
+          timestamp: ev.created_at,
+        }));
+        setMessages(items);
+      }
+    }
+
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!session) {
         router.replace("/login");
@@ -75,31 +141,12 @@ export default function ChatPage() {
     });
   }, [router, supabase]);
 
-  async function loadInitialHistory(actorId: string) {
-    const { data: events, error } = await supabase
-      .from("raw_events")
-      .select("*")
-      .eq("actor_id", actorId)
-      .in("source", ["user_message", "agent_message"])
-      .order("created_at", { ascending: true })
-      .limit(100);
-
-    if (events && !error) {
-      const items: ChatItem[] = events.map((ev: RawEvent) => ({
-        id: ev.id,
-        sender: ev.source === "user_message" ? "user" : "agent",
-        text: ev.payload?.message || "",
-        timestamp: ev.created_at,
-      }));
-      setMessages(items);
-    }
-  }
-
-  // 2. Supabase Realtime Subscription for raw_events
+  // 2. Supabase Realtime Subscription for raw_events, score_events, and profile tables
   useEffect(() => {
     if (!userId) return;
 
-    const channel = supabase
+    // A. Chat messages sync
+    const chatChannel = supabase
       .channel(`raw_events_${userId}`)
       .on(
         "postgres_changes",
@@ -116,7 +163,6 @@ export default function ChatPage() {
             newEvent.source === "agent_message"
           ) {
             setMessages((prev) => {
-              // Avoid duplicate if already locally appended
               if (prev.some((m) => m.id === newEvent.id)) return prev;
               return [
                 ...prev,
@@ -133,23 +179,97 @@ export default function ChatPage() {
       )
       .subscribe();
 
+    // B. Realtime updates of score and profile with the "updated from your phone" toast
+    const scoreChannel = supabase
+      .channel(`score_events_${userId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "score_events",
+          filter: `profile_id=eq.${userId}`,
+        },
+        (payload) => {
+          const newScore = (payload.new as any)?.score;
+          showToast(
+            newScore !== undefined
+              ? `Score updated to ${newScore} from your phone`
+              : "Score & profile updated from your phone"
+          );
+        }
+      )
+      .subscribe();
+
+    const profileChannel = supabase
+      .channel(`profile_changes_${userId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "education",
+          filter: `profile_id=eq.${userId}`,
+        },
+        () => showToast("Profile updated from your phone")
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "internships",
+          filter: `profile_id=eq.${userId}`,
+        },
+        () => showToast("Profile updated from your phone")
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "skills",
+          filter: `profile_id=eq.${userId}`,
+        },
+        () => showToast("Profile updated from your phone")
+      )
+      .subscribe();
+
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(chatChannel);
+      supabase.removeChannel(scoreChannel);
+      supabase.removeChannel(profileChannel);
+      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
     };
   }, [userId, supabase]);
 
   // Scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isSending]);
+  }, [messages, isSending, isTranscribing, isUploadingResume]);
+
+  // Clean up recording timer on unmount
+  useEffect(() => {
+    return () => {
+      if (recordIntervalRef.current) clearInterval(recordIntervalRef.current);
+      if (
+        mediaRecorderRef.current &&
+        mediaRecorderRef.current.state === "recording"
+      ) {
+        mediaRecorderRef.current.stop();
+      }
+    };
+  }, []);
 
   // 3. Send Message to Agent
-  async function handleSend(e?: React.FormEvent) {
+  async function handleSend(e?: React.FormEvent, overrideText?: string) {
     if (e) e.preventDefault();
-    if (!inputText.trim() || isSending || !sessionToken) return;
+    const text = (overrideText ?? inputText).trim();
+    if (!text || isSending || !sessionToken) return;
 
-    const text = inputText.trim();
-    setInputText("");
+    if (!overrideText) {
+      setInputText("");
+    }
     setIsSending(true);
 
     const tempUserId = `user-${Date.now()}`;
@@ -194,6 +314,240 @@ export default function ChatPage() {
     }
   }
 
+  // 4. Voice Recording & Transcription
+  async function startRecording() {
+    setVoiceError(null);
+    if (!sessionToken) {
+      setVoiceError("Please wait for your session to load.");
+      return;
+    }
+
+    if (
+      typeof window === "undefined" ||
+      !navigator.mediaDevices ||
+      !navigator.mediaDevices.getUserMedia
+    ) {
+      setVoiceError("Voice recording is not supported in this browser.");
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioChunksRef.current = [];
+
+      let mimeType = "audio/webm";
+      if (!MediaRecorder.isTypeSupported("audio/webm")) {
+        if (MediaRecorder.isTypeSupported("audio/mp4")) {
+          mimeType = "audio/mp4";
+        } else if (MediaRecorder.isTypeSupported("audio/ogg")) {
+          mimeType = "audio/ogg";
+        } else {
+          mimeType = "";
+        }
+      }
+
+      const recorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
+
+      recorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onstop = async () => {
+        // Stop all audio tracks
+        stream.getTracks().forEach((track) => track.stop());
+
+        if (recordIntervalRef.current) {
+          clearInterval(recordIntervalRef.current);
+          recordIntervalRef.current = null;
+        }
+
+        const audioBlob = new Blob(audioChunksRef.current, {
+          type: recorder.mimeType || "audio/webm",
+        });
+
+        if (audioBlob.size < 500) {
+          setVoiceError(
+            "Recording was too short or silent. Please try speaking again."
+          );
+          setIsTranscribing(false);
+          setIsRecording(false);
+          return;
+        }
+
+        setIsTranscribing(true);
+        try {
+          const extension = recorder.mimeType.includes("mp4") ? "mp4" : "webm";
+          const res = await transcribeAudio(
+            API_BASE_URL,
+            audioBlob,
+            `voice_input.${extension}`,
+            sessionToken
+          );
+
+          if (res.text && res.text.trim()) {
+            // Feed transcript directly into chat flow
+            await handleSend(undefined, res.text.trim());
+          } else {
+            setVoiceError("Could not recognize any speech. Please try again.");
+          }
+        } catch (err: any) {
+          setVoiceError(
+            err.message ||
+              "Voice transcription failed. Please try again or type instead."
+          );
+        } finally {
+          setIsTranscribing(false);
+          setIsRecording(false);
+        }
+      };
+
+      recorder.start(250);
+      mediaRecorderRef.current = recorder;
+      setIsRecording(true);
+      setRecordingSeconds(0);
+
+      recordIntervalRef.current = setInterval(() => {
+        setRecordingSeconds((prev) => prev + 1);
+      }, 1000);
+    } catch (err: any) {
+      if (
+        err.name === "NotAllowedError" ||
+        err.name === "PermissionDeniedError" ||
+        err.message?.includes("Permission denied")
+      ) {
+        setVoiceError(
+          "Microphone permission was denied. Please allow microphone access in your browser."
+        );
+      } else {
+        setVoiceError(
+          `Failed to access microphone: ${err.message || "Unknown error"}`
+        );
+      }
+      setIsRecording(false);
+    }
+  }
+
+  function stopRecording() {
+    if (
+      mediaRecorderRef.current &&
+      mediaRecorderRef.current.state === "recording"
+    ) {
+      mediaRecorderRef.current.stop();
+    }
+  }
+
+  function toggleRecording() {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      startRecording();
+    }
+  }
+
+  // 5. Resume Upload with Consent Sheet & Parsed Card
+  function handleOpenResumePicker() {
+    setResumeError(null);
+    setIsConsentOpen(true);
+  }
+
+  function handleConsentConfirm() {
+    setIsConsentOpen(false);
+    // Open hidden file picker
+    fileInputRef.current?.click();
+  }
+
+  async function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    // Reset input value so same file can be selected again if needed
+    e.target.value = "";
+    if (!file || !sessionToken) return;
+
+    setResumeError(null);
+
+    // Validate size (max 5MB)
+    const MAX_SIZE = 5 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+      setResumeError(
+        `File is too large (${(file.size / (1024 * 1024)).toFixed(1)} MB). Maximum allowed size is 5 MB.`
+      );
+      return;
+    }
+
+    // Validate extension / MIME
+    const fname = file.name.toLowerCase();
+    const isPdfOrDocx =
+      fname.endsWith(".pdf") ||
+      fname.endsWith(".docx") ||
+      file.type === "application/pdf" ||
+      file.type ===
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+    if (!isPdfOrDocx) {
+      setResumeError("Only PDF and DOCX files are supported.");
+      return;
+    }
+
+    setIsUploadingResume(true);
+
+    // Optimistic user note
+    const userMsgId = `user-resume-${Date.now()}`;
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: userMsgId,
+        sender: "user",
+        text: `Uploaded resume: ${file.name}`,
+        timestamp: new Date().toISOString(),
+      },
+    ]);
+
+    try {
+      const summary = await uploadResume(
+        API_BASE_URL,
+        file,
+        file.name,
+        sessionToken
+      );
+
+      const agentMsgId = `agent-resume-${Date.now()}`;
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: agentMsgId,
+          sender: "agent",
+          text: `I've analyzed your resume "${file.name}" and extracted your academic and work experience! Your readiness score is now ${summary.score.score}/100.`,
+          records: summary.records_created,
+          resumeSummary: summary,
+          timestamp: new Date().toISOString(),
+        },
+      ]);
+    } catch (err: any) {
+      setResumeError(err.message || "Failed to upload and parse resume.");
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `error-${Date.now()}`,
+          sender: "agent",
+          text: `Resume upload error: ${err.message || "Could not process file."}`,
+          timestamp: new Date().toISOString(),
+        },
+      ]);
+    } finally {
+      setIsUploadingResume(false);
+    }
+  }
+
+  function handleFixSomething(summary: ResumeResponse) {
+    const missing = summary.missing_fields?.length
+      ? summary.missing_fields.join(", ")
+      : "details";
+    setInputText(`I want to fix or add info for: ${missing}. Specifically: `);
+  }
+
   async function handleSignOut() {
     await supabase.auth.signOut();
     router.replace("/login");
@@ -203,8 +557,44 @@ export default function ChatPage() {
     setExpandedSteps((prev) => ({ ...prev, [id]: !prev[id] }));
   }
 
+  const formatTimer = (secs: number) => {
+    const m = Math.floor(secs / 60)
+      .toString()
+      .padStart(2, "0");
+    const s = (secs % 60).toString().padStart(2, "0");
+    return `${m}:${s}`;
+  };
+
   return (
-    <div className="flex h-screen flex-col bg-slate-50">
+    <div className="flex h-screen flex-col bg-slate-50 relative">
+      {/* Hidden File Input for Resume */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileSelected}
+        accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        className="hidden"
+      />
+
+      {/* Cross-Device Live Update Toast */}
+      {crossDeviceToast && (
+        <div className="absolute top-20 right-6 z-50 flex items-center gap-2.5 rounded-xl border border-indigo-200 bg-white px-4 py-3 text-xs font-medium text-slate-800 shadow-lg animate-in fade-in slide-in-from-top-4">
+          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-100 text-indigo-600">
+            <Smartphone className="h-3.5 w-3.5" />
+          </div>
+          <div>
+            <p className="font-semibold text-slate-900">{crossDeviceToast}</p>
+            <p className="text-[10px] text-slate-400">Synced in realtime</p>
+          </div>
+          <button
+            onClick={() => setCrossDeviceToast(null)}
+            className="ml-2 text-slate-400 hover:text-slate-600"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Top Navigation */}
       <header className="flex h-16 items-center justify-between border-b border-slate-200 bg-white px-6">
         <div className="flex items-center gap-3">
@@ -224,14 +614,45 @@ export default function ChatPage() {
           </div>
         </div>
 
-        <button
-          onClick={handleSignOut}
-          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
-        >
-          <LogOut className="h-4 w-4" />
-          <span>Sign Out</span>
-        </button>
+        <div className="flex items-center gap-3">
+          {role === "student" && (
+            <Link
+              href="/home"
+              className="flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 hover:text-indigo-600"
+            >
+              <span>Dashboard</span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          )}
+
+          <button
+            onClick={handleSignOut}
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
+          >
+            <LogOut className="h-4 w-4" />
+            <span>Sign Out</span>
+          </button>
+        </div>
       </header>
+
+      {/* Error Banners */}
+      {(voiceError || resumeError) && (
+        <div className="bg-red-50 border-b border-red-200 px-6 py-2.5 flex items-center justify-between text-xs text-red-700">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 shrink-0 text-red-500" />
+            <span>{voiceError || resumeError}</span>
+          </div>
+          <button
+            onClick={() => {
+              setVoiceError(null);
+              setResumeError(null);
+            }}
+            className="text-red-500 hover:text-red-700"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
       {/* Chat Messages List */}
       <main className="flex-1 overflow-y-auto p-4 sm:p-6">
@@ -245,10 +666,27 @@ export default function ChatPage() {
                 Welcome to your Recruiting Assistant!
               </h2>
               <p className="mx-auto mt-1 max-w-sm text-xs text-slate-500">
-                Type your details naturally (e.g. your college, batch, degree,
-                or company). The agent automatically builds structured records
-                on your behalf.
+                Type or speak your details naturally, or tap &ldquo;Add my
+                resume&rdquo; below to automatically extract your profile.
               </p>
+              <div className="mt-4 flex flex-wrap justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleOpenResumePicker}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
+                >
+                  <FileText className="h-3.5 w-3.5" />
+                  <span>Add my resume</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={toggleRecording}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  <Mic className="h-3.5 w-3.5 text-indigo-600" />
+                  <span>Speak via Voice</span>
+                </button>
+              </div>
             </div>
           )}
 
@@ -258,6 +696,7 @@ export default function ChatPage() {
             const hasStepsOrRecords =
               (item.steps && item.steps.length > 0) ||
               (item.records && item.records.length > 0);
+            const summary = item.resumeSummary;
 
             return (
               <div
@@ -280,6 +719,83 @@ export default function ChatPage() {
                   <p className="whitespace-pre-wrap leading-relaxed">
                     {item.text}
                   </p>
+
+                  {/* Parsed-Summary Card for Resumes */}
+                  {summary && (
+                    <div className="mt-3 rounded-xl border border-indigo-100 bg-gradient-to-br from-indigo-50/70 to-blue-50/50 p-3.5 text-slate-800">
+                      <div className="flex items-center justify-between border-b border-indigo-100 pb-2.5">
+                        <div className="flex items-center gap-2">
+                          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-600 text-white">
+                            <FileText className="h-4 w-4" />
+                          </div>
+                          <div>
+                            <span className="text-xs font-bold text-slate-900">
+                              Resume Summary Card
+                            </span>
+                            <p className="text-[10px] text-slate-500">
+                              {summary.records_created?.length || 0} record(s)
+                              synced
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-baseline gap-1 rounded-full bg-indigo-600 px-2.5 py-0.5 text-white">
+                          <span className="text-xs font-bold">
+                            {summary.score.score}
+                          </span>
+                          <span className="text-[9px] opacity-80">/ 100</span>
+                        </div>
+                      </div>
+
+                      {/* Extracted Breakdown Preview */}
+                      <div className="my-2.5 space-y-1.5 text-xs">
+                        <div className="text-[11px] font-semibold text-slate-600">
+                          Top Factors:
+                        </div>
+                        {summary.score.breakdown?.slice(0, 3).map((item, i) => (
+                          <div
+                            key={i}
+                            className="flex items-center justify-between text-[11px] text-slate-600"
+                          >
+                            <span className="truncate pr-2">
+                              • {item.reason}
+                            </span>
+                            <span className="font-semibold text-emerald-600 shrink-0">
+                              +{item.points}
+                            </span>
+                          </div>
+                        ))}
+
+                        {summary.missing_fields &&
+                          summary.missing_fields.length > 0 && (
+                            <div className="mt-2 rounded-lg bg-amber-50 p-2 text-[11px] text-amber-800 border border-amber-200/60">
+                              <span className="font-semibold">
+                                Missing fields to boost score:{" "}
+                              </span>
+                              {summary.missing_fields.join(", ")}
+                            </div>
+                          )}
+                      </div>
+
+                      {/* Action buttons: "Looks right" / "Fix something" */}
+                      <div className="mt-3 flex items-center gap-2 pt-2 border-t border-indigo-100">
+                        <Link
+                          href="/home"
+                          className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 transition"
+                        >
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                          <span>Looks right</span>
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={() => handleFixSomething(summary)}
+                          className="inline-flex items-center justify-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition"
+                        >
+                          <RefreshCw className="h-3 w-3 text-slate-500" />
+                          <span>Fix something</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Agent Steps / Tool Calls Inspection Accordion */}
                   {hasStepsOrRecords && (
@@ -352,6 +868,7 @@ export default function ChatPage() {
             );
           })}
 
+          {/* Active Loading States */}
           {isSending && (
             <div className="flex items-center gap-3">
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-white">
@@ -364,43 +881,116 @@ export default function ChatPage() {
             </div>
           )}
 
+          {isTranscribing && (
+            <div className="flex items-center gap-3">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-white">
+                <Mic className="h-4 w-4" />
+              </div>
+              <div className="flex items-center gap-2 rounded-2xl border border-indigo-200 bg-indigo-50/50 px-4 py-3 text-xs text-indigo-700 shadow-sm">
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-indigo-600" />
+                <span>Transcribing your voice note...</span>
+              </div>
+            </div>
+          )}
+
+          {isUploadingResume && (
+            <div className="flex items-center gap-3">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-white">
+                <FileText className="h-4 w-4" />
+              </div>
+              <div className="flex items-center gap-2 rounded-2xl border border-indigo-200 bg-indigo-50/50 px-4 py-3 text-xs text-indigo-700 shadow-sm">
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-indigo-600" />
+                <span>
+                  Reading and extracting resume details without forms...
+                </span>
+              </div>
+            </div>
+          )}
+
           <div ref={messagesEndRef} />
         </div>
       </main>
 
-      {/* Input Composer */}
-      <footer className="border-t border-slate-200 bg-white p-4">
-        <form
-          onSubmit={handleSend}
-          className="mx-auto flex max-w-3xl items-center gap-2"
-        >
-          {/* Voice Input Affordance - Disabled with Day 2 Badge */}
-          <div className="relative group">
-            <button
-              type="button"
-              disabled
-              title="Voice input is coming in Day 2"
-              className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed"
-            >
-              <Mic className="h-5 w-5" />
-            </button>
-            <span className="absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-slate-900 px-1.5 py-0.5 text-[9px] font-semibold text-white opacity-0 group-hover:opacity-100 transition">
-              Day 2 (Voice)
+      {/* Recording Indicator Overlay Bar */}
+      {isRecording && (
+        <div className="border-t border-red-200 bg-red-50/90 px-6 py-2 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="relative flex h-3 w-3">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-red-600"></span>
+            </span>
+            <span className="text-xs font-semibold text-red-700">
+              Recording audio: {formatTimer(recordingSeconds)}
+            </span>
+            <span className="text-[11px] text-red-500">
+              Speak naturally (English, Hindi, Marathi)
             </span>
           </div>
 
+          <button
+            type="button"
+            onClick={stopRecording}
+            className="flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1 text-xs font-semibold text-white hover:bg-red-700 transition"
+          >
+            <Square className="h-3 w-3 fill-current" />
+            <span>Finish & Transcribe</span>
+          </button>
+        </div>
+      )}
+
+      {/* Input Composer */}
+      <footer className="border-t border-slate-200 bg-white p-4">
+        <form
+          onSubmit={(e) => handleSend(e)}
+          className="mx-auto flex max-w-3xl items-center gap-2"
+        >
+          {/* Resume Upload Action Button ("Add my resume") */}
+          <button
+            type="button"
+            onClick={handleOpenResumePicker}
+            disabled={isSending || isTranscribing || isUploadingResume}
+            title="Add my resume"
+            className="flex h-11 items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-medium text-slate-700 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-600 transition disabled:opacity-50"
+          >
+            <Paperclip className="h-4 w-4" />
+            <span className="hidden sm:inline">Add my resume</span>
+          </button>
+
+          {/* Voice Input Mic Button */}
+          <button
+            type="button"
+            onClick={toggleRecording}
+            disabled={isSending || isTranscribing || isUploadingResume}
+            title={isRecording ? "Stop recording" : "Record voice message"}
+            className={`flex h-11 w-11 items-center justify-center rounded-xl border transition ${
+              isRecording
+                ? "border-red-500 bg-red-600 text-white animate-pulse"
+                : "border-slate-200 bg-slate-50 text-slate-600 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-600"
+            } disabled:opacity-50`}
+          >
+            {isRecording ? (
+              <Square className="h-4 w-4 fill-current" />
+            ) : (
+              <Mic className="h-5 w-5" />
+            )}
+          </button>
+
+          {/* Text Input */}
           <input
             type="text"
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             placeholder="Type your details (e.g. I am Riya at St. Xavier's, batch 2027, BSc CS)..."
-            disabled={isSending}
+            disabled={
+              isSending || isRecording || isTranscribing || isUploadingResume
+            }
             className="flex-1 rounded-xl border border-slate-300 px-4 py-2.5 text-sm text-slate-900 focus:border-indigo-600 focus:outline-none focus:ring-1 focus:ring-indigo-600 disabled:opacity-50"
           />
 
+          {/* Send Button */}
           <button
             type="submit"
-            disabled={!inputText.trim() || isSending}
+            disabled={!inputText.trim() || isSending || isRecording}
             className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-600 text-white transition hover:bg-indigo-700 disabled:opacity-50"
           >
             {isSending ? (
@@ -411,6 +1001,56 @@ export default function ChatPage() {
           </button>
         </form>
       </footer>
+
+      {/* Consent Sheet / Modal */}
+      {isConsentOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl border border-slate-100 p-6 animate-in fade-in zoom-in-95">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 mb-4">
+              <FileText className="h-6 w-6" />
+            </div>
+
+            <h3 className="text-base font-bold text-slate-900">
+              Upload Resume
+            </h3>
+
+            <p className="mt-2 text-sm text-slate-600 leading-relaxed">
+              We&rsquo;ll read this file to build your profile.
+            </p>
+
+            <div className="mt-3 rounded-xl bg-slate-50 p-3 text-xs text-slate-500 space-y-1.5 border border-slate-100">
+              <p>
+                • Supported formats: <strong>PDF</strong> or{" "}
+                <strong>DOCX</strong>
+              </p>
+              <p>
+                • Maximum file size: <strong>5 MB</strong>
+              </p>
+              <p>
+                • Your file is parsed safely and automatically into structured
+                records without forms.
+              </p>
+            </div>
+
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setIsConsentOpen(false)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConsentConfirm}
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm transition"
+              >
+                I Agree & Choose File
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

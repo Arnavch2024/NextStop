@@ -149,7 +149,11 @@ export async function transcribeAudio(
 ): Promise<TranscribeResponse> {
   const url = `${cleanBaseUrl(baseUrl)}/v1/voice/transcribe`;
   const formData = new FormData();
-  formData.append("audio", audioBlob, filename);
+  if (audioBlob && typeof audioBlob === "object" && audioBlob.uri) {
+    formData.append("audio", audioBlob as any);
+  } else {
+    formData.append("audio", audioBlob, filename);
+  }
 
   const res = await fetch(url, {
     method: "POST",
@@ -169,4 +173,43 @@ export async function transcribeAudio(
   }
 
   return (await res.json()) as TranscribeResponse;
+}
+
+/**
+ * Upload resume endpoint: POST /v1/students/me/resume
+ */
+export async function uploadResume(
+  baseUrl: string,
+  file: any,
+  filename: string,
+  token: string
+): Promise<ResumeResponse> {
+  const url = `${cleanBaseUrl(baseUrl)}/v1/students/me/resume`;
+  const formData = new FormData();
+  if (file && typeof file === "object" && file.uri) {
+    // React Native FormData asset
+    formData.append("file", file as any);
+  } else {
+    // Browser File/Blob
+    formData.append("file", file, filename);
+  }
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const errorBody = await res.json().catch(() => ({}));
+    throw new ApiError(
+      res.status,
+      errorBody?.detail || "Resume upload failed",
+      errorBody
+    );
+  }
+
+  return (await res.json()) as ResumeResponse;
 }

@@ -22,6 +22,8 @@ import {
   MessageSquare,
   Sparkles,
   TrendingUp,
+  Smartphone,
+  X,
 } from "lucide-react";
 
 export default function StudentHomePage() {
@@ -32,22 +34,14 @@ export default function StudentHomePage() {
   const [error, setError] = useState<string | null>(null);
   const [scoreData, setScoreData] = useState<ScoreResponse | null>(null);
   const [profileData, setProfileData] = useState<StudentProfile | null>(null);
+  const [syncToast, setSyncToast] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
+    let toastTimeout: NodeJS.Timeout | null = null;
 
-    async function loadData() {
+    async function loadData(token: string) {
       try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-
-        if (!session) {
-          router.replace("/login");
-          return;
-        }
-
-        const token = session.access_token;
         const [scoreRes, profileRes] = await Promise.all([
           getStudentScore(API_BASE_URL, token),
           getStudentProfile(API_BASE_URL, token),
@@ -66,10 +60,90 @@ export default function StudentHomePage() {
       }
     }
 
-    loadData();
+    let channels: any[] = [];
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) {
+        router.replace("/login");
+        return;
+      }
+
+      const token = session.access_token;
+      const userId = session.user.id;
+      loadData(token);
+
+      const triggerToastAndReload = (msg = "Updated from your phone") => {
+        if (!isMounted) return;
+        setSyncToast(msg);
+        if (toastTimeout) clearTimeout(toastTimeout);
+        toastTimeout = setTimeout(() => {
+          if (isMounted) setSyncToast(null);
+        }, 4000);
+        loadData(token);
+      };
+
+      const scoreChan = supabase
+        .channel(`home_score_${userId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "score_events",
+            filter: `profile_id=eq.${userId}`,
+          },
+          (payload) => {
+            const sc = (payload.new as any)?.score;
+            triggerToastAndReload(
+              sc !== undefined
+                ? `Score updated to ${sc} from your phone`
+                : "Updated from your phone"
+            );
+          }
+        )
+        .subscribe();
+
+      const profileChan = supabase
+        .channel(`home_profile_${userId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "education",
+            filter: `profile_id=eq.${userId}`,
+          },
+          () => triggerToastAndReload("Profile updated from your phone")
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "internships",
+            filter: `profile_id=eq.${userId}`,
+          },
+          () => triggerToastAndReload("Profile updated from your phone")
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "skills",
+            filter: `profile_id=eq.${userId}`,
+          },
+          () => triggerToastAndReload("Profile updated from your phone")
+        )
+        .subscribe();
+
+      channels = [scoreChan, profileChan];
+    });
 
     return () => {
       isMounted = false;
+      if (toastTimeout) clearTimeout(toastTimeout);
+      channels.forEach((c) => supabase.removeChannel(c));
     };
   }, [router, supabase]);
 
@@ -112,7 +186,25 @@ export default function StudentHomePage() {
   const jobs = profileData?.jobs ?? [];
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 pb-16">
+    <div className="min-h-screen bg-slate-50 text-slate-900 pb-16 relative">
+      {/* Realtime Sync Toast */}
+      {syncToast && (
+        <div className="fixed top-20 right-6 z-50 flex items-center gap-2.5 rounded-xl border border-blue-200 bg-white px-4 py-3 text-xs font-medium text-slate-800 shadow-xl animate-in fade-in slide-in-from-top-4">
+          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-100 text-blue-600">
+            <Smartphone className="h-3.5 w-3.5" />
+          </div>
+          <div>
+            <p className="font-semibold text-slate-900">{syncToast}</p>
+            <p className="text-[10px] text-slate-400">Synced live</p>
+          </div>
+          <button
+            onClick={() => setSyncToast(null)}
+            className="ml-2 text-slate-400 hover:text-slate-600"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
       {/* Header */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">

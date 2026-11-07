@@ -26,22 +26,14 @@ export default function MobileHomeScreen() {
   const [error, setError] = useState<string | null>(null);
   const [scoreData, setScoreData] = useState<ScoreResponse | null>(null);
   const [profileData, setProfileData] = useState<StudentProfile | null>(null);
+  const [syncToast, setSyncToast] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
+    let toastTimeout: NodeJS.Timeout | null = null;
 
-    async function load() {
+    async function loadData(token: string) {
       try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-
-        if (!session) {
-          router.replace("/login");
-          return;
-        }
-
-        const token = session.access_token;
         const [scoreRes, profRes] = await Promise.all([
           getStudentScore(API_BASE_URL, token),
           getStudentProfile(API_BASE_URL, token),
@@ -60,9 +52,90 @@ export default function MobileHomeScreen() {
       }
     }
 
-    load();
+    let channels: any[] = [];
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) {
+        router.replace("/login");
+        return;
+      }
+
+      const token = session.access_token;
+      const userId = session.user.id;
+      loadData(token);
+
+      const triggerToastAndReload = (msg = "Updated from your laptop") => {
+        if (!isMounted) return;
+        setSyncToast(msg);
+        if (toastTimeout) clearTimeout(toastTimeout);
+        toastTimeout = setTimeout(() => {
+          if (isMounted) setSyncToast(null);
+        }, 4000);
+        loadData(token);
+      };
+
+      const scoreChan = supabase
+        .channel(`mobile_home_score_${userId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "score_events",
+            filter: `profile_id=eq.${userId}`,
+          },
+          (payload) => {
+            const sc = (payload.new as any)?.score;
+            triggerToastAndReload(
+              sc !== undefined
+                ? `Score updated to ${sc} from your laptop`
+                : "Updated from your laptop"
+            );
+          }
+        )
+        .subscribe();
+
+      const profChan = supabase
+        .channel(`mobile_home_profile_${userId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "education",
+            filter: `profile_id=eq.${userId}`,
+          },
+          () => triggerToastAndReload("Profile updated from your laptop")
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "internships",
+            filter: `profile_id=eq.${userId}`,
+          },
+          () => triggerToastAndReload("Profile updated from your laptop")
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "skills",
+            filter: `profile_id=eq.${userId}`,
+          },
+          () => triggerToastAndReload("Profile updated from your laptop")
+        )
+        .subscribe();
+
+      channels = [scoreChan, profChan];
+    });
+
     return () => {
       isMounted = false;
+      if (toastTimeout) clearTimeout(toastTimeout);
+      channels.forEach((c) => supabase.removeChannel(c));
     };
   }, [router, supabase]);
 
@@ -100,6 +173,19 @@ export default function MobileHomeScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Realtime Sync Toast */}
+      {syncToast && (
+        <View style={styles.toastContainer}>
+          <Text style={styles.toastIcon}>💻</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.toastTitle}>{syncToast}</Text>
+            <Text style={styles.toastSubtitle}>Synced live from laptop</Text>
+          </View>
+          <TouchableOpacity onPress={() => setSyncToast(null)}>
+            <Text style={styles.toastClose}>✕</Text>
+          </TouchableOpacity>
+        </View>
+      )}
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Header */}
         <View style={styles.header}>
@@ -447,5 +533,41 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontWeight: "600",
     fontSize: 14,
+  },
+  toastContainer: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  toastIcon: {
+    fontSize: 20,
+  },
+  toastTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#1e3a8a",
+  },
+  toastSubtitle: {
+    fontSize: 11,
+    color: "#3b82f6",
+  },
+  toastClose: {
+    fontSize: 14,
+    color: "#94a3b8",
+    padding: 4,
   },
 });
