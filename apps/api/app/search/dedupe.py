@@ -181,10 +181,26 @@ def upsert_contact(
             if role_type and role_type != "other" and existing.get("role_type") in ("other", None):
                 update_fields["role_type"] = role_type
 
+            if data.get("location"):
+                update_fields["location"] = data["location"]
+            if data.get("published_date") or data.get("source_published_date"):
+                update_fields["source_published_date"] = data.get("published_date") or data.get("source_published_date")
+            if "stale" in data:
+                update_fields["stale"] = data["stale"]
+
             update_fields["source"] = "web"
             update_fields["source_url"] = source_url or data.get("source_url")
             update_fields["last_verified_at"] = now_iso
-            update_fields["confidence"] = data.get("confidence", 1.0)
+            # Confidence capping: 0.4 if stale, 0.6 if not stale for single unfetched source
+            fetch_status = data.get("fetch_status")
+            is_unverified = (fetch_status != "ok") or (not data.get("verified", False))
+            conf = float(data.get("confidence", 1.0))
+            if is_unverified:
+                if data.get("stale") is True:
+                    conf = min(conf, 0.4)
+                else:
+                    conf = min(conf, 0.6)
+            update_fields["confidence"] = conf
 
         elif source == "user_said":
             # user_said fills empty fields only, never overwrites
@@ -248,6 +264,20 @@ def upsert_contact(
     else:
         # Create new contact
         contact_id = str(uuid.uuid4())
+        fetch_status = data.get("fetch_status")
+        is_single_unverified = (
+            (source == "user_said")
+            or data.get("unverified", False)
+            or (fetch_status != "ok")
+            or (not data.get("verified", False))
+        )
+        conf = float(data.get("confidence", 1.0))
+        if is_single_unverified and source == "web":
+            if data.get("stale") is True:
+                conf = min(conf, 0.4)
+            else:
+                conf = min(conf, 0.6)
+
         new_row = {
             "id": contact_id,
             "name": name,
@@ -257,9 +287,12 @@ def upsert_contact(
             "role_type": role_type,
             "email": email,
             "linkedin_url": linkedin,
+            "location": data.get("location"),
+            "source_published_date": data.get("published_date") or data.get("source_published_date"),
+            "stale": data.get("stale"),
             "source": source,
             "source_url": source_url or data.get("source_url"),
-            "confidence": data.get("confidence", 1.0),
+            "confidence": conf,
             "created_by_profile_id": user_id,
             "first_seen_at": now_iso,
             "last_verified_at": now_iso if source == "web" else None,
@@ -281,20 +314,39 @@ def upsert_contact(
             ).execute()
 
     # Append provenance in contact_sources
+    fetch_status = data.get("fetch_status")
+    is_source_unverified = (
+        (source == "user_said")
+        or data.get("unverified", False)
+        or (fetch_status != "ok")
+        or (not data.get("verified", False))
+    )
+    conf = float(data.get("confidence", 1.0))
+    if is_source_unverified and source == "web":
+        conf = min(conf, 0.6)
+
     source_row = {
         "id": str(uuid.uuid4()),
         "contact_id": contact_id,
         "source": source,
         "source_url": source_url or data.get("source_url"),
         "fetched_at": now_iso if source == "web" else None,
-        "confidence": data.get("confidence", 1.0),
-        "unverified": (source == "user_said"),
-        "note": data.get("note"),
+        "confidence": conf,
+        "unverified": is_source_unverified,
+        "fetch_status": fetch_status or ("ok" if source == "seed" else "not_fetched"),
+        "published_date": data.get("published_date"),
+        "note": "synthetic"
+        if data.get("note") == "synthetic"
+        else f"fetch_status={fetch_status};published_date={data.get('published_date')}",
     }
     try:
         client.table("contact_sources").insert(source_row).execute()
-    except Exception as e:
-        logger.warning(f"Could not record contact_sources row: {e}")
+    except Exception:
+        clean_row = {k: v for k, v in source_row.items() if k not in ("fetch_status", "published_date")}
+        try:
+            client.table("contact_sources").insert(clean_row).execute()
+        except Exception as e2:
+            logger.warning(f"Could not record contact_sources row: {e2}")
 
     logger.info(f"upsert_contact {op}: id={contact_id}, source={source}")
     return {"contact_id": contact_id, "op": op}
