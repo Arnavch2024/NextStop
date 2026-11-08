@@ -7,8 +7,12 @@ from supabase import Client
 
 from app.agent.prompts import get_system_prompt_for_role
 from app.agent.tools import (
-    UPSERT_RECORD_TOOL,
+    DRAFT_OUTREACH_TOOL_NAME,
+    SEARCH_DATA_LAKE_TOOL_NAME,
+    UPSERT_CONTACT_TOOL_NAME,
     UPSERT_RECORD_TOOL_NAME,
+    WEB_SEARCH_ENRICH_TOOL_NAME,
+    get_tools_for_role,
     handle_upsert,
 )
 from app.config import settings
@@ -27,6 +31,10 @@ from app.models.api import (
     RecordRef,
 )
 from app.models.db import ProfileRole, UserProfile
+from app.search.data_lake import search_data_lake
+from app.search.dedupe import upsert_contact
+from app.search.outreach import create_outreach_draft
+from app.search.web import format_web_content_block, web_search_enrich
 
 MAX_AGENT_ITERATIONS = 5
 
@@ -175,14 +183,20 @@ def run_agent_loop(
         history = load_recent_events(user.id, limit=50, client=sb)
         contents = build_gemini_contents_from_history(history, message)
 
+        tools = get_tools_for_role(user.role)
         config = types.GenerateContentConfig(
             system_instruction=system_prompt,
-            tools=[UPSERT_RECORD_TOOL],
+            tools=tools,
             temperature=0.2,
         )
 
         reply_text = ""
         iteration = 0
+        lake_found = 0
+        web_found = 0
+        added_new = 0
+        merged = 0
+        used_search = False
 
         # 3. Multi-turn loop (max 5 iterations)
         while iteration < MAX_AGENT_ITERATIONS:
@@ -212,7 +226,7 @@ def run_agent_loop(
                 for fc in function_calls:
                     fc_name = fc.name
                     fc_args = fc.args or {}
-                    logger.info(f"Tool call requested: {fc_name} on table {fc_args.get('table')}")
+                    logger.info(f"Tool call requested: {fc_name} with args {fc_args}")
 
                     # Write tool_call raw_event
                     write_raw_event(
@@ -223,18 +237,72 @@ def run_agent_loop(
                     )
 
                     # Execute tool call
+                    tool_result: Dict[str, Any] = {}
                     if fc_name == UPSERT_RECORD_TOOL_NAME:
                         table = fc_args.get("table", "")
                         data = fc_args.get("data", {})
-                        upsert_result = handle_upsert(sb, user, table, data)
+                        tool_result = handle_upsert(sb, user, table, data)
+                        if table == "contacts":
+                            used_search = True
+                            if tool_result.get("op") == "created":
+                                added_new += 1
+                            elif tool_result.get("op") in ("updated", "merged"):
+                                merged += 1
+                    elif fc_name == SEARCH_DATA_LAKE_TOOL_NAME:
+                        used_search = True
+                        q = fc_args.get("query", "")
+                        filters = fc_args.get("filters")
+                        tool_result = search_data_lake(client=sb, query=q, filters=filters, actor_id=user.id)
+                        lake_found += tool_result.get("found", 0)
+                    elif fc_name == WEB_SEARCH_ENRICH_TOOL_NAME:
+                        used_search = True
+                        q = fc_args.get("query", "")
+                        tool_result = web_search_enrich(
+                            client=sb,
+                            query=q,
+                            actor_id=user.id,
+                        )
+                        tool_result["web_content"] = format_web_content_block(tool_result.get("results", []))
+                        web_found += len(tool_result.get("results", []))
+                    elif fc_name == UPSERT_CONTACT_TOOL_NAME:
+                        used_search = True
+                        source = fc_args.get("source", "user_said")
+                        source_url = fc_args.get("source_url")
+                        upsert_res = upsert_contact(
+                            sb,
+                            fc_args,
+                            user,
+                            source=source,
+                            source_url=source_url,
+                        )
+                        tool_result = {
+                            "table": "contacts",
+                            "id": upsert_res["contact_id"],
+                            "op": upsert_res["op"],
+                        }
+                        if upsert_res["op"] == "created":
+                            added_new += 1
+                        elif upsert_res["op"] in ("updated", "merged"):
+                            merged += 1
+                    elif fc_name == DRAFT_OUTREACH_TOOL_NAME:
+                        cid = fc_args.get("contact_id")
+                        channel = fc_args.get("channel", "email")
+                        s_ctx = fc_args.get("sender_context")
+                        tool_result = create_outreach_draft(
+                            client=sb,
+                            user=user,
+                            contact_id=cid,
+                            channel=channel,
+                            sender_context=s_ctx,
+                        )
                     else:
-                        upsert_result = {"error": f"Unknown tool: {fc_name}"}
+                        tool_result = {"error": f"Unknown tool: {fc_name}"}
 
                     # Write tool_result raw_event
                     write_raw_event(
                         user.id,
                         source="tool_result",
-                        payload={"tool": fc_name, "result": upsert_result},
+                        payload={"tool": fc_name, "result": tool_result},
                         client=sb,
                     )
 
@@ -243,18 +311,18 @@ def run_agent_loop(
                         type=AgentStepType.TOOL_CALL,
                         tool=fc_name,
                         input=fc_args,
-                        output=upsert_result,
+                        output=tool_result,
                         at=datetime.now(timezone.utc),
                     )
                     steps.append(step)
 
                     # Track record created/updated
-                    if "table" in upsert_result and "op" in upsert_result and "error" not in upsert_result:
+                    if "table" in tool_result and "op" in tool_result and "error" not in tool_result:
                         records_created.append(
                             RecordRef(
-                                table=upsert_result["table"],
-                                id=upsert_result.get("id"),
-                                op=upsert_result["op"],
+                                table=tool_result["table"],
+                                id=tool_result.get("id"),
+                                op=tool_result["op"],
                             )
                         )
 
@@ -263,7 +331,7 @@ def run_agent_loop(
                         types.Part(
                             function_response=types.FunctionResponse(
                                 name=fc_name,
-                                response=upsert_result,
+                                response=tool_result,
                             )
                         )
                     )
@@ -296,7 +364,23 @@ def run_agent_loop(
             )
         )
 
-        # 5. Close agent run as completed
+        # 5. Search summary step if search was used
+        if used_search:
+            summary_text = (
+                f"searched data lake, found {lake_found}; "
+                f"searched web, found {web_found}; "
+                f"added {added_new} new, merged {merged}"
+            )
+            steps.append(
+                AgentStep(
+                    type=AgentStepType.SEARCH_SUMMARY,
+                    summary=summary_text,
+                    output={"summary": summary_text},
+                    at=datetime.now(timezone.utc),
+                )
+            )
+
+        # 6. Close agent run as completed
         close_agent_run(
             run_id,
             status="completed",

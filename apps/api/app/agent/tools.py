@@ -9,6 +9,7 @@ from app.logger import logger
 from app.models.db import (
     ALLOWED_TABLES,
     TABLE_VALIDATORS,
+    ProfileRole,
     UserProfile,
 )
 from app.scoring.loader import recompute_score
@@ -36,6 +37,142 @@ UPSERT_RECORD_DECLARATION = types.FunctionDeclaration(
 )
 
 UPSERT_RECORD_TOOL = types.Tool(function_declarations=[UPSERT_RECORD_DECLARATION])
+
+SEARCH_DATA_LAKE_TOOL_NAME = "search_data_lake"
+WEB_SEARCH_ENRICH_TOOL_NAME = "web_search_enrich"
+UPSERT_CONTACT_TOOL_NAME = "upsert_contact"
+DRAFT_OUTREACH_TOOL_NAME = "draft_outreach"
+
+SEARCH_DATA_LAKE_DECLARATION = types.FunctionDeclaration(
+    name=SEARCH_DATA_LAKE_TOOL_NAME,
+    description="Search the shared contacts data lake first. Returns existing contacts matching the query and filters.",
+    parameters=types.Schema(
+        type=types.Type.OBJECT,
+        properties={
+            "query": types.Schema(
+                type=types.Type.STRING,
+                description="Free-text query (e.g. name, title, company name, college name)",
+            ),
+            "filters": types.Schema(
+                type=types.Type.OBJECT,
+                description="Optional structured filters: company_id, college_id, role_type",
+            ),
+        },
+    ),
+)
+
+WEB_SEARCH_ENRICH_DECLARATION = types.FunctionDeclaration(
+    name=WEB_SEARCH_ENRICH_TOOL_NAME,
+    description="Search the public web to discover contacts or enrich company information. Only use when data lake results are thin. Never scrape LinkedIn.",
+    parameters=types.Schema(
+        type=types.Type.OBJECT,
+        properties={
+            "query": types.Schema(
+                type=types.Type.STRING,
+                description="Search query string",
+            ),
+            "extract_page_text": types.Schema(
+                type=types.Type.BOOLEAN,
+                description="Whether to fetch and extract page text from top non-LinkedIn result",
+            ),
+        },
+        required=["query"],
+    ),
+)
+
+UPSERT_CONTACT_DECLARATION = types.FunctionDeclaration(
+    name=UPSERT_CONTACT_TOOL_NAME,
+    description="Upsert a contact into the shared lake with deduplication, priority merge (web > user_said > seed), and provenance tracking. Conflicting user info routes to private list. Never store phone in lake.",
+    parameters=types.Schema(
+        type=types.Type.OBJECT,
+        properties={
+            "name": types.Schema(
+                type=types.Type.STRING,
+                description="Full name of the contact (required)",
+            ),
+            "company_id": types.Schema(
+                type=types.Type.STRING,
+                description="UUID of associated company",
+            ),
+            "college_id": types.Schema(
+                type=types.Type.STRING,
+                description="UUID of associated college",
+            ),
+            "title": types.Schema(
+                type=types.Type.STRING,
+                description="Job title or role",
+            ),
+            "role_type": types.Schema(
+                type=types.Type.STRING,
+                enum=["campus_recruiter", "placement_officer", "hr", "other"],
+                description="Contact role type category",
+            ),
+            "email": types.Schema(
+                type=types.Type.STRING,
+                description="Professional email address",
+            ),
+            "linkedin_url": types.Schema(
+                type=types.Type.STRING,
+                description="Public LinkedIn profile URL",
+            ),
+            "source": types.Schema(
+                type=types.Type.STRING,
+                enum=["web", "user_said", "seed"],
+                description="Provenance source of contact info",
+            ),
+            "source_url": types.Schema(
+                type=types.Type.STRING,
+                description="URL where contact was found",
+            ),
+            "phone": types.Schema(
+                type=types.Type.STRING,
+                description="Phone number (stored privately in caller's saved contacts only; never in lake)",
+            ),
+        },
+        required=["name"],
+    ),
+)
+
+DRAFT_OUTREACH_DECLARATION = types.FunctionDeclaration(
+    name=DRAFT_OUTREACH_TOOL_NAME,
+    description="Draft an outreach message (email or LinkedIn connection note) for a contact. NEVER sends messages over the network; stores as a private draft.",
+    parameters=types.Schema(
+        type=types.Type.OBJECT,
+        properties={
+            "contact_id": types.Schema(
+                type=types.Type.STRING,
+                description="UUID of the contact to draft outreach for",
+            ),
+            "channel": types.Schema(
+                type=types.Type.STRING,
+                enum=["email", "linkedin"],
+                description="Outreach channel ('email' or 'linkedin')",
+            ),
+            "sender_context": types.Schema(
+                type=types.Type.STRING,
+                description="Optional additional context or note from the sender",
+            ),
+        },
+        required=["contact_id", "channel"],
+    ),
+)
+
+
+def get_tools_for_role(role: ProfileRole) -> list[types.Tool]:
+    """Returns role-aware Gemini tool declarations."""
+    if role in (ProfileRole.PLACEMENT_OFFICER, ProfileRole.COMPANY, ProfileRole.RECRUITER):
+        return [
+            types.Tool(
+                function_declarations=[
+                    UPSERT_RECORD_DECLARATION,
+                    SEARCH_DATA_LAKE_DECLARATION,
+                    WEB_SEARCH_ENRICH_DECLARATION,
+                    UPSERT_CONTACT_DECLARATION,
+                    DRAFT_OUTREACH_DECLARATION,
+                ]
+            )
+        ]
+    return [types.Tool(function_declarations=[UPSERT_RECORD_DECLARATION])]
 
 
 def handle_upsert(

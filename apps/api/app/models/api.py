@@ -25,6 +25,7 @@ class AgentStepType(str, Enum):
     TOOL_CALL = "tool_call"
     TOOL_RESULT = "tool_result"
     FINAL_REPLY = "final_reply"
+    SEARCH_SUMMARY = "search_summary"
 
 
 class AgentStep(BaseModel):
@@ -32,6 +33,7 @@ class AgentStep(BaseModel):
     tool: Optional[str] = None
     input: Optional[Dict[str, Any]] = None
     output: Optional[Dict[str, Any]] = None
+    summary: Optional[str] = None
     at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
