@@ -10,10 +10,15 @@ class Settings(BaseSettings):
     SUPABASE_ANON_KEY: str = Field(default="placeholder-anon-key")
     SUPABASE_SERVICE_KEY: str = Field(default="placeholder-service-key")
 
+    # LLM Settings (Gemini default, provider swappable via env)
+    LLM_PROVIDER: str = Field(default="gemini")
+    LLM_AGENT_MODEL: str = Field(default="gemini-2.5-flash")
+    LLM_FAST_MODEL: str = Field(default="gemini-1.5-flash")
+
     # Google Gemini settings
     GEMINI_API_KEY: Optional[str] = Field(default=None)
     GOOGLE_API_KEY: Optional[str] = Field(default=None)
-    GEMINI_MODEL: str = Field(default="gemini-3-flash-preview")
+    GEMINI_MODEL: str = Field(default="gemini-2.5-flash")
 
     # Voice transcription settings
     TRANSCRIPTION_PROVIDER: str = Field(default="whisper")
@@ -45,14 +50,17 @@ class Settings(BaseSettings):
     )
 
     @property
-    def effective_gemini_api_key(self) -> str:
+    def raw_gemini_api_key(self) -> Optional[str]:
         return (
             self.GEMINI_API_KEY
             or self.GOOGLE_API_KEY
             or os.environ.get("GEMINI_API_KEY")
             or os.environ.get("GOOGLE_API_KEY")
-            or "placeholder-gemini-key"
         )
+
+    @property
+    def effective_gemini_api_key(self) -> str:
+        return self.raw_gemini_api_key or "placeholder-gemini-key"
 
 
 settings = Settings()

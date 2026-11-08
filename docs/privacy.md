@@ -21,6 +21,10 @@
 - Save/remove: a user can save a contact to their private list and remove it at any time via `DELETE /v1/contacts/{id}/save`. This removes only the saved-list row (the shared lake contact remains).
 - Delete-my-saved-contact is available from "My list".
 
+## LLM Processing
+
+- Resume text uploaded by students is processed exclusively by **Google Gemini** (via the Google Gemini API) using pinned stable models (`gemini-2.5-flash` for agent reasoning, `gemini-1.5-flash` for structured extraction) inside delimited `<resume_document>` blocks. Raw resume text is never retained in server logs or used to train public models.
+
 ## Removal requests (manual process)
 
 A contact can be suppressed from the shared lake via a manual removal request:

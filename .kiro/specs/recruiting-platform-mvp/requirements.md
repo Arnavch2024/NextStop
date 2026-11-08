@@ -194,9 +194,9 @@ Day 3 turns the platform into a searchable talent/contact data lake: seeded Mumb
 - **FR-SEED-2**: All seed rows SHALL be labelled `source='seed'`; synthetic contacts SHALL be clearly marked synthetic.
 - **FR-SEED-3**: The seed loader SHALL be idempotent (re-running adds no duplicates).
 
-### 9.3 Agent tools (role-aware, Gemini)
+### 9.3 Agent tools (role-aware, LLMProvider with Gemini default)
 
-> **Stack:** the agent uses Google Gemini (`google.genai`, model `settings.GEMINI_MODEL`; Gemini Pro available) — the chosen stack (§6). Day 3 tools are Gemini `FunctionDeclaration`s dispatched by the existing runner (design §11.3, §11.11).
+> **Stack:** the agent interacts through an `LLMProvider` interface with Google Gemini as the default provider because of free-tier limits (`LLM_PROVIDER=gemini`, swappable via env). The models are pinned to stable non-preview versions: `LLM_AGENT_MODEL=gemini-2.5-flash` for multi-turn conversational reasoning and `LLM_FAST_MODEL=gemini-1.5-flash` for structured extraction and drafting. Day 3 tools are provider-neutral function declarations dispatched by the runner (design §11.3, §11.11).
 
 - **FR-TOOL-1**: THE SYSTEM SHALL provide `search_data_lake(query, filters)` over contacts/companies/colleges using SQL filters + full-text; it SHALL always be tried first.
 - **FR-TOOL-2**: THE SYSTEM SHALL provide `web_search_enrich(query, purpose)` behind a provider-agnostic interface: primary Exa, fallback Tavily, optional Tavily Extract / Jina Reader for page text, all via env keys.

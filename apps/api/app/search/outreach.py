@@ -2,10 +2,18 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
+from pydantic import BaseModel
 from supabase import Client
 
+from app.config import settings
+from app.llm import LLMProvider, get_llm_provider
 from app.logger import logger
 from app.models.db import UserProfile
+
+
+class OutreachGeneratedContent(BaseModel):
+    subject: Optional[str] = None
+    body: str
 
 
 def generate_outreach_text(
@@ -13,9 +21,10 @@ def generate_outreach_text(
     channel: str,
     sender_context: Optional[str] = None,
     user: Optional[UserProfile] = None,
+    llm_provider: Optional[LLMProvider] = None,
 ) -> Dict[str, Optional[str]]:
     """
-    Generates tailored subject and body for outreach.
+    Generates tailored subject and body for outreach via LLMProvider with deterministic fallback.
     Never sends anything.
     """
     c_name = contact.get("name") or "Hiring Team"
@@ -27,6 +36,27 @@ def generate_outreach_text(
     sender_role = user.role.value if user and user.role else "recruiting partner"
     ctx = f" Note: {sender_context.strip()}" if sender_context and sender_context.strip() else ""
 
+    # Attempt LLM structured generation first
+    try:
+        provider = llm_provider or get_llm_provider()
+        prompt = (
+            f"Draft a professional {channel} message to {c_name} ({c_title} at {c_company}). "
+            f"Sender is {sender_name} ({sender_role})."
+            f"{ctx}\n"
+            f"For email, provide subject and body. For linkedin, subject must be null and body concise under 300 characters."
+        )
+        res = provider.generate_structured(
+            prompt=prompt,
+            response_model=OutreachGeneratedContent,
+            system_instruction="You are a campus recruiting outreach assistant. Draft tailored, professional messages.",
+            model=settings.LLM_FAST_MODEL,
+        )
+        if res and res.body and res.body.strip():
+            return {"subject": res.subject, "body": res.body}
+    except Exception as e:
+        logger.debug(f"LLM outreach generation fell back to template: {e}")
+
+    # Fallback to deterministic template
     if channel == "linkedin":
         subject = None
         body = (
@@ -69,6 +99,7 @@ def create_outreach_draft(
     contact_id: str,
     channel: str = "email",
     sender_context: Optional[str] = None,
+    llm_provider: Optional[LLMProvider] = None,
 ) -> Dict[str, Any]:
     """
     Creates and stores an outreach draft for the caller.
@@ -87,7 +118,7 @@ def create_outreach_draft(
     contact["company_name"] = company_name
 
     # 2. Generate content
-    draft_content = generate_outreach_text(contact, channel, sender_context, user)
+    draft_content = generate_outreach_text(contact, channel, sender_context, user, llm_provider=llm_provider)
     subject = draft_content["subject"]
     body = draft_content["body"] or ""
 

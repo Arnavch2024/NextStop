@@ -1,11 +1,10 @@
-import json
 from typing import List, Optional
 
 from google import genai
-from google.genai import types
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field
 
 from app.config import settings
+from app.llm import GeminiLLMProvider, LLMProvider, get_llm_provider
 from app.logger import logger
 from app.search.web import WEB_CONTENT_PROMPT_RULE
 
@@ -49,9 +48,10 @@ def extract_contacts_from_text(
     text: str,
     source_url: Optional[str] = None,
     gemini_client: Optional[genai.Client] = None,
+    llm_provider: Optional[LLMProvider] = None,
 ) -> List[CandidateContact]:
     """
-    Extracts CandidateContact records from web text using Pydantic validation.
+    Extracts CandidateContact records from web text using Pydantic validation via LLMProvider.
     Drops candidates with no name. Retries once on schema failure.
     """
     if not text or not text.strip():
@@ -60,51 +60,32 @@ def extract_contacts_from_text(
     # Wrap untrusted text securely inside <web_content>
     wrapped_content = f"<web_content>\n{text[:12000]}\n</web_content>"
 
-    client = gemini_client
-    if client is None:
-        try:
-            client = genai.Client(api_key=settings.effective_gemini_api_key)
-        except Exception as e:
-            logger.warning(f"Could not initialize Gemini client for contact extraction: {e}")
-            return []
+    if llm_provider:
+        provider = llm_provider
+    elif gemini_client:
+        provider = GeminiLLMProvider(client=gemini_client)
+    else:
+        provider = get_llm_provider()
 
-    # Attempt extraction with 1 retry on schema/parsing failure
-    for attempt in (1, 2):
-        try:
-            response = client.models.generate_content(
-                model=settings.GEMINI_MODEL,
-                contents=wrapped_content,
-                config=types.GenerateContentConfig(
-                    system_instruction=EXTRACTION_SYSTEM_INSTRUCTION,
-                    temperature=0.1,
-                    response_mime_type="application/json",
-                    response_schema=ExtractionResult,
-                ),
-            )
+    try:
+        extraction_result: ExtractionResult = provider.generate_structured(
+            prompt=wrapped_content,
+            response_model=ExtractionResult,
+            system_instruction=EXTRACTION_SYSTEM_INSTRUCTION,
+            model=settings.LLM_FAST_MODEL,
+        )
 
-            response_text = response.text or "{}"
-            data = json.loads(response_text)
-            contacts_list = data.get("contacts", [])
+        valid_contacts: List[CandidateContact] = []
+        for contact in extraction_result.contacts:
+            # Drop nameless candidates (Open decision 5 & spec requirement)
+            if not contact.name or not contact.name.strip():
+                continue
+            if source_url and not contact.source_url:
+                contact.source_url = source_url
+            valid_contacts.append(contact)
 
-            valid_contacts: List[CandidateContact] = []
-            for item in contacts_list:
-                try:
-                    contact = CandidateContact(**item)
-                    # Drop nameless candidates (Open decision 5 & spec requirement)
-                    if not contact.name or not contact.name.strip():
-                        continue
-                    if source_url and not contact.source_url:
-                        contact.source_url = source_url
-                    valid_contacts.append(contact)
-                except ValidationError as ve:
-                    logger.debug(f"CandidateContact validation skipped item: {ve}")
+        return valid_contacts
 
-            return valid_contacts
-
-        except Exception as exc:
-            if attempt == 1:
-                logger.warning(f"Contact extraction attempt 1 failed ({exc}). Retrying...")
-            else:
-                logger.error(f"Contact extraction failed after retry: {exc}")
-
-    return []
+    except Exception as exc:
+        logger.warning(f"Error extracting contacts with LLM provider: {exc}")
+        return []

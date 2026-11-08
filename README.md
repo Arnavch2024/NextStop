@@ -57,15 +57,19 @@ cp apps/mobile/.env.example apps/mobile/.env
 
 Fill in the values:
 
-| App        | Variable                                                          | Description                                      |
-| ---------- | ----------------------------------------------------------------- | ------------------------------------------------ |
-| api        | `SUPABASE_URL`                                                    | Your Supabase project URL                        |
-| api        | `SUPABASE_ANON_KEY`                                               | Supabase anon/public key                         |
-| api        | `SUPABASE_SERVICE_KEY`                                            | Supabase service-role key (**server-side only**) |
-| api        | `GEMINI_API_KEY`                                                  | Google AI Studio API key                         |
-| web/mobile | `NEXT_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_URL`           | Same Supabase URL                                |
-| web/mobile | `NEXT_PUBLIC_SUPABASE_ANON_KEY` / `EXPO_PUBLIC_SUPABASE_ANON_KEY` | Same anon key                                    |
-| web/mobile | `NEXT_PUBLIC_API_BASE_URL` / `EXPO_PUBLIC_API_BASE_URL`           | URL of `apps/api` (e.g. `http://localhost:8000`) |
+| App        | Variable                                                          | Description                                                   |
+| ---------- | ----------------------------------------------------------------- | ------------------------------------------------------------- |
+| api        | `SUPABASE_URL`                                                    | Your Supabase project URL                                     |
+| api        | `SUPABASE_ANON_KEY`                                               | Supabase anon/public key                                      |
+| api        | `SUPABASE_SERVICE_KEY`                                            | Supabase service-role key (**server-side only**)              |
+| api        | `GEMINI_API_KEY`                                                  | Google AI Studio API key                                      |
+| api        | `LLM_PROVIDER`                                                    | LLM provider (default: `gemini`, swappable via env)           |
+| api        | `LLM_AGENT_MODEL`                                                 | Agent loop reasoning model (pinned: `gemini-2.5-flash`)       |
+| api        | `LLM_FAST_MODEL`                                                  | Fast structured extraction model (pinned: `gemini-1.5-flash`) |
+| api        | `EXA_API_KEY` / `TAVILY_API_KEY`                                  | Public web search provider keys (Day 3 search)                |
+| web/mobile | `NEXT_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_URL`           | Same Supabase URL                                             |
+| web/mobile | `NEXT_PUBLIC_SUPABASE_ANON_KEY` / `EXPO_PUBLIC_SUPABASE_ANON_KEY` | Same anon key                                                 |
+| web/mobile | `NEXT_PUBLIC_API_BASE_URL` / `EXPO_PUBLIC_API_BASE_URL`           | URL of `apps/api` (e.g. `http://localhost:8000`)              |
 
 ### 3. Apply the database migration
 
@@ -158,6 +162,18 @@ docker run -p 8000:8000 --env-file apps/api/.env recruiting-api
 Health probe: `GET /health` → `{ "status": "ok" }`
 
 For Railway/Render: set the `Start Command` to `uvicorn app.main:app --host 0.0.0.0 --port $PORT`.
+
+**Required Environment Variables for Railway / Render:**
+
+- `SUPABASE_URL` — Supabase project URL
+- `SUPABASE_ANON_KEY` — Supabase anon key
+- `SUPABASE_SERVICE_KEY` — Supabase service-role secret key
+- `GEMINI_API_KEY` — Google AI Studio API key (Gemini is default due to free-tier limits)
+- `LLM_PROVIDER` — `gemini` (swappable via env)
+- `LLM_AGENT_MODEL` — `gemini-2.5-flash` (pinned stable agent model)
+- `LLM_FAST_MODEL` — `gemini-1.5-flash` (pinned fast extraction model)
+- `EXA_API_KEY` or `TAVILY_API_KEY` — search provider key
+- `TRANSCRIPTION_API_KEY` — Whisper transcription key (optional if using voice)
 
 ### Web → Vercel
 

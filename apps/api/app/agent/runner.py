@@ -23,6 +23,7 @@ from app.db.supabase import (
     load_recent_events,
     write_raw_event,
 )
+from app.llm import GeminiLLMProvider, LLMProvider, get_llm_provider
 from app.logger import logger
 from app.models.api import (
     AgentStep,
@@ -41,11 +42,12 @@ MAX_AGENT_ITERATIONS = 5
 _gemini_client: Optional[genai.Client] = None
 
 
-def get_gemini_client() -> genai.Client:
+def get_gemini_client() -> Optional[genai.Client]:
     """Returns the Gemini SDK client."""
     global _gemini_client
     if _gemini_client is None:
-        _gemini_client = genai.Client(api_key=settings.effective_gemini_api_key)
+        if settings.raw_gemini_api_key:
+            _gemini_client = genai.Client(api_key=settings.raw_gemini_api_key)
     return _gemini_client
 
 
@@ -119,18 +121,26 @@ def run_agent_loop(
     supabase_client: Optional[Client] = None,
     gemini_client: Optional[genai.Client] = None,
     model_name: Optional[str] = None,
+    llm_provider: Optional[LLMProvider] = None,
 ) -> ChatResponse:
     """
-    Executes the conversational agent loop:
+    Executes the conversational agent loop via LLMProvider:
     1. Records the incoming user message to raw_events.
     2. Initializes an agent_runs entry.
-    3. Runs up to MAX_AGENT_ITERATIONS turns calling Gemini with tool use.
+    3. Runs up to MAX_AGENT_ITERATIONS turns calling the LLM with tool use.
     4. Handles upsert_record invocations, writes events, and aggregates steps.
     5. Writes the final reply to raw_events and updates agent_runs to completed.
     """
     sb = supabase_client or get_supabase_client()
     gm = gemini_client or get_gemini_client()
-    model = model_name or settings.GEMINI_MODEL
+    if llm_provider:
+        provider = llm_provider
+    elif gm is not None:
+        provider = GeminiLLMProvider(client=gm)
+    else:
+        provider = get_llm_provider()
+
+    model = model_name or settings.LLM_AGENT_MODEL
 
     # 1. Start agent run and record user message
     run_id = create_agent_run(user.id, sb)
@@ -184,11 +194,6 @@ def run_agent_loop(
         contents = build_gemini_contents_from_history(history, message)
 
         tools = get_tools_for_role(user.role)
-        config = types.GenerateContentConfig(
-            system_instruction=system_prompt,
-            tools=tools,
-            temperature=0.2,
-        )
 
         reply_text = ""
         iteration = 0
@@ -203,23 +208,27 @@ def run_agent_loop(
             iteration += 1
             logger.info(f"Agent turn iteration {iteration}/{MAX_AGENT_ITERATIONS} for user {user.id}")
 
-            response = gm.models.generate_content(
+            response = provider.generate(
+                messages=contents,
+                tools=tools,
+                system_instruction=system_prompt,
                 model=model,
-                contents=contents,
-                config=config,
+                temperature=0.2,
             )
 
-            # Check for candidate and function calls
-            if not response.candidates:
-                reply_text = "I'm sorry, I could not generate a response at this time."
-                break
-
-            candidate = response.candidates[0]
-            function_calls = response.function_calls
+            function_calls = response.tool_calls
 
             if function_calls:
                 # Add model's turn to conversation history
-                contents.append(candidate.content)
+                contents.append(
+                    types.Content(
+                        role="model",
+                        parts=[
+                            types.Part(function_call=types.FunctionCall(name=tc.name, args=tc.args))
+                            for tc in function_calls
+                        ],
+                    )
+                )
 
                 fn_response_parts: List[types.Part] = []
 
