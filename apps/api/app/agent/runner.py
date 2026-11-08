@@ -261,7 +261,14 @@ def run_agent_loop(
                         used_search = True
                         q = fc_args.get("query", "")
                         filters = fc_args.get("filters")
-                        tool_result = search_data_lake(client=sb, query=q, filters=filters, actor_id=user.id)
+                        inc_sample = fc_args.get("include_sample")
+                        tool_result = search_data_lake(
+                            client=sb,
+                            query=q,
+                            filters=filters,
+                            actor_id=user.id,
+                            include_sample=inc_sample,
+                        )
                         lake_found += tool_result.get("found", 0)
                     elif fc_name == WEB_SEARCH_ENRICH_TOOL_NAME:
                         used_search = True

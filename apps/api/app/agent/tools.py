@@ -57,6 +57,10 @@ SEARCH_DATA_LAKE_DECLARATION = types.FunctionDeclaration(
                 type=types.Type.OBJECT,
                 description="Optional structured filters: company_id, college_id, role_type",
             ),
+            "include_sample": types.Schema(
+                type=types.Type.BOOLEAN,
+                description="Whether to include sample/seed data in results (defaults to false unless DEMO_SHOW_SAMPLE is enabled)",
+            ),
         },
     ),
 )

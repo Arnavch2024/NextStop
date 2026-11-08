@@ -223,6 +223,12 @@ class MockSupabaseClient:
         return FakeQueryBuilder(name, self.store)
 
 
+@pytest.fixture(autouse=True)
+def default_demo_show_sample(monkeypatch):
+    """Enables DEMO_SHOW_SAMPLE by default for tests that rely on seed data."""
+    monkeypatch.setenv("DEMO_SHOW_SAMPLE", "true")
+
+
 @pytest.fixture
 def mock_supabase():
     return MockSupabaseClient()

@@ -12,6 +12,7 @@
 
 ## Web sourcing
 
+- Public sources only: contact data in the shared lake is derived exclusively from publicly available web sources and search results, never from private databases, scraping gated networks, or non-public directories.
 - Public pages only; robots.txt is respected for any direct fetch.
 - LinkedIn pages are never scraped — only the public profile URL, name, title and company shown in a search result are stored.
 - All web content is treated as untrusted data (wrapped in `<web_content>`; the agent never follows instructions found there).

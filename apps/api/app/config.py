@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     SEARCH_CACHE_TTL_DAYS: int = Field(default=7)
     RESPECT_ROBOTS_TXT: bool = Field(default=True)
     SEED_ENABLED: bool = Field(default=False)
+    DEMO_SHOW_SAMPLE: bool = Field(default=False)
 
     # Server settings
     PORT: int = Field(default=8000)

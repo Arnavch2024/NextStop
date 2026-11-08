@@ -1,7 +1,9 @@
+import os
 from typing import Any, Dict, List, Optional
 
 from supabase import Client
 
+from app.config import settings
 from app.db.supabase import write_raw_event
 from app.logger import logger
 
@@ -11,15 +13,27 @@ def search_data_lake(
     query: str = "",
     filters: Optional[Dict[str, Any]] = None,
     actor_id: Optional[str] = None,
+    include_sample: Optional[bool] = None,
 ) -> Dict[str, Any]:
     """
     Searches the shared contacts lake + companies/colleges.
     Always tried first. Excludes contacts where suppressed_at is not null.
+    Sample (seed) contacts rank below real ones, and are excluded unless
+    include_sample=True or DEMO_SHOW_SAMPLE=true in environment.
     Writes a raw_events audit row: source='search', payload={kind: 'data_lake', query, found: N}.
     """
     filters = filters or {}
     clean_query = query.strip() if query else ""
     tokens = [t.lower() for t in clean_query.split() if t]
+
+    if include_sample is not None:
+        show_sample = include_sample
+    elif "include_sample" in filters:
+        show_sample = bool(filters["include_sample"])
+    else:
+        show_sample = settings.DEMO_SHOW_SAMPLE or (
+            os.environ.get("DEMO_SHOW_SAMPLE", "").lower() in ("true", "1", "yes")
+        )
 
     # 1. Fetch reference lookup maps for companies and colleges
     companies_res = client.table("companies").select("id, name, category, industry").execute()
@@ -90,11 +104,18 @@ def search_data_lake(
                     break
 
         if is_match:
+            is_sample = contact.get("source") == "seed" or contact.get("note") == "synthetic"
+            if not show_sample and is_sample:
+                continue
+
             enriched = dict(contact)
             enriched["company_name"] = comp_name
             enriched["college_name"] = coll_name
+            enriched["is_sample"] = is_sample
             matched_contacts.append(enriched)
 
+    # Order: real (non-seed) contacts rank above sample ones
+    matched_contacts.sort(key=lambda c: 1 if c.get("is_sample") else 0)
     found_count = len(matched_contacts)
 
     # 4. Write audit raw_events row (source='search')

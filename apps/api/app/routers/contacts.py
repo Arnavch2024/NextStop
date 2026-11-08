@@ -1,3 +1,4 @@
+import os
 import uuid
 from typing import Optional
 from urllib.parse import urlparse
@@ -5,6 +6,7 @@ from urllib.parse import urlparse
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from supabase import Client
 
+from app.config import settings
 from app.db.supabase import get_supabase_client
 from app.dependencies import get_current_user
 from app.logger import logger
@@ -32,6 +34,7 @@ def list_contacts(
     college_id: Optional[str] = Query(None, description="Filter by college UUID"),
     role_type: Optional[str] = Query(None, description="Filter by role type"),
     saved_only: bool = Query(False, description="Filter to only contacts saved by caller"),
+    include_sample: Optional[bool] = Query(None, description="Include sample/seed data in results"),
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Page size"),
     current_user: UserProfile = Depends(get_current_user),
@@ -64,9 +67,15 @@ def list_contacts(
     contacts_res = query_builder.execute()
     raw_contacts = contacts_res.data or []
 
-    # 4. Filter in memory for saved_only, q text search, and suppression
+    # 4. Filter in memory for saved_only, q text search, suppression, and sample data controls
     clean_q = q.strip().lower() if q else ""
     tokens = [t for t in clean_q.split() if t]
+
+    show_sample = (
+        include_sample
+        if include_sample is not None
+        else (settings.DEMO_SHOW_SAMPLE or (os.environ.get("DEMO_SHOW_SAMPLE", "").lower() in ("true", "1", "yes")))
+    )
 
     matched: list[dict] = []
     for c in raw_contacts:
@@ -75,6 +84,10 @@ def list_contacts(
 
         cid = str(c["id"])
         if saved_only and cid not in saved_contact_ids:
+            continue
+
+        is_sample_val = c.get("source") == "seed" or c.get("note") == "synthetic"
+        if not show_sample and is_sample_val:
             continue
 
         c_name = str(c.get("name", "")).lower()
@@ -96,7 +109,11 @@ def list_contacts(
         item["company_name"] = comp_name or None
         item["college_name"] = coll_name or None
         item["saved"] = cid in saved_contact_ids
+        item["is_sample"] = is_sample_val
         matched.append(item)
+
+    # Order: real (non-seed) contacts rank above sample ones
+    matched.sort(key=lambda c: 1 if c.get("is_sample") else 0)
 
     total = len(matched)
     start_idx = (page - 1) * page_size
@@ -145,7 +162,11 @@ def list_contacts(
             ]
 
         is_sample_val = (
-            c.get("source") == "seed" or any(s.source == "seed" for s in c_sources) or c.get("note") == "synthetic"
+            c.get("is_sample")
+            if "is_sample" in c
+            else (
+                c.get("source") == "seed" or any(s.source == "seed" for s in c_sources) or c.get("note") == "synthetic"
+            )
         )
 
         cards.append(

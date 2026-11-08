@@ -67,6 +67,7 @@ Fill in the values:
 | api        | `LLM_AGENT_MODEL`                                                 | Agent loop reasoning model (pinned: `gemini-3.5-flash`)            |
 | api        | `LLM_FAST_MODEL`                                                  | Fast structured extraction model (pinned: `gemini-3.5-flash-lite`) |
 | api        | `EXA_API_KEY` / `TAVILY_API_KEY`                                  | Public web search provider keys (Day 3 search)                     |
+| api        | `DEMO_SHOW_SAMPLE`                                                | Show sample/seed data in lake by default (default: `false`)        |
 | web/mobile | `NEXT_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_URL`           | Same Supabase URL                                                  |
 | web/mobile | `NEXT_PUBLIC_SUPABASE_ANON_KEY` / `EXPO_PUBLIC_SUPABASE_ANON_KEY` | Same anon key                                                      |
 | web/mobile | `NEXT_PUBLIC_API_BASE_URL` / `EXPO_PUBLIC_API_BASE_URL`           | URL of `apps/api` (e.g. `http://localhost:8000`)                   |
@@ -181,6 +182,36 @@ The API performs an automated startup verification making a cheap 1-token real c
 ```bash
 cd apps/api
 python scripts/check_models.py
+```
+
+### Admin Scripts (Contacts Data Lake)
+
+#### 1. Ingest Real-World Contacts
+
+Populates the shared data lake with real web data for companies in the lake (using Exa/Tavily web search and Gemini extraction). Never scrapes LinkedIn; only public search result snippets and URLs are stored. Never stores phone numbers.
+
+```bash
+cd apps/api
+
+# Dry-run: simulate additions without writing to database
+python scripts/ingest_contacts.py --category GCC --limit 5 --dry-run
+
+# Execute ingestion with rate limiting delay
+python scripts/ingest_contacts.py --category GCC --delay 1.5
+```
+
+#### 2. Purge Synthetic Seed Contacts
+
+Deletes synthetic seed rows (`source='seed'`) and their provenance records from `contact_sources` after explicit confirmation:
+
+```bash
+cd apps/api
+
+# Check seed row counts (dry-run)
+python scripts/purge_seed.py
+
+# Confirm and delete seed rows
+python scripts/purge_seed.py --yes
 ```
 
 ### Web → Vercel
