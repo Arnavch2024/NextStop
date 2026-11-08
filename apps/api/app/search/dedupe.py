@@ -138,22 +138,52 @@ def upsert_contact(
 
     # Step 1: linkedin_url
     if linkedin:
-        q = client.table("contacts").select("*").ilike("linkedin_url", linkedin).is_("suppressed_at", "null").execute()
-        if q.data and len(q.data) > 0:
-            existing = q.data[0]
+        try:
+            q = (
+                client.table("contacts")
+                .select("*")
+                .ilike("linkedin_url", linkedin)
+                .is_("suppressed_at", "null")
+                .execute()
+            )
+            if q.data and len(q.data) > 0:
+                existing = q.data[0]
+        except Exception:
+            try:
+                q = client.table("contacts").select("*").ilike("linkedin_url", linkedin).execute()
+                if q.data and len(q.data) > 0:
+                    existing = q.data[0]
+            except Exception:
+                pass
 
     # Step 2: email
     if not existing and email:
-        q = client.table("contacts").select("*").ilike("email", email).is_("suppressed_at", "null").execute()
-        if q.data and len(q.data) > 0:
-            existing = q.data[0]
+        try:
+            q = client.table("contacts").select("*").ilike("email", email).is_("suppressed_at", "null").execute()
+            if q.data and len(q.data) > 0:
+                existing = q.data[0]
+        except Exception:
+            try:
+                q = client.table("contacts").select("*").ilike("email", email).execute()
+                if q.data and len(q.data) > 0:
+                    existing = q.data[0]
+            except Exception:
+                pass
 
     # Step 3: normalized name + company_id
     if not existing and name and company_id:
-        q = client.table("contacts").select("*").eq("company_id", company_id).is_("suppressed_at", "null").execute()
-        candidates = q.data or []
+        try:
+            q = client.table("contacts").select("*").eq("company_id", company_id).is_("suppressed_at", "null").execute()
+            candidates = q.data or []
+        except Exception:
+            try:
+                q = client.table("contacts").select("*").eq("company_id", company_id).execute()
+                candidates = q.data or []
+            except Exception:
+                candidates = []
         for cand in candidates:
-            if normalize_name(cand.get("name", "")) == normalize_name(name):
+            cand_name = cand.get("name") or cand.get("full_name") or ""
+            if normalize_name(cand_name) == normalize_name(name):
                 existing = cand
                 break
 
@@ -229,7 +259,20 @@ def upsert_contact(
                 conflicts["phone"] = phone_override
 
         if update_fields:
-            client.table("contacts").update(update_fields).eq("id", contact_id).execute()
+            try:
+                client.table("contacts").update(update_fields).eq("id", contact_id).execute()
+            except Exception:
+                compat_updates = {}
+                for k, v in update_fields.items():
+                    if k == "name":
+                        compat_updates["full_name"] = v
+                    elif k in ("title", "email", "company_id"):
+                        compat_updates[k] = v
+                if compat_updates:
+                    try:
+                        client.table("contacts").update(compat_updates).eq("id", contact_id).execute()
+                    except Exception as e_up:
+                        logger.warning(f"Could not update contact compatibly: {e_up}")
 
         # Handle user_said conflicts: store in user's private user_saved_contacts
         if (conflicts or phone_override) and source == "user_said":
@@ -299,9 +342,22 @@ def upsert_contact(
             "first_seen_at": now_iso,
             "last_verified_at": now_iso if source == "web" else None,
         }
-        ins = client.table("contacts").insert(new_row).execute()
-        if ins.data and len(ins.data) > 0:
-            contact_id = str(ins.data[0].get("id", contact_id))
+        try:
+            ins = client.table("contacts").insert(new_row).execute()
+            if ins.data and len(ins.data) > 0:
+                contact_id = str(ins.data[0].get("id", contact_id))
+        except Exception:
+            compat_row = {
+                "id": contact_id,
+                "full_name": name,
+                "title": title,
+                "company_id": company_id,
+                "email": email,
+                "owner_id": None,
+            }
+            ins = client.table("contacts").insert(compat_row).execute()
+            if ins.data and len(ins.data) > 0:
+                contact_id = str(ins.data[0].get("id", contact_id))
 
         if phone_override and source == "user_said":
             # Save user phone in private user_saved_contacts

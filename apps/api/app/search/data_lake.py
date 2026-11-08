@@ -58,16 +58,21 @@ def search_data_lake(
             matching_coll_ids.add(str(col["id"]))
 
     # 2. Build contacts query
-    db_query = client.table("contacts").select("*").is_("suppressed_at", "null")
+    try:
+        db_query = client.table("contacts").select("*").is_("suppressed_at", "null")
+        if filters.get("company_id"):
+            db_query = db_query.eq("company_id", filters["company_id"])
+        if filters.get("college_id"):
+            db_query = db_query.eq("college_id", filters["college_id"])
+        if filters.get("role_type"):
+            db_query = db_query.eq("role_type", filters["role_type"])
+        res = db_query.execute()
+    except Exception:
+        db_query = client.table("contacts").select("*")
+        if filters.get("company_id"):
+            db_query = db_query.eq("company_id", filters["company_id"])
+        res = db_query.execute()
 
-    if filters.get("company_id"):
-        db_query = db_query.eq("company_id", filters["company_id"])
-    if filters.get("college_id"):
-        db_query = db_query.eq("college_id", filters["college_id"])
-    if filters.get("role_type"):
-        db_query = db_query.eq("role_type", filters["role_type"])
-
-    res = db_query.execute()
     contacts_pool = res.data or []
 
     # 3. Filter contacts in Python for multi-field search (name, title, company_name, college_name)
@@ -77,7 +82,7 @@ def search_data_lake(
         if contact.get("suppressed_at") is not None:
             continue
 
-        c_name = str(contact.get("name", "")).lower()
+        c_name = str(contact.get("name") or contact.get("full_name") or "").lower()
         c_title = str(contact.get("title", "")).lower()
         comp_id = str(contact.get("company_id")) if contact.get("company_id") else None
         coll_id = str(contact.get("college_id")) if contact.get("college_id") else None

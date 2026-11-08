@@ -55,16 +55,21 @@ def list_contacts(
     coll_map = {str(c["id"]): c.get("name") for c in (coll_res.data or []) if c.get("id")}
 
     # 3. Base contacts query (exclude suppressed_at is not null)
-    query_builder = client.table("contacts").select("*").is_("suppressed_at", "null")
+    try:
+        query_builder = client.table("contacts").select("*").is_("suppressed_at", "null")
+        if company_id:
+            query_builder = query_builder.eq("company_id", company_id)
+        if college_id:
+            query_builder = query_builder.eq("college_id", college_id)
+        if role_type:
+            query_builder = query_builder.eq("role_type", role_type)
+        contacts_res = query_builder.execute()
+    except Exception:
+        query_builder = client.table("contacts").select("*")
+        if company_id:
+            query_builder = query_builder.eq("company_id", company_id)
+        contacts_res = query_builder.execute()
 
-    if company_id:
-        query_builder = query_builder.eq("company_id", company_id)
-    if college_id:
-        query_builder = query_builder.eq("college_id", college_id)
-    if role_type:
-        query_builder = query_builder.eq("role_type", role_type)
-
-    contacts_res = query_builder.execute()
     raw_contacts = contacts_res.data or []
 
     # 4. Filter in memory for saved_only, q text search, suppression, and sample data controls
@@ -90,7 +95,7 @@ def list_contacts(
         if not show_sample and is_sample_val:
             continue
 
-        c_name = str(c.get("name", "")).lower()
+        c_name = str(c.get("name") or c.get("full_name") or "").lower()
         c_title = str(c.get("title", "")).lower()
         c_email = str(c.get("email", "")).lower()
         comp_name = comp_map.get(str(c.get("company_id", "")), "")
@@ -184,7 +189,7 @@ def list_contacts(
         cards.append(
             ContactCard(
                 id=cid,
-                name=c.get("name") or "",
+                name=c.get("name") or c.get("full_name") or "",
                 title=c.get("title"),
                 company_id=str(c.get("company_id")) if c.get("company_id") else None,
                 company_name=c.get("company_name"),
