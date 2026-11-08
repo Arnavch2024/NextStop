@@ -23,7 +23,7 @@
 
 ## LLM Processing
 
-- Resume text uploaded by students is processed exclusively by **Google Gemini** (via the Google Gemini API) using pinned stable models (`gemini-2.5-flash` for agent reasoning, `gemini-1.5-flash` for structured extraction) inside delimited `<resume_document>` blocks. Raw resume text is never retained in server logs or used to train public models.
+- Resume text uploaded by students is processed exclusively by **Google Gemini** (via the Google Gemini API) using pinned stable models (`gemini-3.5-flash` for agent reasoning, `gemini-3.5-flash-lite` for structured extraction) inside delimited `<resume_document>` blocks. Raw resume text is never retained in server logs or used to train public models.
 
 ## Removal requests (manual process)
 

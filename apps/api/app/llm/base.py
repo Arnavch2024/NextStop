@@ -28,6 +28,14 @@ class MissingAPIKeyError(LLMError):
     pass
 
 
+class ModelRejectedError(LLMError):
+    """Raised when a configured model is rejected by the LLM provider (e.g. 404/retired/unsupported)."""
+
+    def __init__(self, model_name: str, message: str):
+        self.model_name = model_name
+        super().__init__(f"Configured model '{model_name}' was rejected by LLM provider: {message}")
+
+
 class LLMProvider(ABC):
     """
     Provider-neutral interface for LLM interactions.

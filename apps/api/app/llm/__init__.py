@@ -6,8 +6,10 @@ from app.llm.base import (
     LLMProvider,
     LLMResponse,
     MissingAPIKeyError,
+    ModelRejectedError,
     ToolCall,
 )
+from app.llm.check_models import check_configured_models, should_skip_model_check
 from app.llm.fake import FakeLLMProvider
 from app.llm.gemini import GeminiLLMProvider
 
@@ -42,8 +44,11 @@ __all__ = [
     "ToolCall",
     "LLMError",
     "MissingAPIKeyError",
+    "ModelRejectedError",
     "GeminiLLMProvider",
     "FakeLLMProvider",
     "get_llm_provider",
     "set_llm_provider",
+    "check_configured_models",
+    "should_skip_model_check",
 ]

@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from typing import List, Optional
 
 from pydantic import Field
@@ -12,13 +13,13 @@ class Settings(BaseSettings):
 
     # LLM Settings (Gemini default, provider swappable via env)
     LLM_PROVIDER: str = Field(default="gemini")
-    LLM_AGENT_MODEL: str = Field(default="gemini-2.5-flash")
-    LLM_FAST_MODEL: str = Field(default="gemini-1.5-flash")
+    LLM_AGENT_MODEL: str = Field(default="gemini-3.5-flash")
+    LLM_FAST_MODEL: str = Field(default="gemini-3.5-flash-lite")
 
     # Google Gemini settings
     GEMINI_API_KEY: Optional[str] = Field(default=None)
     GOOGLE_API_KEY: Optional[str] = Field(default=None)
-    GEMINI_MODEL: str = Field(default="gemini-2.5-flash")
+    GEMINI_MODEL: str = Field(default="gemini-3.5-flash")
 
     # Voice transcription settings
     TRANSCRIPTION_PROVIDER: str = Field(default="whisper")
@@ -44,7 +45,7 @@ class Settings(BaseSettings):
     CORS_ORIGINS: List[str] = Field(default=["*"])
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(".env", str(Path(__file__).resolve().parent.parent / ".env")),
         env_file_encoding="utf-8",
         extra="ignore",
     )

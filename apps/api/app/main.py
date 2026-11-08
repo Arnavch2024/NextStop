@@ -1,8 +1,12 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 
 from app.config import settings
+from app.llm.check_models import check_configured_models, should_skip_model_check
+from app.logger import logger
 from app.routers import (
     agent_runs_router,
     chat_router,
@@ -13,6 +17,16 @@ from app.routers import (
     voice_router,
 )
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Verify configured LLM models on server startup (skipped in CI/tests)
+    if not should_skip_model_check():
+        logger.info("Executing startup check: verifying configured LLM models...")
+        check_configured_models(raise_on_error=True)
+    yield
+
+
 app = FastAPI(
     title="Recruiting Platform API",
     version="0.1.0",
@@ -20,6 +34,7 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json",
+    lifespan=lifespan,
 )
 
 # CORS middleware

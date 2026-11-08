@@ -41,7 +41,7 @@ def generate_outreach_text(
         provider = llm_provider or get_llm_provider()
         prompt = (
             f"Draft a professional {channel} message to {c_name} ({c_title} at {c_company}). "
-            f"Sender is {sender_name} ({sender_role})."
+            f"Sender is {sender_name} ({sender_role}). Address the recipient as '{c_name}'. "
             f"{ctx}\n"
             f"For email, provide subject and body. For linkedin, subject must be null and body concise under 300 characters."
         )
