@@ -22,6 +22,16 @@ class Settings(BaseSettings):
     TRANSCRIPTION_MODEL: Optional[str] = Field(default=None)
     TRANSCRIPTION_MAX_BYTES: int = Field(default=25 * 1024 * 1024)  # 25MB
 
+    # Day 3 Search Slice settings
+    EXA_API_KEY: Optional[str] = Field(default=None)
+    TAVILY_API_KEY: Optional[str] = Field(default=None)
+    JINA_API_KEY: Optional[str] = Field(default=None)
+    WEB_SEARCH_PROVIDER: str = Field(default="exa")
+    WEB_FETCH_PROVIDER: Optional[str] = Field(default=None)
+    SEARCH_CACHE_TTL_DAYS: int = Field(default=7)
+    RESPECT_ROBOTS_TXT: bool = Field(default=True)
+    SEED_ENABLED: bool = Field(default=False)
+
     # Server settings
     PORT: int = Field(default=8000)
     HOST: str = Field(default="0.0.0.0")
