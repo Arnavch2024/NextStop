@@ -52,6 +52,17 @@ def main() -> int:
         dry_run=args.dry_run,
     )
 
+    candidates = stats.get("candidates", [])
+    if candidates:
+        print("\nCandidate Contacts Identified:")
+        print(f"{'Company':<20} | {'Name':<22} | {'Operation':<7} | {'Title':<28} | {'Matched Rule'}")
+        print("-" * 110)
+        for c in candidates:
+            rule_snip = (c["matched_rule"][:45] + "...") if len(c["matched_rule"]) > 45 else c["matched_rule"]
+            print(
+                f"{c['company'][:19]:<20} | {c['name'][:21]:<22} | {c['operation']:<7} | {c['title'][:27]:<28} | {rule_snip}"
+            )
+
     print("\n================ Ingestion Summary ================")
     print(f"Companies processed: {stats['companies_processed']}")
     print(f"Contacts added:      {stats['contacts_added']}")

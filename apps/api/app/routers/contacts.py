@@ -86,7 +86,7 @@ def list_contacts(
         if saved_only and cid not in saved_contact_ids:
             continue
 
-        is_sample_val = c.get("source") == "seed" or c.get("note") == "synthetic"
+        is_sample_val = c.get("source") == "seed" or (c.get("note") == "synthetic" and c.get("source") != "web")
         if not show_sample and is_sample_val:
             continue
 
@@ -164,9 +164,7 @@ def list_contacts(
         is_sample_val = (
             c.get("is_sample")
             if "is_sample" in c
-            else (
-                c.get("source") == "seed" or any(s.source == "seed" for s in c_sources) or c.get("note") == "synthetic"
-            )
+            else (c.get("source") == "seed" or (c.get("note") == "synthetic" and c.get("source") != "web"))
         )
 
         cards.append(

@@ -104,7 +104,9 @@ def search_data_lake(
                     break
 
         if is_match:
-            is_sample = contact.get("source") == "seed" or contact.get("note") == "synthetic"
+            is_sample = contact.get("source") == "seed" or (
+                contact.get("note") == "synthetic" and contact.get("source") != "web"
+            )
             if not show_sample and is_sample:
                 continue
 

@@ -33,8 +33,9 @@ def main() -> int:
     print("==================================================")
     print("           Purge Seed Data Scan                   ")
     print("==================================================")
-    print(f"Seed contacts found:        {res['contacts_found']}")
-    print(f"Seed contact_sources found: {res['sources_found']}")
+    print(f"Seed contacts found:                {res['contacts_found']}")
+    print(f"Seed contact_sources found:         {res['sources_found']}")
+    print(f"Referencing user_saved_contacts:    {res.get('user_saved_contacts_referenced', 0)}")
     print("--------------------------------------------------")
 
     if not args.yes:

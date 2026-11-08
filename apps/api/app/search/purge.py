@@ -40,12 +40,26 @@ def run_purge(client: Client, confirm: bool = False) -> Dict[str, Any]:
         else:
             raise exc
 
-    logger.info(f"Purge seed scan found: {contact_count} contacts and {source_count} contact_sources")
+    # 3. Check how many user_saved_contacts reference these seed contacts
+    saved_referencing_count = 0
+    seed_ids = [str(c["id"]) for c in seed_contacts if c.get("id")]
+    if seed_ids:
+        try:
+            saved_res = client.table("user_saved_contacts").select("id").in_("contact_id", seed_ids).execute()
+            saved_referencing_count = len(saved_res.data or [])
+        except Exception as exc:
+            logger.debug(f"Could not check user_saved_contacts references: {exc}")
+
+    logger.info(
+        f"Purge seed scan found: {contact_count} contacts, {source_count} contact_sources, "
+        f"{saved_referencing_count} referenced in user_saved_contacts"
+    )
 
     if not confirm:
         return {
             "contacts_found": contact_count,
             "sources_found": source_count,
+            "user_saved_contacts_referenced": saved_referencing_count,
             "contacts_deleted": 0,
             "sources_deleted": 0,
             "confirmed": False,
@@ -68,6 +82,7 @@ def run_purge(client: Client, confirm: bool = False) -> Dict[str, Any]:
     return {
         "contacts_found": contact_count,
         "sources_found": source_count,
+        "user_saved_contacts_referenced": saved_referencing_count,
         "contacts_deleted": contacts_deleted,
         "sources_deleted": sources_deleted,
         "confirmed": True,

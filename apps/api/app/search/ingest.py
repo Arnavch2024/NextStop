@@ -141,6 +141,7 @@ def run_ingest(
                     text=text_to_extract,
                     source_url=url,
                     llm_provider=llm_provider,
+                    target_company=comp_name,
                 )
             except Exception as exc:
                 err_str = str(exc).lower()
@@ -164,6 +165,18 @@ def run_ingest(
 
                 if dry_run:
                     would_merge = _check_would_merge(client, cand_dict, comp_id)
+                    op_type = "merge" if would_merge else "add"
+                    cand_entry = {
+                        "company": comp_name,
+                        "name": cand.name,
+                        "title": cand.title or "Recruiter",
+                        "source_url": cand.source_url or url,
+                        "matched_rule": cand.matched_rule or f"{cand.name} at {comp_name}",
+                        "confidence": cand.confidence,
+                        "operation": op_type,
+                    }
+                    stats.setdefault("candidates", []).append(cand_entry)
+
                     if would_merge:
                         stats["contacts_merged"] += 1
                         logger.info(f"[DRY-RUN WOULD MERGE] {cand.name} ({cand.title}) at {comp_name}")
@@ -179,6 +192,18 @@ def run_ingest(
                             source="web",
                             source_url=cand.source_url or url,
                         )
+                        op_type = "merge" if res.get("op") in ("merged", "updated") else "add"
+                        cand_entry = {
+                            "company": comp_name,
+                            "name": cand.name,
+                            "title": cand.title or "Recruiter",
+                            "source_url": cand.source_url or url,
+                            "matched_rule": cand.matched_rule or f"{cand.name} at {comp_name}",
+                            "confidence": cand.confidence,
+                            "operation": op_type,
+                        }
+                        stats.setdefault("candidates", []).append(cand_entry)
+
                         if res.get("error") == "nameless_candidate":
                             stats["contacts_dropped"] += 1
                         elif res.get("op") == "created":

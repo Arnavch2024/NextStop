@@ -294,3 +294,178 @@ def test_ordering_and_include_sample_flag(mock_supabase, client, monkeypatch):
     res_explicit_false = search_data_lake(client=mock_supabase, include_sample=False)
     assert len(res_explicit_false["contacts"]) == 1
     assert res_explicit_false["contacts"][0]["id"] == real_contact_id
+
+
+def test_extraction_precision_rules():
+    """
+    Precision rules:
+    (a) Name and target company must appear in the same sentence or result block.
+    (b) Title or surrounding text must mention recruiting, talent acquisition, campus/university hiring, or HR.
+    """
+    from app.search.extract_contacts import ExtractionResult, extract_contacts_from_text
+
+    article_text = (
+        "Rohit Verma leads university recruiting at Barclays India in their Mumbai campus. "
+        "Amit Kumar is a Senior Software Engineer at Barclays India working on core banking infrastructure. "
+        "Meanwhile, Priya Sharma leads campus talent acquisition at Google India."
+    )
+
+    # Mock LLM returning all 3 candidates initially
+    mock_llm = MagicMock()
+    mock_llm.generate_structured.return_value = ExtractionResult(
+        contacts=[
+            CandidateContact(
+                name="Rohit Verma",
+                title="Lead University Recruiter",
+                company="Barclays India",
+            ),
+            CandidateContact(
+                name="Amit Kumar",
+                title="Senior Software Engineer",
+                company="Barclays India",
+            ),
+            CandidateContact(
+                name="Priya Sharma",
+                title="Campus Talent Acquisition Lead",
+                company="Google India",
+            ),
+        ]
+    )
+
+    # Target company is Barclays India
+    extracted = extract_contacts_from_text(
+        text=article_text,
+        source_url="https://example.com/article",
+        llm_provider=mock_llm,
+        target_company="Barclays India",
+    )
+
+    names = [c.name for c in extracted]
+
+    # 1. Valid recruiter at target company is kept
+    assert "Rohit Verma" in names
+    rohit = next(c for c in extracted if c.name == "Rohit Verma")
+    assert "Barclays India" in rohit.matched_rule
+    assert "Rohit Verma" in rohit.matched_rule
+
+    # 2. Non-recruiter employee at Barclays India is dropped
+    assert "Amit Kumar" not in names
+
+    # 3. Person from another company (Google) in the same article is dropped
+    assert "Priya Sharma" not in names
+    assert len(extracted) == 1
+
+
+def test_merged_seed_contact_survives_purge_and_user_saved_reference_counted(mock_supabase, test_user):
+    """
+    Verifies that:
+    1. In purge dry-run, user_saved_contacts referencing contacts that would be deleted are counted.
+    2. A seed contact matched and merged by a web result ends with source='web', is_sample=False,
+       and SURVIVES purge_seed --yes, while pure seed rows are deleted.
+    """
+    comp_id = str(uuid.uuid4())
+    mock_supabase.store["companies"].append({"id": comp_id, "name": "Barclays India", "category": "GCC"})
+
+    # Seed contact 1: Priya Deshmukh (will be merged by web)
+    priya_id = str(uuid.uuid4())
+    mock_supabase.store["contacts"].append(
+        {
+            "id": priya_id,
+            "name": "Priya Deshmukh",
+            "title": "Junior Talent Sourcer",
+            "company_id": comp_id,
+            "linkedin_url": "https://linkedin.com/in/priyadeshmukh",
+            "source": "seed",
+        }
+    )
+    mock_supabase.store["contact_sources"].append({"id": str(uuid.uuid4()), "contact_id": priya_id, "source": "seed"})
+
+    # Seed contact 2: Untouched Seed (pure seed, will NOT be merged)
+    pure_seed_id = str(uuid.uuid4())
+    mock_supabase.store["contacts"].append(
+        {
+            "id": pure_seed_id,
+            "name": "Untouched Seed Contact",
+            "title": "HR Lead",
+            "company_id": comp_id,
+            "source": "seed",
+        }
+    )
+    mock_supabase.store["contact_sources"].append(
+        {"id": str(uuid.uuid4()), "contact_id": pure_seed_id, "source": "seed"}
+    )
+
+    # User saves both seed contacts
+    mock_supabase.store["user_saved_contacts"].append(
+        {"id": str(uuid.uuid4()), "profile_id": str(test_user.id), "contact_id": priya_id}
+    )
+    mock_supabase.store["user_saved_contacts"].append(
+        {"id": str(uuid.uuid4()), "profile_id": str(test_user.id), "contact_id": pure_seed_id}
+    )
+
+    # 1. Initial Purge Dry-Run: 2 seed contacts, 2 contact_sources, 2 referencing saved rows
+    dry_run_res = run_purge(client=mock_supabase, confirm=False)
+    assert dry_run_res["contacts_found"] == 2
+    assert dry_run_res["sources_found"] == 2
+    assert dry_run_res["user_saved_contacts_referenced"] == 2
+    assert dry_run_res["contacts_deleted"] == 0
+
+    # 2. Ingest web result that matches and merges Priya Deshmukh
+    mock_search = MagicMock()
+    mock_search.search.return_value = [
+        SearchResult(
+            title="Priya Deshmukh - Barclays LinkedIn",
+            url="https://linkedin.com/in/priyadeshmukh",
+            snippet="Priya Deshmukh is Lead Campus Recruiter at Barclays India in Mumbai.",
+        )
+    ]
+
+    candidate_web = CandidateContact(
+        name="Priya Deshmukh",
+        title="Lead Campus Recruiter",
+        company="Barclays India",
+        linkedin_url="https://linkedin.com/in/priyadeshmukh",
+        email="priya.deshmukh@barclays.example.com",
+        source_url="https://linkedin.com/in/priyadeshmukh",
+    )
+
+    with patch(
+        "app.search.ingest.extract_contacts_from_text",
+        return_value=[candidate_web],
+    ):
+        stats = run_ingest(
+            client=mock_supabase,
+            category="GCC",
+            limit=1,
+            delay=0,
+            dry_run=False,
+            search_provider=mock_search,
+            admin_user=test_user,
+        )
+
+    assert stats["contacts_merged"] == 1
+
+    # Check Priya's updated state: source is 'web' and is_sample is False
+    priya_row = next(c for c in mock_supabase.store["contacts"] if c["id"] == priya_id)
+    assert priya_row["source"] == "web"
+    assert priya_row["title"] == "Lead Campus Recruiter"
+
+    lake_res = search_data_lake(client=mock_supabase, query="Priya", include_sample=True)
+    priya_card = next(c for c in lake_res["contacts"] if c["id"] == priya_id)
+    assert priya_card["is_sample"] is False
+
+    # 3. Purge Dry-Run after merge: only 1 pure seed contact left to be purged
+    dry_run_after = run_purge(client=mock_supabase, confirm=False)
+    assert dry_run_after["contacts_found"] == 1
+    assert dry_run_after["user_saved_contacts_referenced"] == 1
+
+    # 4. Execute confirmed purge (purge_seed --yes)
+    confirmed_purge = run_purge(client=mock_supabase, confirm=True)
+    assert confirmed_purge["contacts_deleted"] == 1
+    assert confirmed_purge["confirmed"] is True
+
+    # Priya SURVIVED the purge because she is now source='web'!
+    remaining_contacts = mock_supabase.store["contacts"]
+    remaining_ids = [c["id"] for c in remaining_contacts]
+    assert priya_id in remaining_ids
+    assert pure_seed_id not in remaining_ids
