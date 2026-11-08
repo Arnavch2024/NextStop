@@ -205,7 +205,7 @@ Day 3 turns the platform into a searchable talent/contact data lake: seeded Mumb
 - **FR-TOOL-5**: An extraction step SHALL turn search results into structured candidate contacts via Pydantic-validated JSON, using null for anything not stated.
 - **FR-TOOL-6**: THE SYSTEM SHALL provide `upsert_contact` with dedupe: match on linkedin_url, then email, then normalized (name + company); merge instead of duplicating. Merge priority is `web` (with source_url) > `user_said` > `seed`. A `user_said` value fills empty fields only (never overwrites an existing value) and is flagged unverified; conflicting user input stays in the user's private saved-contact row. Provenance is appended to `contact_sources`.
 - **FR-TOOL-7**: THE SYSTEM SHALL provide `draft_outreach(contact, sender context)` producing an email or LinkedIn note; it SHALL NEVER auto-send and SHALL return `{subject, body, channel}`.
-- **FR-TOOL-8**: Tool availability SHALL be role-aware: search/outreach tools are available to placement_officer, company and recruiter; the student role retains the Day 2 tools only.
+- **FR-TOOL-8**: Tool availability SHALL be role-aware: search/outreach tools (`search_data_lake`, `web_search_enrich`, `upsert_contact`, `draft_outreach`) are available to ALL roles including `student`, `placement_officer`, `company`, and `recruiter`. Students can discover campus recruiters at GCCs/enterprises in Mumbai and draft outreach alongside managing their Day 2 profile.
 
 ### 9.4 Web safety
 

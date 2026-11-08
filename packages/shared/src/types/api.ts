@@ -145,3 +145,66 @@ export interface StudentProfile {
   skills: SkillRecord[];
   documents: DocumentRecord[];
 }
+
+export interface ContactSourceModel {
+  source: string;
+  source_url?: string | null;
+  domain?: string | null;
+  fetched_at?: string | null;
+  confidence: number;
+}
+
+export interface ContactCard {
+  id: string;
+  name: string;
+  title?: string | null;
+  company_id?: string | null;
+  company_name?: string | null;
+  college_id?: string | null;
+  college_name?: string | null;
+  role_type: string;
+  email?: string | null;
+  linkedin_url?: string | null;
+  saved: boolean;
+  is_sample: boolean;
+  sources: ContactSourceModel[];
+  first_seen_at?: string | null;
+  last_verified_at?: string | null;
+}
+
+export interface ContactListResponse {
+  items: ContactCard[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
+export interface SaveResponse {
+  contact_id: string;
+  saved: boolean;
+}
+
+export interface SaveContactRequest {
+  phone?: string | null;
+}
+
+export interface OutreachDraftRequest {
+  contact_id: string;
+  channel: "email" | "linkedin";
+  sender_context?: string | null;
+}
+
+export interface OutreachDraftResponse {
+  draft_id: string;
+  subject?: string | null;
+  body: string;
+  channel: string;
+}
+
+export interface AgentRunResponse {
+  id: string;
+  status: string;
+  steps: Record<string, any>[];
+  summary?: string | null;
+  created_at?: string | null;
+}

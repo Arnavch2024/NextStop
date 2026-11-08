@@ -114,6 +114,7 @@ class ContactCard(BaseModel):
     email: Optional[str] = None
     linkedin_url: Optional[str] = None
     saved: bool = False
+    is_sample: bool = False
     sources: List[ContactSourceModel] = Field(default_factory=list)
     first_seen_at: Optional[datetime] = None
     last_verified_at: Optional[datetime] = None

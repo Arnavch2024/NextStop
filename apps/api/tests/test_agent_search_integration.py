@@ -22,14 +22,8 @@ def make_gemini_text_response(text: str):
 
 
 def test_role_aware_tool_declarations():
-    # Student has only upsert_record
-    student_tools = get_tools_for_role(ProfileRole.STUDENT)
-    assert len(student_tools) == 1
-    student_fn_names = [fn.name for fn in student_tools[0].function_declarations]
-    assert student_fn_names == ["upsert_record"]
-
-    # Recruiter has search & outreach tools
-    for role in (ProfileRole.RECRUITER, ProfileRole.COMPANY, ProfileRole.PLACEMENT_OFFICER):
+    # All roles (STUDENT, RECRUITER, COMPANY, PLACEMENT_OFFICER) have search & outreach tools
+    for role in (ProfileRole.STUDENT, ProfileRole.RECRUITER, ProfileRole.COMPANY, ProfileRole.PLACEMENT_OFFICER):
         tools = get_tools_for_role(role)
         assert len(tools) == 1
         fn_names = [fn.name for fn in tools[0].function_declarations]

@@ -159,20 +159,22 @@ DRAFT_OUTREACH_DECLARATION = types.FunctionDeclaration(
 
 
 def get_tools_for_role(role: ProfileRole) -> list[types.Tool]:
-    """Returns role-aware Gemini tool declarations."""
-    if role in (ProfileRole.PLACEMENT_OFFICER, ProfileRole.COMPANY, ProfileRole.RECRUITER):
-        return [
-            types.Tool(
-                function_declarations=[
-                    UPSERT_RECORD_DECLARATION,
-                    SEARCH_DATA_LAKE_DECLARATION,
-                    WEB_SEARCH_ENRICH_DECLARATION,
-                    UPSERT_CONTACT_DECLARATION,
-                    DRAFT_OUTREACH_DECLARATION,
-                ]
-            )
-        ]
-    return [types.Tool(function_declarations=[UPSERT_RECORD_DECLARATION])]
+    """
+    Returns role-aware Gemini tool declarations.
+    Students, Placement Officers, Companies, and Recruiters now have access to search & outreach tools
+    alongside structured upserts (e.g. students discovering GCC recruiters in Mumbai).
+    """
+    return [
+        types.Tool(
+            function_declarations=[
+                UPSERT_RECORD_DECLARATION,
+                SEARCH_DATA_LAKE_DECLARATION,
+                WEB_SEARCH_ENRICH_DECLARATION,
+                UPSERT_CONTACT_DECLARATION,
+                DRAFT_OUTREACH_DECLARATION,
+            ]
+        )
+    ]
 
 
 def handle_upsert(

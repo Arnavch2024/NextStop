@@ -144,6 +144,10 @@ def list_contacts(
                 )
             ]
 
+        is_sample_val = (
+            c.get("source") == "seed" or any(s.source == "seed" for s in c_sources) or c.get("note") == "synthetic"
+        )
+
         cards.append(
             ContactCard(
                 id=cid,
@@ -157,6 +161,7 @@ def list_contacts(
                 email=c.get("email"),
                 linkedin_url=c.get("linkedin_url"),
                 saved=c.get("saved", False),
+                is_sample=is_sample_val,
                 sources=c_sources,
                 first_seen_at=c.get("first_seen_at") or c.get("created_at"),
                 last_verified_at=c.get("last_verified_at"),

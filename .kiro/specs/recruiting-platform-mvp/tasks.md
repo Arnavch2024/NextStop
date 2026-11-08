@@ -223,7 +223,7 @@
 
 ### Task 6.8 Chat integration (role-aware Gemini tools)
 
-- [ ] Add search/outreach tools to the agent for `placement_officer`/`company`/`recruiter` as Gemini `FunctionDeclaration`s in the runner's `tools=[...]` (matching the existing `UPSERT_RECORD_DECLARATION` pattern, dispatched via the existing `runner.py` function-call handling); `student` keeps Day 2 tools only.
+- [x] Add search/outreach tools to the agent for all roles (`student`, `placement_officer`, `company`, `recruiter`) as provider-neutral `FunctionDeclaration`s in the runner's `tools=[...]`; students can search for campus recruiters at GCCs in Mumbai and draft outreach alongside Day 2 profile tools.
 - [ ] `/v1/chat` response shape unchanged; `records_created` may include contacts; the search summary is appended as a step in `agent_runs.steps` ("searched data lake, found N; searched web, found M; added K new, merged J") — no new `agent_runs` column.
 - **DoD**: A recruiter chat "Find campus recruiters at TCS in Mumbai, then draft an email" performs lake + web search, creates/merges contacts, returns a draft; `/v1/chat` response is still `{reply, steps, records_created}`.
 
