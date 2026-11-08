@@ -109,11 +109,12 @@ def test_upsert_company_and_contact(mock_supabase):
             "company_id": comp_id,
             "name": "Karan Mehta",
             "email": "karan@acme.com",
-            "title": "Head of Campus Talent",
+            "linkedin_url": "https://linkedin.com/in/karan-mehta",
         },
     )
     assert res_contact_update["op"] == "merged"
     assert res_contact_update["id"] == res_contact["id"]
     contact_row = mock_supabase.store["contacts"][0]
-    assert contact_row["title"] == "Head of Campus Talent"
+    assert contact_row["title"] == "Lead Recruiter"
+    assert contact_row["linkedin_url"] == "https://linkedin.com/in/karan-mehta"
     assert "phone" not in contact_row or contact_row["phone"] is None

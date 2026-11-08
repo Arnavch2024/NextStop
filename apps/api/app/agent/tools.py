@@ -131,50 +131,12 @@ def handle_upsert(
                 return {"table": table, "id": rec_id, "op": "created"}
 
         elif table == "contacts":
-            # Natural key & multi-key dedupe: linkedin_url -> email -> name + company_id
-            clean_data["created_by_profile_id"] = user_id
-            clean_data.pop("owner_id", None)
-            clean_data.pop("phone", None)
-            name = clean_data.get("name", "").strip()
-            linkedin = clean_data.get("linkedin_url", "").strip().lower() if clean_data.get("linkedin_url") else None
-            email = clean_data.get("email", "").strip().lower() if clean_data.get("email") else None
-            company_id = clean_data.get("company_id")
+            from app.search.dedupe import upsert_contact
 
-            existing_contact = None
-            if linkedin:
-                res = supabase_client.table("contacts").select("*").ilike("linkedin_url", linkedin).execute()
-                if res.data and len(res.data) > 0:
-                    existing_contact = res.data[0]
-            if not existing_contact and email:
-                res = supabase_client.table("contacts").select("*").ilike("email", email).execute()
-                if res.data and len(res.data) > 0:
-                    existing_contact = res.data[0]
-            if not existing_contact and name and company_id:
-                res = (
-                    supabase_client.table("contacts")
-                    .select("*")
-                    .eq("company_id", company_id)
-                    .ilike("name", name)
-                    .execute()
-                )
-                if res.data and len(res.data) > 0:
-                    existing_contact = res.data[0]
-            if not existing_contact and name:
-                res = supabase_client.table("contacts").select("*").ilike("name", name).execute()
-                if res.data and len(res.data) > 0:
-                    existing_contact = res.data[0]
-
-            if existing_contact:
-                rec_id = str(existing_contact["id"])
-                supabase_client.table("contacts").update(clean_data).eq("id", rec_id).execute()
-                return {"table": table, "id": rec_id, "op": "merged"}
-            else:
-                rec_id = str(uuid.uuid4())
-                clean_data["id"] = rec_id
-                res = supabase_client.table("contacts").insert(clean_data).execute()
-                if res.data and len(res.data) > 0:
-                    rec_id = str(res.data[0].get("id", rec_id))
-                return {"table": table, "id": rec_id, "op": "created"}
+            source = clean_data.get("source", "user_said")
+            source_url = clean_data.get("source_url")
+            res = upsert_contact(supabase_client, clean_data, user, source=source, source_url=source_url)
+            return {"table": table, "id": res["contact_id"], "op": res["op"]}
 
         elif table in ("education", "internships", "jobs", "skills"):
             # Ownership enforcement: find student_id where profile_id = user.id
