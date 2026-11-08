@@ -190,14 +190,16 @@ python scripts/check_models.py
 
 Populates the shared data lake with real web data for companies in the lake (using Exa/Tavily web search and Gemini extraction). Never scrapes LinkedIn; only public search result snippets and URLs are stored. Never stores phone numbers.
 
+- **Configurable Queries Per Company:** `INGEST_QUERIES_PER_COMPANY` (default `4` for targeted dry runs; recommend setting to `2` or `3` for wide-lake ingestion runs to conserve provider quota). Can be configured via environment variable or passed as `--queries-per-company N`.
+
 ```bash
 cd apps/api
 
 # Dry-run: simulate additions without writing to database
 python scripts/ingest_contacts.py --category GCC --limit 5 --dry-run
 
-# Execute ingestion with rate limiting delay
-python scripts/ingest_contacts.py --category GCC --delay 1.5
+# Wide-lake ingestion run with 2 queries per company and rate-limiting delay
+python scripts/ingest_contacts.py --queries-per-company 2 --delay 1.5
 ```
 
 #### 2. Purge Synthetic Seed Contacts
