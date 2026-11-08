@@ -1,8 +1,8 @@
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import Any, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class ProfileRole(str, Enum):
@@ -10,6 +10,13 @@ class ProfileRole(str, Enum):
     PLACEMENT_OFFICER = "placement_officer"
     COMPANY = "company"
     RECRUITER = "recruiter"
+
+
+class ContactRoleType(str, Enum):
+    CAMPUS_RECRUITER = "campus_recruiter"
+    PLACEMENT_OFFICER = "placement_officer"
+    HR = "hr"
+    OTHER = "other"
 
 
 class AgentRunStatus(str, Enum):
@@ -88,13 +95,27 @@ class CompanyUpsertData(BaseModel):
 
 
 class ContactUpsertData(BaseModel):
-    full_name: str = Field(..., min_length=1)
+    name: str = Field(..., min_length=1)
     company_id: Optional[str] = None
+    college_id: Optional[str] = None
     title: Optional[str] = None
+    role_type: Optional[str] = Field(default="other")
     email: Optional[str] = None
-    phone: Optional[str] = None
+    linkedin_url: Optional[str] = None
     source: Optional[str] = Field(default="user_said")
+    source_url: Optional[str] = None
     confidence: Optional[float] = Field(default=1.0, ge=0.0, le=1.0)
+
+    @model_validator(mode="before")
+    @classmethod
+    def handle_name_alias_and_drop_phone(cls, values: Any) -> Any:
+        if isinstance(values, dict):
+            # Map legacy full_name to name
+            if "name" not in values and "full_name" in values:
+                values["name"] = values["full_name"]
+            # Never write phone to lake
+            values.pop("phone", None)
+        return values
 
 
 class EducationUpsertData(BaseModel):

@@ -92,7 +92,7 @@ def test_upsert_company_and_contact(mock_supabase):
         "contacts",
         {
             "company_id": comp_id,
-            "full_name": "Karan Mehta",
+            "name": "Karan Mehta",
             "email": "karan@acme.com",
             "title": "Lead Recruiter",
         },
@@ -100,17 +100,20 @@ def test_upsert_company_and_contact(mock_supabase):
     assert res_contact["table"] == "contacts"
     assert res_contact["op"] == "created"
 
-    # Update contact by natural key (company_id, email)
+    # Update contact by natural key (company_id, email) -> merged
     res_contact_update = handle_upsert(
         mock_supabase,
         user,
         "contacts",
         {
             "company_id": comp_id,
-            "full_name": "Karan Mehta",
+            "name": "Karan Mehta",
             "email": "karan@acme.com",
-            "phone": "+91 9876543210",
+            "title": "Head of Campus Talent",
         },
     )
-    assert res_contact_update["op"] == "updated"
+    assert res_contact_update["op"] == "merged"
     assert res_contact_update["id"] == res_contact["id"]
+    contact_row = mock_supabase.store["contacts"][0]
+    assert contact_row["title"] == "Head of Campus Talent"
+    assert "phone" not in contact_row or contact_row["phone"] is None

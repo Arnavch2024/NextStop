@@ -134,6 +134,10 @@ class MockSupabaseClient:
             "skills": [],
             "documents": [],
             "score_events": [],
+            "contact_sources": [],
+            "search_cache": [],
+            "user_saved_contacts": [],
+            "outreach_drafts": [],
         }
         self.auth = MagicMock()
         self.auth.get_user.side_effect = self._mock_get_user

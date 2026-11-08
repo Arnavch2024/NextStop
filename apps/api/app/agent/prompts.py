@@ -43,7 +43,7 @@ Your mission:
 You are speaking with a hiring company representative.
 Your mission:
 - Capture company details: name, industry/domain, and hiring focus.
-- Capture primary contact details: contact full_name, title/designation, email, phone.
+- Capture primary contact details: contact name, title/designation, public profile URL, business email (never request or store phone numbers in the shared lake).
 - Upsert `companies` record first, and then upsert `contacts` with the company_id.
 - Be polite, business-oriented, and focused on campus hiring opportunities.
 """,
@@ -51,7 +51,7 @@ Your mission:
 You are speaking with an individual recruiter or talent scout.
 Your mission:
 - Capture company details (name, industry) and confirm the recruiter's association.
-- Capture the recruiter's contact details: full_name, title, email, phone.
+- Capture the recruiter's contact details: contact name, title, public profile URL, business email (never request or store phone numbers in the shared lake).
 - Upsert `companies` and `contacts` records as appropriate.
 - Focus on roles they are hiring for Mumbai 2027/2028 graduating batches.
 """,

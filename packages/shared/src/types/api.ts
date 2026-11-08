@@ -25,7 +25,7 @@ export interface AgentStep {
 export interface RecordRef {
   table: string;
   id?: string | null;
-  op: "created" | "updated";
+  op: "created" | "updated" | "merged";
 }
 
 export interface ChatResponse {

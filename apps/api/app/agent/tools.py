@@ -131,24 +131,43 @@ def handle_upsert(
                 return {"table": table, "id": rec_id, "op": "created"}
 
         elif table == "contacts":
-            # Natural key: (company_id, lower(email))
-            clean_data["owner_id"] = user_id
+            # Natural key & multi-key dedupe: linkedin_url -> email -> name + company_id
+            clean_data["created_by_profile_id"] = user_id
+            clean_data.pop("owner_id", None)
+            clean_data.pop("phone", None)
+            name = clean_data.get("name", "").strip()
+            linkedin = clean_data.get("linkedin_url", "").strip().lower() if clean_data.get("linkedin_url") else None
+            email = clean_data.get("email", "").strip().lower() if clean_data.get("email") else None
             company_id = clean_data.get("company_id")
-            email = clean_data.get("email", "").strip().lower()
 
-            query = supabase_client.table("contacts").select("id, company_id, email")
-            if company_id:
-                query = query.eq("company_id", company_id)
-            if email:
-                query = query.ilike("email", email)
-            elif not company_id:
-                query = query.ilike("full_name", clean_data.get("full_name", ""))
+            existing_contact = None
+            if linkedin:
+                res = supabase_client.table("contacts").select("*").ilike("linkedin_url", linkedin).execute()
+                if res.data and len(res.data) > 0:
+                    existing_contact = res.data[0]
+            if not existing_contact and email:
+                res = supabase_client.table("contacts").select("*").ilike("email", email).execute()
+                if res.data and len(res.data) > 0:
+                    existing_contact = res.data[0]
+            if not existing_contact and name and company_id:
+                res = (
+                    supabase_client.table("contacts")
+                    .select("*")
+                    .eq("company_id", company_id)
+                    .ilike("name", name)
+                    .execute()
+                )
+                if res.data and len(res.data) > 0:
+                    existing_contact = res.data[0]
+            if not existing_contact and name:
+                res = supabase_client.table("contacts").select("*").ilike("name", name).execute()
+                if res.data and len(res.data) > 0:
+                    existing_contact = res.data[0]
 
-            existing = query.execute()
-            if existing.data and len(existing.data) > 0:
-                rec_id = str(existing.data[0]["id"])
+            if existing_contact:
+                rec_id = str(existing_contact["id"])
                 supabase_client.table("contacts").update(clean_data).eq("id", rec_id).execute()
-                return {"table": table, "id": rec_id, "op": "updated"}
+                return {"table": table, "id": rec_id, "op": "merged"}
             else:
                 rec_id = str(uuid.uuid4())
                 clean_data["id"] = rec_id

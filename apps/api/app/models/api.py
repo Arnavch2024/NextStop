@@ -38,12 +38,13 @@ class AgentStep(BaseModel):
 class RecordOp(str, Enum):
     CREATED = "created"
     UPDATED = "updated"
+    MERGED = "merged"
 
 
 class RecordRef(BaseModel):
     table: str
     id: Optional[str] = None
-    op: str = Field(description="'created' or 'updated'")
+    op: str = Field(description="'created', 'updated' or 'merged'")
 
 
 class ChatResponse(BaseModel):
@@ -86,3 +87,68 @@ class StudentProfileResponse(BaseModel):
 
 class TranscribeResponse(BaseModel):
     text: str
+
+
+# --- Day 3 Models for Search Slice ---
+
+
+class ContactSourceModel(BaseModel):
+    source: str = Field(description="'seed' | 'resume' | 'user_said' | 'web'")
+    source_url: Optional[str] = None
+    domain: Optional[str] = None
+    fetched_at: Optional[datetime] = None
+    confidence: float = 1.0
+
+
+class ContactCard(BaseModel):
+    id: str
+    name: str
+    title: Optional[str] = None
+    company_id: Optional[str] = None
+    company_name: Optional[str] = None
+    college_id: Optional[str] = None
+    college_name: Optional[str] = None
+    role_type: str = "other"
+    email: Optional[str] = None
+    linkedin_url: Optional[str] = None
+    saved: bool = False
+    sources: List[ContactSourceModel] = Field(default_factory=list)
+    first_seen_at: Optional[datetime] = None
+    last_verified_at: Optional[datetime] = None
+
+
+class ContactListResponse(BaseModel):
+    items: List[ContactCard] = Field(default_factory=list)
+    page: int = 1
+    page_size: int = 20
+    total: int = 0
+
+
+class SaveResponse(BaseModel):
+    contact_id: str
+    saved: bool
+
+
+class SaveContactRequest(BaseModel):
+    phone: Optional[str] = None
+
+
+class OutreachDraftRequest(BaseModel):
+    contact_id: str
+    channel: str = Field(description="'email' | 'linkedin'")
+    sender_context: Optional[str] = None
+
+
+class OutreachDraftResponse(BaseModel):
+    draft_id: str
+    subject: Optional[str] = None
+    body: str
+    channel: str
+
+
+class AgentRunResponse(BaseModel):
+    id: str
+    status: str
+    steps: List[Dict[str, Any]] = Field(default_factory=list)
+    summary: Optional[str] = None
+    created_at: Optional[datetime] = None
