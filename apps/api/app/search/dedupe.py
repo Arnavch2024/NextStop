@@ -114,15 +114,27 @@ def upsert_contact(
     user_id = str(user.id)
     now_iso = datetime.now(timezone.utc).isoformat()
 
-    # Resolve company_id if company name given as string
+    # Resolve company_id if company name given as string or if company_id is not a valid UUID
     company_id = data.get("company_id")
+    if company_id:
+        try:
+            uuid.UUID(str(company_id))
+        except (ValueError, AttributeError):
+            company_id = None
+
     if not company_id and data.get("company"):
         company_id = get_or_create_company(client, data["company"], user_id)
     if not company_id and data.get("company_name"):
         company_id = get_or_create_company(client, data["company_name"], user_id)
 
-    # Resolve college_id if college name given as string
+    # Resolve college_id if college name given as string or if college_id is not a valid UUID
     college_id = data.get("college_id")
+    if college_id:
+        try:
+            uuid.UUID(str(college_id))
+        except (ValueError, AttributeError):
+            college_id = None
+
     if not college_id and data.get("college"):
         college_id = get_or_create_college(client, data["college"], user_id)
     if not college_id and data.get("college_name"):
@@ -347,12 +359,15 @@ def upsert_contact(
             if ins.data and len(ins.data) > 0:
                 contact_id = str(ins.data[0].get("id", contact_id))
         except Exception:
+            # If the database has the legacy unique index (company_id, lower(coalesce(email,''))),
+            # contacts without emails would collide on (company_id, ''). Use a unique placeholder.
+            compat_email = email or f"{contact_id}@unverified.placeholder"
             compat_row = {
                 "id": contact_id,
                 "full_name": name,
                 "title": title,
                 "company_id": company_id,
-                "email": email,
+                "email": compat_email,
                 "owner_id": None,
             }
             ins = client.table("contacts").insert(compat_row).execute()

@@ -118,6 +118,7 @@ class GeminiLLMProvider(LLMProvider):
         return LLMResponse(
             text=text_content,
             tool_calls=tool_calls,
+            raw_response=response,
         )
 
     def generate_structured(

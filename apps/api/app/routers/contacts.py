@@ -41,8 +41,11 @@ def list_contacts(
     client: Client = Depends(get_supabase_client),
 ) -> ContactListResponse:
     # 1. Fetch caller's saved contacts
-    saved_res = client.table("user_saved_contacts").select("contact_id").eq("profile_id", current_user.id).execute()
-    saved_contact_ids = {str(r["contact_id"]) for r in (saved_res.data or []) if r.get("contact_id")}
+    try:
+        saved_res = client.table("user_saved_contacts").select("contact_id").eq("profile_id", current_user.id).execute()
+        saved_contact_ids = {str(r["contact_id"]) for r in (saved_res.data or []) if r.get("contact_id")}
+    except Exception:
+        saved_contact_ids = set()
 
     if saved_only and not saved_contact_ids:
         return ContactListResponse(items=[], page=page, page_size=page_size, total=0)
@@ -186,6 +189,10 @@ def list_contacts(
             else (c.get("source") == "seed" or (c.get("note") == "synthetic" and c.get("source") != "web"))
         )
 
+        email_val = c.get("email")
+        if email_val and str(email_val).endswith("@unverified.placeholder"):
+            email_val = None
+
         cards.append(
             ContactCard(
                 id=cid,
@@ -196,7 +203,7 @@ def list_contacts(
                 college_id=str(c.get("college_id")) if c.get("college_id") else None,
                 college_name=c.get("college_name"),
                 role_type=c.get("role_type", "other"),
-                email=c.get("email"),
+                email=email_val,
                 linkedin_url=c.get("linkedin_url"),
                 location=c.get("location"),
                 source_published_date=c.get("source_published_date"),

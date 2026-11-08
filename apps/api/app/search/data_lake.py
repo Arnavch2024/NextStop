@@ -36,7 +36,10 @@ def search_data_lake(
         )
 
     # 1. Fetch reference lookup maps for companies and colleges
-    companies_res = client.table("companies").select("id, name, category, industry").execute()
+    try:
+        companies_res = client.table("companies").select("id, name, category, industry").execute()
+    except Exception:
+        companies_res = client.table("companies").select("id, name, industry").execute()
     companies_data = companies_res.data or []
     company_name_map = {str(c["id"]): c.get("name") for c in companies_data}
 
@@ -45,10 +48,20 @@ def search_data_lake(
     college_name_map = {str(c["id"]): c.get("name") for c in colleges_data}
 
     # Find company IDs or college IDs that match the query tokens
+    from app.db.seed import MUMBAI_COMPANIES
+
+    ref_map = {c["name"].lower(): c for c in MUMBAI_COMPANIES}
+
     matching_comp_ids = set()
     for c in companies_data:
         c_name = str(c.get("name", "")).lower()
-        if any(t in c_name for t in tokens):
+        ref_cat = (ref_map.get(c_name) or {}).get("category", "")
+        ref_ind = (ref_map.get(c_name) or {}).get("industry", "")
+        db_cat = str(c.get("category", "")).lower()
+        db_ind = str(c.get("industry", "")).lower()
+        if any(
+            t in c_name or t in ref_cat.lower() or t in ref_ind.lower() or t in db_cat or t in db_ind for t in tokens
+        ):
             matching_comp_ids.add(str(c["id"]))
 
     matching_coll_ids = set()
@@ -97,9 +110,15 @@ def search_data_lake(
             is_match = False
             # Check if any token matches contact name, title, company, or college
             for token in tokens:
+                t_stem = (
+                    token[:-2]
+                    if token.endswith(("er", "or", "ed"))
+                    else (token[:-3] if token.endswith("ing") else token)
+                )
                 if (
                     token in c_name
                     or token in c_title
+                    or (t_stem and len(t_stem) >= 4 and t_stem in c_title)
                     or token in comp_name.lower()
                     or token in coll_name.lower()
                     or comp_id in matching_comp_ids
@@ -116,6 +135,9 @@ def search_data_lake(
                 continue
 
             enriched = dict(contact)
+            if enriched.get("email") and str(enriched["email"]).endswith("@unverified.placeholder"):
+                enriched["email"] = None
+            enriched["name"] = contact.get("name") or contact.get("full_name") or ""
             enriched["company_name"] = comp_name
             enriched["college_name"] = coll_name
             enriched["is_sample"] = is_sample

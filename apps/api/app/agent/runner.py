@@ -220,15 +220,22 @@ def run_agent_loop(
 
             if function_calls:
                 # Add model's turn to conversation history
-                contents.append(
-                    types.Content(
-                        role="model",
-                        parts=[
-                            types.Part(function_call=types.FunctionCall(name=tc.name, args=tc.args))
-                            for tc in function_calls
-                        ],
+                if (
+                    response.raw_response
+                    and getattr(response.raw_response, "candidates", None)
+                    and response.raw_response.candidates[0].content
+                ):
+                    contents.append(response.raw_response.candidates[0].content)
+                else:
+                    contents.append(
+                        types.Content(
+                            role="model",
+                            parts=[
+                                types.Part(function_call=types.FunctionCall(name=tc.name, args=tc.args))
+                                for tc in function_calls
+                            ],
+                        )
                     )
-                )
 
                 fn_response_parts: List[types.Part] = []
 

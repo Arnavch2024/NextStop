@@ -7,7 +7,7 @@ from supabase import Client
 from app.config import settings
 from app.logger import logger
 from app.models.db import ProfileRole, UserProfile
-from app.search.dedupe import normalize_name, upsert_contact
+from app.search.dedupe import get_or_create_company, normalize_name, upsert_contact
 from app.search.extract_contacts import extract_company_contacts, extract_contacts_from_text
 from app.search.providers.base import SearchProvider
 from app.search.providers.extract import is_data_broker, normalize_url
@@ -95,6 +95,17 @@ def run_ingest(
 
         logger.info("Using reference list of Mumbai companies for ingestion.")
         all_companies = [dict(c, id=f"ref-{i + 1}") for i, c in enumerate(MUMBAI_COMPANIES)]
+    else:
+        from app.db.seed import MUMBAI_COMPANIES
+
+        ref_map = {c["name"].lower(): c for c in MUMBAI_COMPANIES}
+        for c in all_companies:
+            matched_ref = ref_map.get(c.get("name", "").lower())
+            if matched_ref:
+                if not c.get("category"):
+                    c["category"] = matched_ref.get("category")
+                if not c.get("industry"):
+                    c["industry"] = matched_ref.get("industry")
 
     # Filter by category if requested
     if category:
@@ -164,6 +175,10 @@ def run_ingest(
         comp_id = str(comp.get("id"))
         if not comp_name:
             continue
+        if not dry_run and (comp_id.startswith("ref-") or not comp_id):
+            real_comp_id = get_or_create_company(client, comp_name, str(user.id))
+            if real_comp_id:
+                comp_id = real_comp_id
 
         seen_company_urls: Dict[str, Dict[str, Any]] = {}
         stop_due_to_quota = False
