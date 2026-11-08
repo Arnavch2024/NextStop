@@ -112,8 +112,22 @@ def list_contacts(
         item["is_sample"] = is_sample_val
         matched.append(item)
 
-    # Order: real (non-seed) contacts rank above sample ones
-    matched.sort(key=lambda c: 1 if c.get("is_sample") else 0)
+    # Order: real contacts rank above sample ones; within real, Mumbai-stated and fresh contacts rank highest
+    def _rank_contact(c: dict):
+        sample_key = 1 if c.get("is_sample") else 0
+        loc = (c.get("location") or "").lower()
+        mumbai_key = 0 if "mumbai" in loc else 1
+        stale_val = c.get("stale")
+        if stale_val is False:
+            stale_key = 0
+        elif stale_val is None:
+            stale_key = 1
+        else:
+            stale_key = 2
+        conf_key = -float(c.get("confidence") or 0.0)
+        return (sample_key, mumbai_key, stale_key, conf_key)
+
+    matched.sort(key=_rank_contact)
 
     total = len(matched)
     start_idx = (page - 1) * page_size
@@ -179,6 +193,9 @@ def list_contacts(
                 role_type=c.get("role_type", "other"),
                 email=c.get("email"),
                 linkedin_url=c.get("linkedin_url"),
+                location=c.get("location"),
+                source_published_date=c.get("source_published_date"),
+                stale=c.get("stale"),
                 saved=c.get("saved", False),
                 is_sample=is_sample_val,
                 sources=c_sources,

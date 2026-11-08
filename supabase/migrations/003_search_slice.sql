@@ -48,6 +48,9 @@ alter table public.contacts add column if not exists first_seen_at timestamptz n
 alter table public.contacts add column if not exists last_verified_at timestamptz;
 alter table public.contacts add column if not exists created_by_profile_id uuid references public.profiles(id) on delete set null;
 alter table public.contacts add column if not exists suppressed_at timestamptz;
+alter table public.contacts add column if not exists location text;
+alter table public.contacts add column if not exists source_published_date text;
+alter table public.contacts add column if not exists stale boolean;
 
 -- Backfill audit column from legacy owner_id (owner_id & phone are retained deprecated)
 update public.contacts
@@ -83,10 +86,15 @@ create table if not exists public.contact_sources (
   source_url text,
   fetched_at timestamptz,
   confidence numeric not null default 1.0,
-  unverified boolean not null default false,   -- true for user_said contributions
+  unverified boolean not null default false,   -- true for user_said contributions or unverified web sources
+  fetch_status text,                     -- 'ok' | 'blocked' | 'not_fetched'
+  published_date text,                   -- article / result publication date if provided
   note text,                             -- e.g. 'synthetic'
   created_at timestamptz not null default now()
 );
+alter table public.contact_sources add column if not exists fetch_status text;
+alter table public.contact_sources add column if not exists published_date text;
+
 create index if not exists contact_sources_contact_idx on public.contact_sources (contact_id);
 
 -- 5. search_cache (server-only, 7-day TTL)

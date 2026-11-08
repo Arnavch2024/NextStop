@@ -113,6 +113,9 @@ class ContactCard(BaseModel):
     role_type: str = "other"
     email: Optional[str] = None
     linkedin_url: Optional[str] = None
+    location: Optional[str] = None
+    source_published_date: Optional[str] = None
+    stale: Optional[bool] = None
     saved: bool = False
     is_sample: bool = False
     sources: List[ContactSourceModel] = Field(default_factory=list)
