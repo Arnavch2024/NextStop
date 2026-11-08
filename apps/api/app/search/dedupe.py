@@ -30,13 +30,14 @@ def get_or_create_company(client: Client, company_name: str, user_id: str) -> Op
         return str(res.data[0]["id"])
 
     cid = str(uuid.uuid4())
+    owner = user_id if user_id and user_id != "00000000-0000-0000-0000-000000000000" else None
     ins = (
         client.table("companies")
         .insert(
             {
                 "id": cid,
                 "name": clean,
-                "owner_id": user_id,
+                "owner_id": owner,
             }
         )
         .execute()
@@ -56,6 +57,7 @@ def get_or_create_college(client: Client, college_name: str, user_id: str) -> Op
         return str(res.data[0]["id"])
 
     cid = str(uuid.uuid4())
+    owner = user_id if user_id and user_id != "00000000-0000-0000-0000-000000000000" else None
     ins = (
         client.table("colleges")
         .insert(
@@ -63,7 +65,7 @@ def get_or_create_college(client: Client, college_name: str, user_id: str) -> Op
                 "id": cid,
                 "name": clean,
                 "city": "Mumbai",
-                "owner_id": user_id,
+                "owner_id": owner,
             }
         )
         .execute()
@@ -293,7 +295,7 @@ def upsert_contact(
             "source": source,
             "source_url": source_url or data.get("source_url"),
             "confidence": conf,
-            "created_by_profile_id": user_id,
+            "created_by_profile_id": user_id if user_id and user_id != "00000000-0000-0000-0000-000000000000" else None,
             "first_seen_at": now_iso,
             "last_verified_at": now_iso if source == "web" else None,
         }

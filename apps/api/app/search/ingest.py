@@ -177,7 +177,7 @@ def run_ingest(
                     client=client,
                     query=query,
                     purpose=purpose,
-                    actor_id=user.id,
+                    actor_id=user.id if user.id and str(user.id) != "00000000-0000-0000-0000-000000000000" else None,
                     primary_provider=search_provider,
                     multi_provider=(search_provider is None),
                 )
