@@ -34,11 +34,49 @@ class FakeQueryBuilder:
         self._filters.append(lambda row: str(row.get(column)) == str(value))
         return self
 
+    def neq(self, column: str, value: Any):
+        self._filters.append(lambda row: str(row.get(column)) != str(value))
+        return self
+
+    def is_(self, column: str, value: Any):
+        if value is None or str(value).lower() in ("null", "none"):
+            self._filters.append(lambda row: row.get(column) is None)
+        else:
+            self._filters.append(lambda row: row.get(column) == value)
+        return self
+
+    def in_(self, column: str, values: List[Any]):
+        self._filters.append(lambda row: row.get(column) in values)
+        return self
+
+    def gte(self, column: str, value: Any):
+        self._filters.append(lambda row: row.get(column) is not None and str(row.get(column)) >= str(value))
+        return self
+
+    def lte(self, column: str, value: Any):
+        self._filters.append(lambda row: row.get(column) is not None and str(row.get(column)) <= str(value))
+        return self
+
     def ilike(self, column: str, value: Any):
-        self._filters.append(lambda row: str(row.get(column, "")).lower() == str(value).lower())
+        self._filters.append(lambda row: str(value).lower().replace("%", "") in str(row.get(column, "")).lower())
+        return self
+
+    def delete(self):
+        self._action = "delete"
+        return self
+
+    def maybe_single(self):
+        return self
+
+    def single(self):
         return self
 
     def limit(self, count: int):
+        self._limit = count
+        return self
+
+    def range(self, start: int, end: int):
+        self._range = (start, end)
         return self
 
     def order(self, column: str, desc: bool = False):
@@ -51,8 +89,13 @@ class FakeQueryBuilder:
             res = rows
             for f in self._filters:
                 res = [r for r in res if f(r)]
+            if hasattr(self, "_range") and self._range:
+                res = res[self._range[0] : self._range[1] + 1]
+            elif hasattr(self, "_limit") and self._limit:
+                res = res[: self._limit]
             mock_res = MagicMock()
             mock_res.data = [dict(r) for r in res]
+            mock_res.count = len(res)
             return mock_res
 
         elif self._action == "insert":
@@ -77,6 +120,19 @@ class FakeQueryBuilder:
                     updated.append(dict(r))
             mock_res = MagicMock()
             mock_res.data = updated
+            return mock_res
+
+        elif self._action == "delete":
+            deleted = []
+            remaining = []
+            for r in rows:
+                if all(f(r) for f in self._filters):
+                    deleted.append(dict(r))
+                else:
+                    remaining.append(r)
+            self.store[self.table_name] = remaining
+            mock_res = MagicMock()
+            mock_res.data = deleted
             return mock_res
 
         mock_res = MagicMock()
