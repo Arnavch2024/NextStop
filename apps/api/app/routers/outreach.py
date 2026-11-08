@@ -1,0 +1,35 @@
+from fastapi import APIRouter, Depends, status
+from supabase import Client
+
+from app.db.supabase import get_supabase_client
+from app.dependencies import get_current_user
+from app.models.api import OutreachDraftRequest, OutreachDraftResponse
+from app.models.db import UserProfile
+from app.search.outreach import create_outreach_draft
+
+router = APIRouter(prefix="/v1/outreach", tags=["outreach"])
+
+
+@router.post("/draft", response_model=OutreachDraftResponse, status_code=status.HTTP_200_OK)
+def draft_outreach_endpoint(
+    body: OutreachDraftRequest,
+    user: UserProfile = Depends(get_current_user),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """
+    Drafts an outreach message tailored to a contact.
+    Never sends anything. Stores private draft in outreach_drafts.
+    """
+    res = create_outreach_draft(
+        client=supabase,
+        user=user,
+        contact_id=str(body.contact_id),
+        channel=body.channel,
+        sender_context=body.sender_context,
+    )
+    return OutreachDraftResponse(
+        draft_id=res["draft_id"],
+        subject=res["subject"],
+        body=res["body"],
+        channel=res["channel"],
+    )
