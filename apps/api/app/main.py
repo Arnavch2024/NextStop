@@ -4,7 +4,9 @@ from fastapi.openapi.utils import get_openapi
 
 from app.config import settings
 from app.routers import (
+    agent_runs_router,
     chat_router,
+    contacts_router,
     health_router,
     outreach_router,
     students_router,
@@ -35,6 +37,8 @@ app.include_router(chat_router)
 app.include_router(students_router)
 app.include_router(voice_router)
 app.include_router(outreach_router)
+app.include_router(contacts_router)
+app.include_router(agent_runs_router)
 
 
 def custom_openapi():
