@@ -75,6 +75,28 @@ def get_or_create_college(client: Client, college_name: str, user_id: str) -> Op
     return cid
 
 
+def classify_recruiter_role(title: Optional[str], default_role: str = "other") -> str:
+    """Sets role_type to campus_recruiter when title matches campus/early-careers/university recruiting."""
+    if not title:
+        return default_role
+    t = title.lower()
+    if any(
+        k in t
+        for k in (
+            "campus",
+            "early career",
+            "early-career",
+            "early careers",
+            "university recruit",
+            "university relations",
+        )
+    ):
+        return "campus_recruiter"
+    if "placement" in t:
+        return "placement_officer"
+    return default_role
+
+
 def upsert_contact(
     client: Client,
     candidate: Dict[str, Any],
@@ -142,8 +164,8 @@ def upsert_contact(
 
     email = data.get("email", "").strip().lower() if data.get("email") else None
     linkedin = data.get("linkedin_url", "").strip().lower() if data.get("linkedin_url") else None
-    role_type = data.get("role_type") or "other"
     title = data.get("title")
+    role_type = classify_recruiter_role(title, default_role=data.get("role_type") or "other")
 
     # 1. Match against existing (non-suppressed) contacts
     existing = None
@@ -230,7 +252,9 @@ def upsert_contact(
                 update_fields["company_id"] = company_id
             if college_id and not existing.get("college_id"):
                 update_fields["college_id"] = college_id
-            if role_type and role_type != "other" and existing.get("role_type") in ("other", None):
+            if role_type == "campus_recruiter" and existing.get("role_type") != "campus_recruiter":
+                update_fields["role_type"] = "campus_recruiter"
+            elif role_type and role_type != "other" and existing.get("role_type") in ("other", None):
                 update_fields["role_type"] = role_type
 
             if data.get("location"):

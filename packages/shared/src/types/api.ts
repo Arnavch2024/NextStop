@@ -32,6 +32,7 @@ export interface ChatResponse {
   reply: string;
   steps: AgentStep[];
   records_created: RecordRef[];
+  contacts?: ContactCard[];
 }
 
 export interface TranscribeResponse {
@@ -165,6 +166,13 @@ export interface ContactCard {
   role_type: string;
   email?: string | null;
   linkedin_url?: string | null;
+  location?: string | null;
+  source?: string | null;
+  source_url?: string | null;
+  source_published_date?: string | null;
+  stale?: boolean | null;
+  confidence?: number | null;
+  unverified?: boolean;
   saved: boolean;
   is_sample: boolean;
   sources: ContactSourceModel[];

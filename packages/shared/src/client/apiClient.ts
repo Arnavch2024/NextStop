@@ -3,6 +3,8 @@ import type {
   ChatResponse,
   HealthResponse,
   ResumeResponse,
+  SaveContactRequest,
+  SaveResponse,
   ScoreResponse,
   StudentProfile,
   TranscribeResponse,
@@ -212,4 +214,36 @@ export async function uploadResume(
   }
 
   return (await res.json()) as ResumeResponse;
+}
+
+/**
+ * Save contact endpoint: POST /v1/contacts/{id}/save
+ */
+export async function saveContact(
+  baseUrl: string,
+  contactId: string,
+  token: string,
+  body?: SaveContactRequest
+): Promise<SaveResponse> {
+  const url = `${cleanBaseUrl(baseUrl)}/v1/contacts/${contactId}/save`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(body || {}),
+  });
+
+  if (!res.ok) {
+    const errorBody = await res.json().catch(() => ({}));
+    throw new ApiError(
+      res.status,
+      errorBody?.detail || "Failed to save contact",
+      errorBody
+    );
+  }
+
+  return (await res.json()) as SaveResponse;
 }

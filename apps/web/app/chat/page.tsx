@@ -8,10 +8,12 @@ import {
   chat,
   transcribeAudio,
   uploadResume,
+  saveContact,
   AgentStep,
   RecordRef,
   RawEvent,
   ResumeResponse,
+  ContactCard,
 } from "@recruiting/shared";
 import {
   Send,
@@ -33,6 +35,8 @@ import {
   X,
   ArrowRight,
   RefreshCw,
+  Bookmark,
+  ExternalLink,
 } from "lucide-react";
 
 interface ChatItem {
@@ -41,6 +45,7 @@ interface ChatItem {
   text: string;
   steps?: AgentStep[];
   records?: RecordRef[];
+  contacts?: ContactCard[];
   resumeSummary?: ResumeResponse;
   timestamp: string;
 }
@@ -74,6 +79,12 @@ export default function ChatPage() {
   // Cross-device sync toast state
   const [crossDeviceToast, setCrossDeviceToast] = useState<string | null>(null);
 
+  // Saved contacts state
+  const [savedContactIds, setSavedContactIds] = useState<
+    Record<string, boolean>
+  >({});
+  const [savingContactId, setSavingContactId] = useState<string | null>(null);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -88,6 +99,22 @@ export default function ChatPage() {
     toastTimeoutRef.current = setTimeout(() => {
       setCrossDeviceToast(null);
     }, 4500);
+  }
+
+  // Save contact to user's list
+  async function handleSaveContact(contactId: string) {
+    if (!sessionToken || savingContactId) return;
+    setSavingContactId(contactId);
+    try {
+      await saveContact(API_BASE_URL, contactId, sessionToken);
+      setSavedContactIds((prev) => ({ ...prev, [contactId]: true }));
+      showToast("Contact saved to your list");
+    } catch (err: any) {
+      console.error("Failed to save contact:", err);
+      showToast(err?.message || "Failed to save contact");
+    } finally {
+      setSavingContactId(null);
+    }
   }
 
   // 1. Check Session & Load Profile
@@ -296,6 +323,7 @@ export default function ChatPage() {
           text: response.reply,
           steps: response.steps,
           records: response.records_created,
+          contacts: response.contacts,
           timestamp: new Date().toISOString(),
         },
       ]);
@@ -794,6 +822,106 @@ export default function ChatPage() {
                           <span>Fix something</span>
                         </button>
                       </div>
+                    </div>
+                  )}
+
+                  {/* Recruiter / Contact Cards */}
+                  {item.contacts && item.contacts.length > 0 && (
+                    <div className="mt-3 space-y-2.5">
+                      {item.contacts.map((contact) => {
+                        const isSaved =
+                          savedContactIds[contact.id] || contact.saved;
+                        const isSaving = savingContactId === contact.id;
+                        const isUnverified = contact.unverified !== false;
+
+                        return (
+                          <div
+                            key={contact.id}
+                            className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-slate-800 shadow-xs"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <div className="font-semibold text-slate-900 text-sm">
+                                  {contact.name}
+                                </div>
+                                <div className="text-xs text-slate-600">
+                                  {contact.title || "Recruiter"}
+                                  {contact.company_name
+                                    ? ` at ${contact.company_name}`
+                                    : ""}
+                                </div>
+                                {contact.location && (
+                                  <div className="text-[11px] text-slate-500 mt-0.5">
+                                    📍 {contact.location}
+                                  </div>
+                                )}
+                              </div>
+                              <div>
+                                <span
+                                  className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-medium border ${
+                                    isUnverified
+                                      ? "bg-amber-50 text-amber-800 border-amber-200"
+                                      : "bg-emerald-50 text-emerald-800 border-emerald-200"
+                                  }`}
+                                >
+                                  {isUnverified
+                                    ? "Unverified, check the source"
+                                    : "Verified"}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/60 pt-2 text-xs">
+                              <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+                                {contact.source_url && (
+                                  <a
+                                    href={contact.source_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-800 underline"
+                                  >
+                                    Source <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                )}
+                                {contact.source_published_date && (
+                                  <span>
+                                    As of:{" "}
+                                    {contact.source_published_date.slice(0, 10)}
+                                  </span>
+                                )}
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => handleSaveContact(contact.id)}
+                                disabled={isSaved || isSaving}
+                                className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition ${
+                                  isSaved
+                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-default"
+                                    : "bg-indigo-600 text-white hover:bg-indigo-700 shadow-xs disabled:opacity-50 cursor-pointer"
+                                }`}
+                              >
+                                {isSaved ? (
+                                  <>
+                                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                                    <span>Saved</span>
+                                  </>
+                                ) : isSaving ? (
+                                  <>
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    <span>Saving...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Bookmark className="h-3 w-3" />
+                                    <span>Save to my list</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
 

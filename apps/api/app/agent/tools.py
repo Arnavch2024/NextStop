@@ -67,7 +67,11 @@ SEARCH_DATA_LAKE_DECLARATION = types.FunctionDeclaration(
 
 WEB_SEARCH_ENRICH_DECLARATION = types.FunctionDeclaration(
     name=WEB_SEARCH_ENRICH_TOOL_NAME,
-    description="Search the public web to discover contacts or enrich company information. Only use when data lake results are thin. Never scrape LinkedIn.",
+    description=(
+        "Search the public web to discover and ingest contacts into the shared lake. "
+        "Automatically runs precision pipeline and returns only accepted contacts with lake IDs, "
+        "along with counts. Never returns raw snippets, highlights, or page text."
+    ),
     parameters=types.Schema(
         type=types.Type.OBJECT,
         properties={
@@ -86,7 +90,10 @@ WEB_SEARCH_ENRICH_DECLARATION = types.FunctionDeclaration(
 
 UPSERT_CONTACT_DECLARATION = types.FunctionDeclaration(
     name=UPSERT_CONTACT_TOOL_NAME,
-    description="Upsert a contact into the shared lake with deduplication, priority merge (web > user_said > seed), and provenance tracking. Conflicting user info routes to private list. Never store phone in lake.",
+    description=(
+        "Persists contact details stated directly by the user (source must be 'user_said'). "
+        "Web-derived contacts enter only via the pipeline in web_search_enrich and are not allowed here."
+    ),
     parameters=types.Schema(
         type=types.Type.OBJECT,
         properties={

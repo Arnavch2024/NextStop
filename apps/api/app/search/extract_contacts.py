@@ -10,12 +10,12 @@ from app.llm import GeminiLLMProvider, LLMProvider, get_llm_provider
 from app.logger import logger
 from app.search.cache import get_cached_extraction, write_cached_extraction
 from app.search.providers.extract import (
+    WEB_CONTENT_PROMPT_RULE,
     compute_staleness,
     is_data_broker,
     is_name_only_empty_snippet,
     parse_title_hint,
 )
-from app.search.web import WEB_CONTENT_PROMPT_RULE
 
 RECRUITER_PATTERN = re.compile(
     r"\b("
@@ -350,15 +350,31 @@ def extract_company_contacts(
         raw_contacts = [CandidateContact.model_validate(c) for c in cached_raw]
     else:
         was_cached = False
-        provider = llm_provider or get_llm_provider()
-        extraction_result: ExtractionResult = provider.generate_structured(
-            prompt=combined_web_content,
-            response_model=ExtractionResult,
-            system_instruction=EXTRACTION_SYSTEM_INSTRUCTION,
-            model=selected_model,
-        )
-        raw_contacts = extraction_result.contacts
-        write_cached_extraction(cache_key, [c.model_dump() for c in raw_contacts])
+        try:
+            provider = llm_provider or get_llm_provider()
+            extraction_result: ExtractionResult = provider.generate_structured(
+                prompt=combined_web_content,
+                response_model=ExtractionResult,
+                system_instruction=EXTRACTION_SYSTEM_INSTRUCTION,
+                model=selected_model,
+            )
+            raw_contacts = extraction_result.contacts
+            write_cached_extraction(cache_key, [c.model_dump() for c in raw_contacts])
+        except Exception as exc:
+            logger.warning(f"Structured extraction LLM call failed, falling back to title hint parsing: {exc}")
+            raw_contacts = []
+            for r in clean_results:
+                h = parse_title_hint(r.get("title", ""))
+                if h and h.get("name"):
+                    raw_contacts.append(
+                        CandidateContact(
+                            name=h["name"],
+                            title=h.get("title") or "Campus Recruiter",
+                            company=h.get("company") or target_company,
+                            source_url=r.get("url"),
+                            confidence=0.6,
+                        )
+                    )
 
     valid_contacts: List[CandidateContact] = []
     dropped_candidates: List[Dict[str, Any]] = []
@@ -412,6 +428,20 @@ def extract_company_contacts(
 
         # Staleness computation
         cand.stale = compute_staleness(cand.published_date)
+
+        # Role type classification: campus/early-careers/university recruiting -> campus_recruiter
+        if cand.title and any(
+            k in cand.title.lower()
+            for k in (
+                "campus",
+                "early career",
+                "early-career",
+                "early careers",
+                "university recruit",
+                "university relations",
+            )
+        ):
+            cand.role_type = "campus_recruiter"
 
         # Location guard: location is null unless stated in the source text; never infer or default
         if cand.location:

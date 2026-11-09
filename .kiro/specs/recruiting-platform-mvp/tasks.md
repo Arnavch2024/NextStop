@@ -244,3 +244,164 @@
 - [ ] Operator/admin action sets `contacts.suppressed_at = now()`; suppressed rows are excluded from `search_data_lake`, `GET /v1/contacts`, and agent results (enforced by 6.3/6.7 + the agent).
 - [ ] `docs/privacy.md` documents the request intake → review → action → confirmation → logging process.
 - **DoD**: Suppressing a contact removes it from all search/contact-list/agent results; `docs/privacy.md` lists the intake + action process; a previously-found contact no longer appears after suppression.
+
+## Phase 7 — Day 4: Officer, Company & Recruiter slices + scoring modules
+
+> **Scope after scoping cut (≈2 days of build).** Unchanged: stack, Day 1-3 contracts (`/health`, `/v1/chat` shape incl. additive `contacts` array), Day 2 student scoring, ingestion-only rule for web contacts, never-auto-send rule. LLM calls via existing `LLMProvider`. Open decisions resolved: #6 sum internship+full_time per campus-cycle band once; #8 status column on `user_saved_contacts`. Design in §12, open decisions in §12.13.
+>
+> **Priority and cut order:**
+> P1 — 7.1 migration + startup check → 7.2 scoring modules → 7.3 officer import + student table + demo accounts
+> P2 — 7.4 campus hiring CSV + company score endpoint → 7.5 student search (company)
+> P3 — 7.6 invitation-letter draft only
+> ~~Cut~~ — LLM header mapping, XLSX, student discoverable toggle, interview/offer letters, outreach status tracking, recruiter dashboard polish, mobile dashboards. See `README.md#future-work`.
+>
+> **Demo-account safety rule:** demo accounts see only `student_records` rows with `is_demo_data = true` (seeded synthetic records). `GET /v1/student-records` for any demo user is scoped to demo data at the service layer. `DEMO_LOGIN_ENABLED` defaults to `false`; off in production.
+
+---
+
+### Task 7.1 — Schema migration `005_day4_student_records.sql` + startup check 🔴 P1
+
+**Estimate: 0.5 day**
+
+- [ ] Write `supabase/migrations/005_day4_student_records.sql` (non-destructive, idempotent, all statements guarded with `if not exists` / DO-blocks):
+  - Enums: `student_status` (`in_college`,`internship`,`full_time`,`not_placed`), `campus_hiring_type` (`internship`,`full_time`), `outreach_draft_kind` (`outreach`,`invitation`).
+  - `profiles` additions: `college_id uuid`, `company_id uuid`, `is_demo boolean not null default false`.
+  - `outreach_drafts` addition: `kind outreach_draft_kind not null default 'outreach'`.
+  - `student_records` table + indexes (see design §12.2); `is_demo_data boolean not null default false` column on `student_records`.
+  - `campus_hiring` table + indexes.
+  - `batch_sharing` table + indexes.
+  - `user_saved_contacts` addition: `status text not null default 'not_contacted'` (additive).
+  - RLS: officer SELECT on `student_records` (own college); student self-SELECT (own claimed); campus_hiring own-profile; batch_sharing officer. No company/recruiter SELECT policy (enforced server-side). All via `drop policy if exists` → `create policy`.
+  - Rollback note as a top-of-file comment block.
+- [ ] Extend `app/db/schema_check.py::check_database_schema` to probe `student_records`, `campus_hiring`, `profiles.college_id`, `outreach_drafts.kind`; raise `MissingMigrationError("005_day4_student_records.sql")` if absent. Reuses existing `should_skip_schema_check`.
+- **DoD:** Migration runs cleanly twice against a DB with 001–004 applied; without 005 the app raises `MissingMigrationError("005_day4_student_records.sql")` at startup; Day 1-3 tests still pass; `outreach_drafts.kind` defaults to `'outreach'` preserving all Day 3 drafts.
+
+---
+
+### Task 7.2 — Scoring modules: campus + company (with boundary tests) 🔴 P1
+
+**Estimate: 0.5 day**
+
+- [ ] `apps/api/app/scoring/campus_score.py`: `classify_company(category) -> (tier, flagged_bool)`; `compute_campus_score(full_time_rows, category_map) -> CampusScoreResult`; `compute_campus_internship_score(internship_rows, category_map) -> CampusScoreResult`; loaders `load_campus_data(supabase, college_id)`, `recompute_campus_score(supabase, college_id)`.
+- [ ] `apps/api/app/scoring/company_score.py`: `compute_company_score(rows) -> ScoreResult`; loader `load_company_data(supabase, company_id)`, `recompute_company_score(supabase, company_id)`. Per campus-cycle: **sum** `offers_made` across both `campus_hiring.type` values (approved decision #6), then band once.
+- [ ] `GET /v1/colleges/{id}/score` and `GET /v1/companies/{id}/score` endpoints; auth required; any authenticated user may read (open decision §12.13 #10).
+- [ ] `apps/api/tests/test_campus_score.py` and `test_company_score.py` covering all boundary cases from `docs/scoring.md` A14–A20: exactly 5 → 0; 6 → bonus; tiers stack; years accumulate; clamp 100; `gcc` never tier 1; unknown category → tier 3 + flagged; company bands 0→-1, 1-4→0, 5-9→+1, 10-20→+2, >20→+3; clamp to 0 and 100; each campus-cycle counted once (summed, not per-type).
+- **DoD:** `pytest test_campus_score.py test_company_score.py` green; `GET /v1/colleges/{id}/score` with seeded `campus_hiring` returns a breakdown; a `gcc` company never appears in tier 1.
+
+---
+
+### Task 7.3 — Officer import (CSV fixed template + header aliases) + student table + demo accounts 🔴 P1
+
+**Estimate: 0.75 day**
+
+- [ ] `POST /v1/student-records` (multipart CSV, `placement_officer` only): consent text in OpenAPI description ("We'll read this file to build your student list"). **No LLM mapping** — deterministic parse only (pandas). Supported headers and aliases (case-insensitive, strip spaces): `name/full_name`, `email`, `batch/batch_year`, `branch`, `degree`, `cgpa/score/percentage/score_value`, `score_scale`, `status/current_status`. Unmapped columns are reported in `reasons` (e.g. `unmapped_column: "Rollno"`) but do not block the import. `college_id` locked to `profiles.college_id`. Report `{imported, skipped, reasons[]}`.
+- [ ] Sample import template published at `GET /v1/student-records/template` (returns the expected CSV header row).
+- [ ] `GET /v1/student-records` (officer): own college, filters `q`/`batch_year`/`status`/`branch`; returns `full_name`, `email`, `branch`, `degree`, `score_value`, `score_scale`, `batch_year`, `current_status`, `claimed_by_profile_id`; status counts in response header or body; pagination.
+- [ ] `GET /v1/student-records/export` (officer): CSV download; cells starting `= + - @` prefixed with `'`.
+- [ ] Demo accounts: `profiles.is_demo = true`; seeded one per role via idempotent seed; `GET /v1/auth/demo-accounts` (open, no auth); `POST /v1/auth/demo-login {role}` returns a Supabase JWT (env-gated by `DEMO_LOGIN_ENABLED`, default false, returns 403 if off). Demo users query `student_records` scoped to `is_demo_data = true` rows only at the service layer.
+- [ ] Login screen: "Try a demo account" tiles (web + mobile).
+- **DoD:** Officer uploads a 20-row CSV with three bad rows (bad batch year, missing name, one unmapped column `"Rollno"`) → 17 imported, 2 skipped with reasons, "unmapped_column: Rollno" in the report; the export CSV contains no live formulas; demo login with `DEMO_LOGIN_ENABLED=true` signs in without a password; demo user sees only `is_demo_data=true` records; seeding twice creates no duplicates.
+
+---
+
+### Task 7.4 — Campus hiring CSV import + company score endpoint + company dashboard 🔴 P2
+
+**Estimate: 0.5 day**
+
+- [ ] `POST /v1/campus-hiring` (multipart CSV, `company` only): same deterministic parse; supported headers/aliases: `college/college_name`, `year/cycle_year`, `type` (`internship`/`full_time`), `interviewed/students_interviewed`, `offers/offers_made`. `profile_id` = caller; `company_id` = `profiles.company_id`. Upsert by `(company_id, college_id, cycle_year, type)`. Return `ImportReport`. Recompute company score after import.
+- [ ] `GET /v1/campus-hiring` (company): own rows; filters `cycle_year`, `type`; college name enriched.
+- [ ] Web `app/(company)/home/page.tsx`: two tabs — (1) hiring table + company score card with breakdown; (2) (placeholder for student search, task 7.5). Empty/loading/error states.
+- **DoD:** Company uploads a 10-row campus hiring CSV; table shows rows; score recalculates after upload; re-uploading same file produces no duplicates; `GET /v1/companies/{id}/score` returns a breakdown with at least one campus-cycle entry.
+
+---
+
+### Task 7.5 — Student search for companies (visibility-filtered, minimal fields) 🔴 P2
+
+**Estimate: 0.5 day**
+
+- [ ] `GET /v1/student-records` (company/recruiter role): enforces visibility rule server-side (service role read; row visible iff `batch_sharing.shared_with_recruiters = true` for `(college_id, batch_year)` AND `student.opted_out = false`). Returns `StudentCard` (minimal fields only: `full_name`, `branch`, `degree`, `score_value`, `score_scale`, `batch_year`, `college_name`, `current_status`, `student_score`). No `email`, phone, Aadhaar, `resume_ref`. Filters: `college_id`, `branch`, `degree`, `min_score_value`, `score_scale`, `batch_year`. Pagination.
+- [ ] Add `search_students` as a Gemini `FunctionDeclaration` in the runner for the `company` role.
+- [ ] Web `app/(company)/home/page.tsx` tab 2: student search form + result cards; no email/phone/docs shown; "Draft invitation" button per card (reuses task 7.6, stubs to a placeholder if 7.6 not done).
+- [ ] `GET /v1/student-records/export` for officers (task 7.3) enforces that the company/recruiter path **never** exports email or documents.
+- [ ] Visibility rule test (`apps/api/tests/test_visibility.py`): company sees shared+not-opted-out records (minimal fields); company never receives `email`; opted-out student disappears from results.
+- **DoD:** Company searches "batch 2027 Computer Engineering"; returns only records where `batch_sharing.shared_with_recruiters=true` and `opted_out=false`; no `email` field in any card; a student whose batch is not shared returns 0 results; visibility tests green.
+
+---
+
+### Task 7.6 — Invitation-letter draft (one kind, existing outreach infra) 🟡 P3
+
+**Estimate: 0.25 day**
+
+- [ ] `POST /v1/outreach/letter` (officer + company): body `{kind: 'invitation', contact_id, channel}` only (interview/offer are Future Work). Calls `app/search/outreach.create_outreach_draft` with `kind='invitation'`; stores row; returns `OutreachDraftResponse` + `draft_id`. Never sends.
+- [ ] Web: "Draft invitation" button on officer's company list and company's college list opens a modal with copy + `mailto:` button and "This will not be sent automatically" label.
+- **DoD:** Officer drafts an invitation to a company contact; response has `kind='invitation'`; `mailto:` button opens system mail client (no API send); draft visible in `GET /v1/outreach/drafts` for that user only.
+
+---
+
+### ~~Cut tasks (Future Work — see README.md#future-work)~~
+
+The following tasks from the original Day 4 scope are moved to Future Work:
+
+- ~~LLM header mapping for CSV~~ (deterministic-only import is sufficient for the template)
+- ~~XLSX import~~ (CSV only for now)
+- ~~Student discoverable toggle~~ (visibility = officer batch share AND NOT opted out; no individual toggle for Day 4)
+- ~~Interview and offer letter drafts~~
+- ~~Outreach status tracking~~ (status column exists in 005 migration for forward compat; no UI/tool)
+- ~~Recruiter dashboard polish~~ (recruiter has chat + My list from Day 3)
+- ~~Mobile dashboards~~ (mobile keeps chat, lists and scores from Day 1-3)
+
+## Phase 8 — Day 5: Consent flows + Railway-route timeline
+
+> ≈1 day of build. Unchanged: all prior contracts, Day 2 scoring rules, never-auto-send. Wires the `documents_pre_verified` and `reference_check_authorized` scoring flags that the engine already accepts. Open decisions in design §13.8.
+
+---
+
+### Task 8.1 — Schema migration `006_day5_consent.sql` + startup check
+
+**Estimate: 0.25 day**
+
+- [ ] Write `supabase/migrations/006_day5_consent.sql` (non-destructive, idempotent):
+  - `reference_authorizations` table + indexes + RLS (`profile_id = auth.uid()`).
+  - `documents.verification_note text`, `documents.masked_id_tail text`, `documents.doc_type_verified text` (`add column if not exists`). No `verified_fields`, no `pgcrypto`.
+  - Rollback note at top.
+- [ ] Extend `check_database_schema` to probe `reference_authorizations`; raise `MissingMigrationError("006_day5_consent.sql")`.
+- **DoD:** Migration runs twice cleanly; app raises `MissingMigrationError` naming `006_day5_consent.sql` if absent; Day 1-4 tests pass; no `pgcrypto` extension or encrypted column referenced anywhere.
+
+---
+
+### Task 8.2 — Pre-verify flow + score wiring
+
+**Estimate: 0.25 day**
+
+- [ ] Display upload notice _"Demo only: please upload sample documents, not your real Aadhaar or PAN."_ on the client before the file picker (web + mobile).
+- [ ] `POST /v1/students/me/verify-mock` (student only, env-gated `MOCK_VERIFY_ENABLED`): without reading the file, set `verification_status = 'pre_verified'`, `verification_note = 'Demo verification (mocked)'`, `doc_type_verified` from MIME/extension only; call `recompute_score(trigger='pre_verify')`. File bytes are never loaded; document contents never logged; nothing sent to any LLM/OCR.
+- [ ] Client calls `verify-mock` automatically after upload confirmation (no extra user action).
+- [ ] Update `load_student_for_scoring`: `documents_pre_verified = exists (documents where student_id=? and verification_status='pre_verified')` (DB-only).
+- [ ] Score breakdown label: `"Documents pre-verified (Demo)" | +2 | system`.
+- [ ] Web: "Demo verification (mocked)" badge on score card and documents section.
+- **DoD:** Student uploads a PDF → badge changes to "Demo verification (mocked)"; score increases by +2; `score_events` row has `documents_pre_verified=true`; no document text appears in any API response or log; calling the endpoint without `MOCK_VERIFY_ENABLED` returns 403.
+
+---
+
+### Task 8.3 — Reference-check authorization + score wiring + agent tool
+
+**Estimate: 0.25 day**
+
+- [ ] `POST /v1/students/me/reference-auth`: upserts `reference_authorizations`; calls `recompute_score(trigger='reference_auth')`.
+- [ ] `DELETE /v1/students/me/reference-auth`: sets `revoked_at = now()`; calls `recompute_score(trigger='reference_revoked')`.
+- [ ] Update `load_student_for_scoring`: `reference_check_authorized = exists (reference_authorizations where student_id=? and revoked_at is null)`.
+- [ ] Agent tools for `student` role: `authorize_reference_check()` and `revoke_reference_check()` (Gemini `FunctionDeclaration`s).
+- [ ] Web: "Authorize reference check" consent button + "Revoke" link; score card updates; a "This authorizes a reference check — for demo purposes only" disclaimer is shown.
+- **DoD:** Student says "I authorize a reference check" in chat → score increases by +2; student says "I revoke my reference check" → score drops by 2; `reference_authorizations.revoked_at` is set; the consent button is correctly toggled.
+
+---
+
+### Task 8.4 — Railway-route timeline (web + mobile)
+
+**Estimate: 0.25 day**
+
+- [ ] `GET /v1/students/me/timeline` (student): sorts stations by `start_year` ascending; applies current-station rule (`start_year not null AND end_year null`; fallback = highest `start_year` with data); college station with `start_year` + no `end_year` gets `subtitle = 'in college'`; adds grayed-out future stations for pre-verify and reference-check.
+- [ ] Add `TimelineStation`, `TimelineResponse` to `packages/shared/src/types/api.ts`; add `getTimeline(base, token)` to `apiClient.ts`; rebuild `dist`.
+- [ ] Web `app/(student)/home/page.tsx`: add `<RailwayTimeline>` component — vertical SVG/CSS track, circle stations, current-station filled marker ("You are here"), source badges. Reuses Day 3 badge components.
+- [ ] Mobile: flat station list (no SVG), same data.
+- **DoD:** A student with 10th (2020), 12th (2022), college (2022, no end year), one internship (2024, ended), and one job (2025, ongoing) sees 5 stations in that order; college shows "in college" ~~unless~~ if no end year; the job station is "You are here" (latest ongoing); future stations grayed out; source badges show `Resume` or `User said`; mobile renders the same stations as a flat list.

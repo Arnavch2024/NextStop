@@ -30,3 +30,4 @@ apps/api/.cache/
 .DS_Store
 .turbo
 *.tsbuildinfo
+supabase/.temp/
