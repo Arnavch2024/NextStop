@@ -177,6 +177,18 @@ class MockSupabaseClient:
                     "role": "recruiter",
                     "display_name": "Karan Mehta",
                 },
+                {
+                    "id": "officer-789",
+                    "role": "placement_officer",
+                    "display_name": "Placement Officer",
+                    "college_id": "col-mumbai-1",
+                },
+                {
+                    "id": "company-999",
+                    "role": "company",
+                    "display_name": "Company HR",
+                    "company_id": "comp-tcs-1",
+                },
             ],
             "students": [],
             "colleges": [],
@@ -194,6 +206,9 @@ class MockSupabaseClient:
             "search_cache": [],
             "user_saved_contacts": [],
             "outreach_drafts": [],
+            "student_records": [],
+            "campus_hiring": [],
+            "batch_sharing": [],
         }
         self.auth = MagicMock()
         self.auth.get_user.side_effect = self._mock_get_user
@@ -216,6 +231,22 @@ class MockSupabaseClient:
             resp = MagicMock()
             resp.user = user_obj
             return resp
+        elif token == "valid-token-officer":
+            user_obj = MagicMock()
+            user_obj.id = "officer-789"
+            user_obj.email = "officer@college.edu"
+            user_obj.user_metadata = {"full_name": "Placement Officer"}
+            resp = MagicMock()
+            resp.user = user_obj
+            return resp
+        elif token == "valid-token-company":
+            user_obj = MagicMock()
+            user_obj.id = "company-999"
+            user_obj.email = "hr@company.com"
+            user_obj.user_metadata = {"full_name": "Company HR"}
+            resp = MagicMock()
+            resp.user = user_obj
+            return resp
         else:
             raise Exception("Invalid JWT token")
 
@@ -225,8 +256,9 @@ class MockSupabaseClient:
 
 @pytest.fixture(autouse=True)
 def default_demo_show_sample(monkeypatch):
-    """Enables DEMO_SHOW_SAMPLE by default for tests that rely on seed data."""
+    """Enables DEMO_SHOW_SAMPLE and SKIP_SCHEMA_CHECK by default for mock tests."""
     monkeypatch.setenv("DEMO_SHOW_SAMPLE", "true")
+    monkeypatch.setenv("SKIP_SCHEMA_CHECK", "true")
 
 
 @pytest.fixture

@@ -265,8 +265,9 @@ def test_chat_search_reply_lists_contacts_and_never_says_recorded_details(client
     assert "JP Morgan Chase Global Technology" in reply
 
 
-def test_startup_schema_check_names_missing_migration():
+def test_startup_schema_check_names_missing_migration(monkeypatch):
     """Startup schema check raises MissingMigrationError naming the missing migration on error."""
+    monkeypatch.setattr("app.db.schema_check.should_skip_schema_check", lambda: False)
     from app.db.schema_check import MissingMigrationError, check_database_schema
 
     mock_client = MagicMock()

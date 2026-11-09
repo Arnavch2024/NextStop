@@ -14,6 +14,7 @@ from app.routers import (
     contacts_router,
     health_router,
     outreach_router,
+    scores_router,
     students_router,
     voice_router,
 )
@@ -57,6 +58,7 @@ app.include_router(voice_router)
 app.include_router(outreach_router)
 app.include_router(contacts_router)
 app.include_router(agent_runs_router)
+app.include_router(scores_router)
 
 
 def custom_openapi():

@@ -77,6 +77,20 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = Field(default="development")
     CORS_ORIGINS: List[str] = Field(default=["*"])
 
+    # Day 4 Role & Demo Settings
+    DEMO_LOGIN_ENABLED: bool = Field(default=False)
+    OFFICIAL_EMAIL_DENYLIST: List[str] = Field(
+        default=[
+            "gmail.com",
+            "yahoo.com",
+            "hotmail.com",
+            "outlook.com",
+            "tempmail.com",
+            "mailinator.com",
+            "guerrillamail.com",
+        ]
+    )
+
     model_config = SettingsConfigDict(
         env_file=(".env", str(Path(__file__).resolve().parent.parent / ".env")),
         env_file_encoding="utf-8",

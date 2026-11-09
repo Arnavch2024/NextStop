@@ -37,7 +37,7 @@ def check_database_schema(
     client: Optional[Client] = None,
     raise_on_error: bool = True,
 ) -> bool:
-    """Verifies that Day 3 migrations (003_search_slice.sql and 004_day3_security.sql)
+    """Verifies that Day 3 (003, 004) and Day 4 (005_day4_roles.sql) migrations
 
     have been applied to the Supabase database.
     Names the missing migration specifically on failure.
@@ -53,7 +53,7 @@ def check_database_schema(
             logger.warning(f"Unable to initialize Supabase client for schema check: {exc}")
             if raise_on_error:
                 raise MissingMigrationError(
-                    f"Database schema check failed to connect. Missing migration 003_search_slice.sql / 004_day3_security.sql? Error: {exc}"
+                    f"Database schema check failed to connect. Missing migration 003_search_slice.sql / 004_day3_security.sql / 005_day4_roles.sql? Error: {exc}"
                 ) from exc
             return False
 
@@ -97,5 +97,34 @@ def check_database_schema(
             raise MissingMigrationError(msg) from exc
         return False
 
-    logger.info("Startup schema check passed: Day 3 migrations (003_search_slice.sql, 004_day3_security.sql) verified.")
+    # Check 4: Day 4 tables (student_records, campus_hiring, batch_sharing)
+    try:
+        client.table("student_records").select("id").limit(1).execute()
+        client.table("campus_hiring").select("id").limit(1).execute()
+        client.table("batch_sharing").select("id").limit(1).execute()
+    except Exception as exc:
+        msg = (
+            "Database schema check failed: missing migration 005_day4_roles.sql. "
+            f"Required Day 4 tables (student_records, campus_hiring, batch_sharing) missing: {exc}"
+        )
+        logger.error(msg)
+        if raise_on_error:
+            raise MissingMigrationError(msg) from exc
+        return False
+
+    # Check 5: Day 4 columns on profiles and outreach_drafts
+    try:
+        client.table("profiles").select("id,college_id,company_id,is_demo").limit(1).execute()
+        client.table("outreach_drafts").select("id,kind").limit(1).execute()
+    except Exception as exc:
+        msg = (
+            "Database schema check failed: missing migration 005_day4_roles.sql. "
+            f"Required Day 4 columns (profiles.college_id/company_id/is_demo, outreach_drafts.kind) missing: {exc}"
+        )
+        logger.error(msg)
+        if raise_on_error:
+            raise MissingMigrationError(msg) from exc
+        return False
+
+    logger.info("Startup schema check passed: Day 3 and Day 4 migrations (003_search_slice.sql, 004_day3_security.sql, 005_day4_roles.sql) verified.")
     return True
