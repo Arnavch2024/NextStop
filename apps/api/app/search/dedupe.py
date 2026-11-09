@@ -200,6 +200,14 @@ def upsert_contact(
                 break
 
     op = "created"
+    fetch_status = data.get("fetch_status")
+    is_unverified = (
+        (source == "user_said")
+        or bool(data.get("unverified", False))
+        or (fetch_status != "ok")
+        or (not data.get("verified", False))
+    )
+    conf = float(data.get("confidence", 1.0))
 
     if existing:
         op = "merged"
@@ -236,15 +244,13 @@ def upsert_contact(
             update_fields["source_url"] = source_url or data.get("source_url")
             update_fields["last_verified_at"] = now_iso
             # Confidence capping: 0.4 if stale, 0.6 if not stale for single unfetched source
-            fetch_status = data.get("fetch_status")
-            is_unverified = (fetch_status != "ok") or (not data.get("verified", False))
-            conf = float(data.get("confidence", 1.0))
             if is_unverified:
                 if data.get("stale") is True:
                     conf = min(conf, 0.4)
                 else:
                     conf = min(conf, 0.6)
             update_fields["confidence"] = conf
+            update_fields["unverified"] = is_unverified
 
         elif source == "user_said":
             # user_said fills empty fields only, never overwrites
@@ -350,6 +356,7 @@ def upsert_contact(
             "source": source,
             "source_url": source_url or data.get("source_url"),
             "confidence": conf,
+            "unverified": is_single_unverified,
             "created_by_profile_id": user_id if user_id and user_id != "00000000-0000-0000-0000-000000000000" else None,
             "first_seen_at": now_iso,
             "last_verified_at": now_iso if source == "web" else None,
@@ -420,6 +427,31 @@ def upsert_contact(
             client.table("contact_sources").insert(clean_row).execute()
         except Exception as e2:
             logger.warning(f"Could not record contact_sources row: {e2}")
+
+    # Record metadata in raw_events for lakes with legacy/unmigrated schema
+    meta_payload = {
+        "contact_id": contact_id,
+        "location": data.get("location") or (existing.get("location") if existing else None),
+        "source_url": source_url or data.get("source_url") or (existing.get("source_url") if existing else None),
+        "source_published_date": data.get("published_date")
+        or data.get("source_published_date")
+        or (existing.get("source_published_date") if existing else None),
+        "stale": data.get("stale") if "stale" in data else (existing.get("stale") if existing else None),
+        "confidence": conf,
+        "unverified": is_unverified,
+        "source": source,
+    }
+    try:
+        client.table("raw_events").insert(
+            {
+                "id": str(uuid.uuid4()),
+                "actor_id": None,
+                "source": "contact_metadata",
+                "payload": meta_payload,
+            }
+        ).execute()
+    except Exception as e_meta:
+        logger.debug(f"Could not record raw_events contact_metadata: {e_meta}")
 
     logger.info(f"upsert_contact {op}: id={contact_id}, source={source}")
     return {"contact_id": contact_id, "op": op}

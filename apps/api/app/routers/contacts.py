@@ -18,6 +18,7 @@ from app.models.api import (
     SaveResponse,
 )
 from app.models.db import UserProfile
+from app.search.data_lake import _get_suppressed_contact_ids, _hydrate_contacts_metadata
 
 router = APIRouter(prefix="/v1/contacts", tags=["Contacts"])
 
@@ -74,6 +75,8 @@ def list_contacts(
         contacts_res = query_builder.execute()
 
     raw_contacts = contacts_res.data or []
+    _hydrate_contacts_metadata(client, raw_contacts)
+    suppressed_ids = _get_suppressed_contact_ids(client)
 
     # 4. Filter in memory for saved_only, q text search, suppression, and sample data controls
     clean_q = q.strip().lower() if q else ""
@@ -87,10 +90,9 @@ def list_contacts(
 
     matched: list[dict] = []
     for c in raw_contacts:
-        if c.get("suppressed_at") is not None:
-            continue
-
         cid = str(c["id"])
+        if c.get("suppressed_at") is not None or cid in suppressed_ids:
+            continue
         if saved_only and cid not in saved_contact_ids:
             continue
 
@@ -206,8 +208,16 @@ def list_contacts(
                 email=email_val,
                 linkedin_url=c.get("linkedin_url"),
                 location=c.get("location"),
+                source=c.get("source") or (c_sources[0].source if c_sources else "web"),
+                source_url=c.get("source_url") or (c_sources[0].source_url if c_sources else None),
                 source_published_date=c.get("source_published_date"),
                 stale=c.get("stale"),
+                confidence=(
+                    float(c.get("confidence"))
+                    if c.get("confidence") is not None
+                    else (c_sources[0].confidence if c_sources else 0.6)
+                ),
+                unverified=bool(c.get("unverified", False)),
                 saved=c.get("saved", False),
                 is_sample=is_sample_val,
                 sources=c_sources,

@@ -34,7 +34,13 @@ from app.models.api import (
 from app.models.db import ProfileRole, UserProfile
 from app.search.data_lake import search_data_lake
 from app.search.dedupe import upsert_contact
+from app.search.extract_contacts import (
+    CandidateContact,
+    validate_full_name,
+    validate_recruiter_candidate,
+)
 from app.search.outreach import create_outreach_draft
+from app.search.providers.extract import is_data_broker
 from app.search.web import format_web_content_block, web_search_enrich
 
 MAX_AGENT_ITERATIONS = 5
@@ -202,6 +208,8 @@ def run_agent_loop(
         added_new = 0
         merged = 0
         used_search = False
+        lake_contacts_found: List[Dict[str, Any]] = []
+        last_web_content = ""
 
         # 3. Multi-turn loop (max 5 iterations)
         while iteration < MAX_AGENT_ITERATIONS:
@@ -276,6 +284,8 @@ def run_agent_loop(
                             actor_id=user.id,
                             include_sample=inc_sample,
                         )
+                        for c in tool_result.get("contacts", []):
+                            lake_contacts_found.append(c)
                         lake_found += tool_result.get("found", 0)
                     elif fc_name == WEB_SEARCH_ENRICH_TOOL_NAME:
                         used_search = True
@@ -285,28 +295,80 @@ def run_agent_loop(
                             query=q,
                             actor_id=user.id,
                         )
-                        tool_result["web_content"] = format_web_content_block(tool_result.get("results", []))
+                        last_web_content = format_web_content_block(tool_result.get("results", []))
+                        tool_result["web_content"] = last_web_content
                         web_found += len(tool_result.get("results", []))
                     elif fc_name == UPSERT_CONTACT_TOOL_NAME:
                         used_search = True
                         source = fc_args.get("source", "user_said")
                         source_url = fc_args.get("source_url")
-                        upsert_res = upsert_contact(
-                            sb,
-                            fc_args,
-                            user,
-                            source=source,
-                            source_url=source_url,
-                        )
-                        tool_result = {
-                            "table": "contacts",
-                            "id": upsert_res["contact_id"],
-                            "op": upsert_res["op"],
-                        }
-                        if upsert_res["op"] == "created":
-                            added_new += 1
-                        elif upsert_res["op"] in ("updated", "merged"):
-                            merged += 1
+
+                        # Item 2 Guard: Web-derived contacts must pass the ingestion pipeline
+                        if source == "web":
+                            if not source_url:
+                                tool_result = {"error": "web_candidate_missing_source_url"}
+                            elif is_data_broker(source_url):
+                                tool_result = {"error": "data_broker_url_rejected"}
+                            else:
+                                is_valid_name, name_err = validate_full_name(fc_args.get("name"))
+                                if not is_valid_name:
+                                    tool_result = {"error": f"full_name_rule_failed: {name_err}"}
+                                else:
+                                    eval_text = (
+                                        fc_args.get("snippet") or fc_args.get("matched_rule") or last_web_content or ""
+                                    )
+                                    target_comp = fc_args.get("company") or fc_args.get("company_name") or ""
+                                    cand_obj = CandidateContact(
+                                        name=fc_args.get("name"),
+                                        title=fc_args.get("title"),
+                                        company=target_comp,
+                                        source_url=source_url,
+                                    )
+                                    val = validate_recruiter_candidate(
+                                        cand_obj,
+                                        eval_text,
+                                        target_company=target_comp,
+                                    )
+                                    if not val.is_valid:
+                                        tool_result = {"error": f"precision_rule_failed: {val.failed_rule}"}
+                                    else:
+                                        fc_args["unverified"] = True
+                                        fc_args["source_url"] = source_url
+                                        fc_args["matched_rule"] = val.matched_rule
+                                        upsert_res = upsert_contact(
+                                            sb,
+                                            fc_args,
+                                            user,
+                                            source=source,
+                                            source_url=source_url,
+                                        )
+                                        tool_result = {
+                                            "table": "contacts",
+                                            "id": upsert_res["contact_id"],
+                                            "op": upsert_res["op"],
+                                        }
+                                        if upsert_res["op"] == "created":
+                                            added_new += 1
+                                        elif upsert_res["op"] in ("updated", "merged"):
+                                            merged += 1
+                        else:
+                            # user_said: allowed only for facts the user states themselves
+                            upsert_res = upsert_contact(
+                                sb,
+                                fc_args,
+                                user,
+                                source="user_said",
+                                source_url=source_url,
+                            )
+                            tool_result = {
+                                "table": "contacts",
+                                "id": upsert_res["contact_id"],
+                                "op": upsert_res["op"],
+                            }
+                            if upsert_res["op"] == "created":
+                                added_new += 1
+                            elif upsert_res["op"] in ("updated", "merged"):
+                                merged += 1
                     elif fc_name == DRAFT_OUTREACH_TOOL_NAME:
                         cid = fc_args.get("contact_id")
                         channel = fc_args.get("channel", "email")
@@ -369,7 +431,42 @@ def run_agent_loop(
                 break
 
         if not reply_text:
-            reply_text = "I've recorded your details successfully. Let me know if you need anything else!"
+            if used_search or lake_contacts_found:
+                if lake_contacts_found:
+                    lines = ["Here are the recruiter contacts found:"]
+                    for c in lake_contacts_found:
+                        c_name = c.get("name") or c.get("full_name") or "Contact"
+                        c_title = c.get("title") or "Recruiter"
+                        c_comp = c.get("company_name") or c.get("company") or "Company"
+                        c_loc = c.get("location") or "Location not stated"
+                        c_src = c.get("source") or "web"
+                        c_date = c.get("source_published_date") or "N/A"
+                        lines.append(
+                            f"- {c_name}, {c_title} at {c_comp} (Location: {c_loc}, Source: {c_src}, As of: {c_date})"
+                        )
+                    reply_text = "\n".join(lines)
+                else:
+                    reply_text = (
+                        "No verified recruiter contacts were found in the data lake or web search for your query."
+                    )
+            else:
+                reply_text = "I've recorded your details successfully. Let me know if you need anything else!"
+        elif (used_search or lake_contacts_found) and "recorded your details" in reply_text.lower():
+            if lake_contacts_found:
+                lines = ["Here are the recruiter contacts found:"]
+                for c in lake_contacts_found:
+                    c_name = c.get("name") or c.get("full_name") or "Contact"
+                    c_title = c.get("title") or "Recruiter"
+                    c_comp = c.get("company_name") or c.get("company") or "Company"
+                    c_loc = c.get("location") or "Location not stated"
+                    c_src = c.get("source") or "web"
+                    c_date = c.get("source_published_date") or "N/A"
+                    lines.append(
+                        f"- {c_name}, {c_title} at {c_comp} (Location: {c_loc}, Source: {c_src}, As of: {c_date})"
+                    )
+                reply_text = "\n".join(lines)
+            else:
+                reply_text = "No verified recruiter contacts were found in the data lake or web search for your query."
 
         # 4. Save final reply
         write_raw_event(
