@@ -222,11 +222,52 @@ def test_student_cannot_claim_record_from_another_college(client: TestClient, mo
 def test_seed_college_domains_skips_missing_source(mock_supabase, tmp_path):
     csv_file = tmp_path / "test_domains.csv"
     csv_file.write_text(
-        "college_name,domain,kind,source_url\n"
-        "VJTI,vjti.ac.in,staff,https://vjti.ac.in\n"
-        "FakeCollege,fake.edu,student,\n"  # missing source_url -> must be skipped
+        "college_name,domain,kind,source_url,evidence,confidence\n"
+        "VJTI,vjti.ac.in,staff,https://vjti.ac.in,x@vjti.ac.in,1.0\n"
+        "FakeCollege,fake.edu,student,,,0.5\n"  # missing source_url -> must be skipped
     )
     res = seed_college_domains(csv_path=csv_file, client=mock_supabase)
     assert res["imported"] == 1
     assert res["skipped"] == 1
     assert any("Missing source_url" in r for r in res["reasons"])
+
+
+def test_seed_college_domains_rejects_free_mail(mock_supabase, tmp_path):
+    csv_file = tmp_path / "test_free_mail.csv"
+    csv_file.write_text(
+        "college_name,domain,kind,source_url,evidence,confidence\n"
+        "GoogleCollege,gmail.com,staff,https://gmail.com,x@gmail.com,1.0\n"
+        "YahooCollege,yahoo.com,student,https://yahoo.com,x@yahoo.com,1.0\n"
+        "SPIT,spit.ac.in,staff,https://spit.ac.in,x@spit.ac.in,1.0\n"
+    )
+    res = seed_college_domains(csv_path=csv_file, client=mock_supabase)
+    assert res["imported"] == 1
+    assert res["skipped"] == 2
+    assert any("Free-mail domain 'gmail.com' rejected" in r for r in res["reasons"])
+    assert any("Free-mail domain 'yahoo.com' rejected" in r for r in res["reasons"])
+
+
+def test_seed_college_domains_subdomain_resolves_to_parent(mock_supabase, tmp_path):
+    csv_file = tmp_path / "test_subdomain.csv"
+    csv_file.write_text(
+        "college_name,domain,kind,source_url,evidence,confidence\n"
+        "Veermata Jijabai Technological Institute (VJTI),student.vjti.ac.in,student,https://vjti.ac.in,x@student.vjti.ac.in,1.0\n"
+    )
+    res = seed_college_domains(csv_path=csv_file, client=mock_supabase)
+    assert res["imported"] == 1
+    # Check that in the database, domain is stored as parent root 'vjti.ac.in'
+    saved = [d for d in mock_supabase.store["college_domains"] if d["domain"] == "vjti.ac.in"]
+    assert len(saved) == 1
+    assert saved[0]["domain"] == "vjti.ac.in"
+    assert saved[0]["evidence"] == "x@student.vjti.ac.in"
+
+
+def test_registrable_root_subdomains_resolve_to_parent():
+    from app.auth.college_resolution import get_registrable_root
+
+    assert get_registrable_root("student.vjti.ac.in") == "vjti.ac.in"
+    assert get_registrable_root("me.dept.vjti.ac.in") == "vjti.ac.in"
+    assert get_registrable_root("kjsce.somaiya.edu") == "somaiya.edu"
+    assert get_registrable_root("engineering.nmims.edu") == "nmims.edu"
+    assert get_registrable_root("sub.dbit.in") == "dbit.in"
+    assert get_registrable_root("spit.ac.in") == "spit.ac.in"

@@ -66,6 +66,28 @@ def get_candidate_domains(domain: str) -> List[str]:
     return candidates
 
 
+def is_freemail_domain(domain: str) -> bool:
+    """Returns True if the domain is a free-mail service provider (e.g. gmail.com, yahoo.com)."""
+    if not domain:
+        return False
+    d = domain.lower().strip()
+    return d in FREE_MAIL_DOMAINS or any(d == f or d.endswith("." + f) for f in FREE_MAIL_DOMAINS)
+
+
+def get_registrable_root(domain: str) -> str:
+    """
+    Returns the registrable root (parent domain) for a given domain or subdomain.
+    E.g.:
+      'student.vjti.ac.in' -> 'vjti.ac.in'
+      'me.vjti.ac.in' -> 'vjti.ac.in'
+      'kjsce.somaiya.edu' -> 'somaiya.edu'
+      'engineering.nmims.edu' -> 'nmims.edu'
+      'vjti.ac.in' -> 'vjti.ac.in'
+    """
+    cands = get_candidate_domains(domain)
+    return cands[-1] if cands else domain.lower().strip()
+
+
 def resolve_college_from_email(
     email: Optional[str],
     is_email_verified: bool = True,

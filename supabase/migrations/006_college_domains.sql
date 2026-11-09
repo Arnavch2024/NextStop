@@ -7,12 +7,20 @@ CREATE TABLE IF NOT EXISTS college_domains (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     college_id UUID NOT NULL REFERENCES colleges(id) ON DELETE CASCADE,
     domain TEXT NOT NULL,
-    kind TEXT NOT NULL CHECK (kind IN ('student', 'staff')),
+    kind TEXT NOT NULL CHECK (kind IN ('student', 'staff', 'unknown')),
     source_url TEXT NOT NULL,
+    evidence TEXT,
+    confidence NUMERIC,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (domain),
     CONSTRAINT college_domains_domain_lower CHECK (domain = lower(domain))
 );
+
+-- Idempotent column additions and constraint updates if table already existed
+ALTER TABLE college_domains ADD COLUMN IF NOT EXISTS evidence TEXT;
+ALTER TABLE college_domains ADD COLUMN IF NOT EXISTS confidence NUMERIC;
+ALTER TABLE college_domains DROP CONSTRAINT IF EXISTS college_domains_kind_check;
+ALTER TABLE college_domains ADD CONSTRAINT college_domains_kind_check CHECK (kind IN ('student', 'staff', 'unknown'));
 
 -- Index for domain lookups
 CREATE INDEX IF NOT EXISTS idx_college_domains_domain ON college_domains(domain);
@@ -27,3 +35,4 @@ CREATE POLICY "college_domains_read_auth" ON college_domains
     FOR SELECT TO authenticated USING (true);
 
 -- Writes are restricted to service_role (service role key bypasses RLS)
+

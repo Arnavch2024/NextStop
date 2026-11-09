@@ -1,13 +1,36 @@
-college_name,domain,kind,source_url
-IIT Bombay,iitb.ac.in,staff,https://www.iitb.ac.in
-Veermata Jijabai Technological Institute (VJTI),vjti.ac.in,staff,https://vjti.ac.in
-Sardar Patel Institute of Technology (SPIT),spit.ac.in,staff,https://www.spit.ac.in
-Dwarkadas J. Sanghvi College of Engineering (DJSCE),djsce.ac.in,staff,https://www.djsce.ac.in
-Thadomal Shahani Engineering College (TSEC),tsec.edu,staff,https://tsec.edu
-Fr. Conceicao Rodrigues College of Engineering (CRCE),frcrce.ac.in,staff,https://frcrce.ac.in
-K. J. Somaiya College of Engineering (KJSCE),somaiya.edu,staff,https://kjsce.somaiya.edu
-Vidyalankar Institute of Technology (VIT),vit.edu.in,staff,https://vit.edu.in
-Vivekanand Education Society Institute of Technology (VESIT),ves.ac.in,staff,https://vesit.ves.ac.in
-Sardar Patel College of Engineering (SPCE),spce.ac.in,staff,https://spce.ac.in
-Don Bosco Institute of Technology (DBIT),dbit.in,staff,https://dbit.in
-Mukesh Patel School of Technology Management & Engineering (MPSTME),nmims.edu,staff,https://engineering.nmims.edu
+college_name,domain,kind,source_url,evidence,confidence
+IIT Bombay,iitb.ac.in,unknown,https://campus.placements.iitb.ac.in/static/docs/brochure.pdf,x@iitb.ac.in,1.0
+Veermata Jijabai Technological Institute (VJTI),vjti.ac.in,unknown,https://vjti.ac.in/training-and-placement-office/,x@vjti.ac.in,1.0
+Sardar Patel Institute of Technology (SPIT),spit.ac.in,unknown,https://placements.spit.ac.in/statistics,x@spit.ac.in,1.0
+Dwarkadas J. Sanghvi College of Engineering (DJSCE),djsce.ac.in,unknown,https://www.djsce.ac.in/placements-hs,x@djsce.ac.in,1.0
+Fr. Conceicao Rodrigues College of Engineering (CRCE),frcrce.ac.in,unknown,https://frcrce.ac.in/campus-placements/,x@frcrce.ac.in,1.0
+K. J. Somaiya College of Engineering (KJSCE),somaiya.edu,unknown,https://kjsce.somaiya.edu/en/placement/about/,x@somaiya.edu,1.0
+Vidyalankar Institute of Technology (VIT),vit.edu.in,unknown,https://vit.edu.in/placement/,x@vit.edu.in,1.0
+Vivekanand Education Society Institute of Technology (VESIT),ves.ac.in,unknown,https://vesit.ves.ac.in/placement/contact-tpc/,x@ves.ac.in,1.0
+Sardar Patel College of Engineering (SPCE),spce.ac.in,unknown,https://www.spce.ac.in/placement.php,x@spce.ac.in,1.0
+Don Bosco Institute of Technology (DBIT),dbit.in,unknown,https://placement.dbit.in/contact-us.html,x@dbit.in,1.0
+Mukesh Patel School of Technology Management & Engineering (MPSTME),nmims.edu,unknown,https://engineering.nmims.edu/placement-overview/b-tech-m-tech-mca-mba-tech-placements/,x@nmims.edu,1.0
+Atharva College of Engineering,atharvacoe.ac.in,unknown,https://atharvacoe.ac.in/placement-head/,x@atharvacoe.ac.in,1.0
+Pillai College of Engineering,mes.ac.in,unknown,https://mes.ac.in/colleges/engineering-colleges/pce/,x@mes.ac.in,1.0
+Rajiv Gandhi Institute of Technology (RGIT),mctrgit.ac.in,unknown,https://www.mctrgit.ac.in/placement-statistics,x@mctrgit.ac.in,1.0
+Xavier Institute of Engineering (XIE),xavier.ac.in,unknown,https://www.xavier.ac.in/Placement%20Contact.php,x@xavier.ac.in,1.0
+Terna Engineering College,ternaengg.ac.in,unknown,https://ternaengg.ac.in/placement/tpo-desk/,x@ternaengg.ac.in,1.0
+SIES Graduate School of Technology,siesgst.ac.in,unknown,https://www.home.siesgst.ac.in/,x@siesgst.ac.in,1.0
+Lokmanya Tilak College of Engineering,ltce.in,unknown,https://ltce.in/placement_tp_cell,x@ltce.in,1.0
+Universal College of Engineering,ucet.edu.in,unknown,https://ucet.edu.in/contact-us/,x@ucet.edu.in,1.0
+Jamnalal Bajaj Institute of Management Studies (JBIMS),jbims.edu,unknown,https://www.jbims.edu/committees/Placement-committee/,x@jbims.edu,1.0
+S. P. Jain Institute of Management and Research (SPJIMR),spjimr.org,unknown,https://www.spjimr.org/placements/,x@spjimr.org,1.0
+NMIMS School of Business Management,nmims.edu,unknown,https://sbm.nmims.edu/placements,x@nmims.edu,1.0
+Prin. L. N. Welingkar Institute of Management (WeSchool),welingkar.org,unknown,https://www.welingkar.org/career-management-centre-mumbai,x@welingkar.org,1.0
+K. J. Somaiya Institute of Management,somaiya.edu,unknown,https://kjsim.somaiya.edu/en/admission/mba/,x@somaiya.edu,1.0
+Sydenham Institute of Management (SIMSREE),simsree.org,unknown,https://simsree.org/contact_us/,x@simsree.org,1.0
+Chetana's R.K. Institute of Management and Research,crkimr.in,unknown,https://www.crkimr.in/placement/,x@crkimr.in,1.0
+MET Institute of Management,met.edu,unknown,https://www.met.edu/institute/institute_of_management/placements,x@met.edu,1.0
+Lala Lajpatrai Institute of Management,llim.edu,unknown,https://beta.llim.edu/career-and-guidance-cell.aspx,x@llim.edu,1.0
+St. Xavier's College,xaviers.edu,unknown,https://xaviers.edu/files/xrcvc/Placement%20Cell%20Policy%20Document%202024-25.pdf,x@xaviers.edu,1.0
+Mithibai College,mithibai.ac.in,unknown,https://mithibai.ac.in/training-and-placement/,x@mithibai.ac.in,1.0
+H.R. College of Commerce and Economics,hrcollege.edu,unknown,https://www.hrcollege.edu/wp-content/uploads/Metric-5.2.1-AQAR-1.pdf,x@hrcollege.edu,1.0
+K. C. College,kccollege.edu.in,unknown,https://kccollege.edu.in/placement/,x@kccollege.edu.in,1.0
+R. A. Podar College of Commerce & Economics,rapodar.ac.in,unknown,https://www.rapodar.ac.in/pc.php,x@rapodar.ac.in,1.0
+Ramnarain Ruia Autonomous College,ruiacollege.edu,unknown,https://www.ruiacollege.edu/Department/DisplayDeptPage.aspx?ItemID=oco&nDeptID=caaos&page=kga,x@ruiacollege.edu,1.0
+Wilson College,wilsoncollege.edu,unknown,https://www.wilsoncollege.edu/center/training_and_placement.html,x@wilsoncollege.edu,1.0

@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from supabase import Client
 
+from app.auth.college_resolution import get_registrable_root, is_freemail_domain
 from app.db.supabase import get_supabase_client
 from app.logger import logger
 
@@ -49,24 +50,37 @@ def seed_college_domains(
         reader = csv.DictReader(f)
         for idx, row in enumerate(reader, start=2):
             college_name = (row.get("college_name") or "").strip()
-            domain = (row.get("domain") or "").strip().lower()
+            raw_domain = (row.get("domain") or "").strip().lower()
             kind = (row.get("kind") or "").strip().lower()
             source_url = (row.get("source_url") or "").strip()
+            evidence = (row.get("evidence") or "").strip()
+            conf_str = (row.get("confidence") or "").strip()
 
             # Validation 1: Skip if source_url is missing
             if not source_url:
                 skipped += 1
-                reasons.append(f"Row {idx}: Missing source_url for domain '{domain}'")
+                reasons.append(f"Row {idx}: Missing source_url for domain '{raw_domain}'")
                 continue
 
             # Validation 2: Missing required fields
-            if not college_name or not domain:
+            if not college_name or not raw_domain:
                 skipped += 1
                 reasons.append(f"Row {idx}: Missing college_name or domain")
                 continue
 
-            # Validation 3: Check kind
-            if kind not in ("student", "staff"):
+            # Validation 3: Reject free-mail domains
+            if is_freemail_domain(raw_domain):
+                skipped += 1
+                reasons.append(f"Row {idx}: Free-mail domain '{raw_domain}' rejected")
+                continue
+
+            # Resolve subdomains to the registrable root parent domain
+            domain = get_registrable_root(raw_domain)
+
+            # Validation 4: Check kind (default to unknown if not specified)
+            if not kind:
+                kind = "unknown"
+            elif kind not in ("student", "staff", "unknown"):
                 skipped += 1
                 reasons.append(f"Row {idx}: Invalid kind '{kind}' for domain '{domain}'")
                 continue
@@ -100,6 +114,14 @@ def seed_college_domains(
                 "kind": kind,
                 "source_url": source_url,
             }
+            if evidence:
+                payload["evidence"] = evidence
+            if conf_str:
+                try:
+                    payload["confidence"] = float(conf_str)
+                except ValueError:
+                    pass
+
             try:
                 # Upsert by domain
                 cli.table("college_domains").upsert(payload, on_conflict="domain").execute()
