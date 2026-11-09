@@ -62,7 +62,7 @@ drop index if exists contacts_company_email_uidx;
 create index if not exists contacts_company_idx on public.contacts (company_id);
 create index if not exists contacts_college_idx on public.contacts (college_id);
 create unique index if not exists contacts_linkedin_uidx on public.contacts (lower(linkedin_url)) where linkedin_url is not null;
-create unique index if not exists contacts_email_uidx on public.contacts (lower(email)) where email is not null;
+create index if not exists contacts_email_idx on public.contacts (lower(email)) where email is not null;
 create index if not exists contacts_fts_idx on public.contacts
   using gin (to_tsvector('english', coalesce(name,'') || ' ' || coalesce(title,'')));
 create index if not exists contacts_active_idx on public.contacts (company_id) where suppressed_at is null;
@@ -71,10 +71,9 @@ create index if not exists contacts_active_idx on public.contacts (company_id) w
 alter table public.companies add column if not exists category text;
 
 do $$ begin
-  if not exists (
-    select 1 from pg_constraint where conname = 'colleges_mumbai_chk'
-  ) then
-    alter table public.colleges add constraint colleges_mumbai_chk check (lower(city) = 'mumbai');
+  if not exists (select 1 from pg_constraint where conname = 'colleges_mumbai_chk') then
+    alter table public.colleges add constraint colleges_mumbai_chk
+      check (city is null or lower(city) in ('mumbai','navi mumbai','thane','mumbai suburban','mumbai metropolitan region'));
   end if;
 end $$;
 
