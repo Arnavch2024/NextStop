@@ -12,13 +12,15 @@ export interface ChatRequest {
   message: string;
 }
 
-export type AgentStepType = "tool_call" | "tool_result" | "final_reply";
+export type AgentStepType =
+  "tool_call" | "tool_result" | "final_reply" | "search_summary";
 
 export interface AgentStep {
-  type: AgentStepType;
+  type: AgentStepType | string;
   tool?: string | null;
   input?: Record<string, any> | null;
   output?: Record<string, any> | null;
+  summary?: string | null;
   at?: string | null;
 }
 

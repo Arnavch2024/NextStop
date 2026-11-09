@@ -9,12 +9,17 @@ import {
   transcribeAudio,
   uploadResume,
   saveContact,
+  removeSavedContact,
+  listContacts,
   AgentStep,
   RecordRef,
   RawEvent,
   ResumeResponse,
   ContactCard,
+  ApiError,
 } from "@recruiting/shared";
+import { ContactCardItem } from "@/app/components/ContactCardItem";
+import { DraftMessageModal } from "@/app/components/DraftMessageModal";
 import {
   Send,
   Mic,
@@ -37,6 +42,7 @@ import {
   RefreshCw,
   Bookmark,
   ExternalLink,
+  ShieldCheck,
 } from "lucide-react";
 
 interface ChatItem {
@@ -85,6 +91,11 @@ export default function ChatPage() {
   >({});
   const [savingContactId, setSavingContactId] = useState<string | null>(null);
 
+  // Outreach draft modal state
+  const [draftingContact, setDraftingContact] = useState<ContactCard | null>(
+    null
+  );
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -111,7 +122,35 @@ export default function ChatPage() {
       showToast("Contact saved to your list");
     } catch (err: any) {
       console.error("Failed to save contact:", err);
-      showToast(err?.message || "Failed to save contact");
+      if (err instanceof ApiError && err.status === 429) {
+        showToast("Rate limit reached. Please wait a moment.");
+      } else {
+        showToast(err?.message || "Failed to save contact");
+      }
+    } finally {
+      setSavingContactId(null);
+    }
+  }
+
+  // Remove contact from user's list
+  async function handleRemoveContact(contactId: string) {
+    if (!sessionToken || savingContactId) return;
+    setSavingContactId(contactId);
+    try {
+      await removeSavedContact(API_BASE_URL, contactId, sessionToken);
+      setSavedContactIds((prev) => {
+        const next = { ...prev };
+        delete next[contactId];
+        return next;
+      });
+      showToast("Contact removed from your list");
+    } catch (err: any) {
+      console.error("Failed to remove contact:", err);
+      if (err instanceof ApiError && err.status === 429) {
+        showToast("Rate limit reached. Please wait a moment.");
+      } else {
+        showToast(err?.message || "Failed to remove contact");
+      }
     } finally {
       setSavingContactId(null);
     }
@@ -165,6 +204,19 @@ export default function ChatPage() {
 
       // Load initial message history from raw_events
       loadInitialHistory(session.user.id);
+
+      // Load initial saved contacts
+      listContacts(API_BASE_URL, session.access_token, { saved_only: true })
+        .then((res) => {
+          if (res?.items) {
+            const savedMap: Record<string, boolean> = {};
+            for (const c of res.items) {
+              savedMap[c.id] = true;
+            }
+            setSavedContactIds((prev) => ({ ...prev, ...savedMap }));
+          }
+        })
+        .catch(() => {});
     });
   }, [router, supabase]);
 
@@ -262,10 +314,44 @@ export default function ChatPage() {
       )
       .subscribe();
 
+    // D. Realtime updates of user saved contacts with the "updated from your phone" toast
+    const savedContactsChannel = supabase
+      .channel(`saved_contacts_sync_${userId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "user_saved_contacts",
+          filter: `profile_id=eq.${userId}`,
+        },
+        (payload) => {
+          if (payload.eventType === "INSERT") {
+            showToast("Saved contacts updated from your phone");
+            const cid = (payload.new as any)?.contact_id;
+            if (cid) {
+              setSavedContactIds((prev) => ({ ...prev, [cid]: true }));
+            }
+          } else if (payload.eventType === "DELETE") {
+            showToast("Contact removed from your list from your phone");
+            const cid = (payload.old as any)?.contact_id;
+            if (cid) {
+              setSavedContactIds((prev) => {
+                const next = { ...prev };
+                delete next[cid];
+                return next;
+              });
+            }
+          }
+        }
+      )
+      .subscribe();
+
     return () => {
       supabase.removeChannel(chatChannel);
       supabase.removeChannel(scoreChannel);
       supabase.removeChannel(profileChannel);
+      supabase.removeChannel(savedContactsChannel);
       if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
     };
   }, [userId, supabase]);
@@ -643,6 +729,14 @@ export default function ChatPage() {
         </div>
 
         <div className="flex items-center gap-3">
+          <Link
+            href="/my-list"
+            className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 hover:text-indigo-600 shadow-2xs"
+          >
+            <Bookmark className="h-3.5 w-3.5 text-indigo-600" />
+            <span>My list</span>
+          </Link>
+
           {role === "student" && (
             <Link
               href="/home"
@@ -828,163 +922,115 @@ export default function ChatPage() {
                   {/* Recruiter / Contact Cards */}
                   {item.contacts && item.contacts.length > 0 && (
                     <div className="mt-3 space-y-2.5">
-                      {item.contacts.map((contact) => {
-                        const isSaved =
-                          savedContactIds[contact.id] || contact.saved;
-                        const isSaving = savingContactId === contact.id;
-                        const isUnverified = contact.unverified !== false;
+                      {item.contacts.map((contact) => (
+                        <ContactCardItem
+                          key={contact.id}
+                          contact={contact}
+                          isSaved={
+                            !!savedContactIds[contact.id] || !!contact.saved
+                          }
+                          isBusy={savingContactId === contact.id}
+                          onSave={handleSaveContact}
+                          onRemove={handleRemoveContact}
+                          onDraft={(c) => setDraftingContact(c)}
+                        />
+                      ))}
 
-                        return (
-                          <div
-                            key={contact.id}
-                            className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-slate-800 shadow-xs"
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <div>
-                                <div className="font-semibold text-slate-900 text-sm">
-                                  {contact.name}
-                                </div>
-                                <div className="text-xs text-slate-600">
-                                  {contact.title || "Recruiter"}
-                                  {contact.company_name
-                                    ? ` at ${contact.company_name}`
-                                    : ""}
-                                </div>
-                                {contact.location && (
-                                  <div className="text-[11px] text-slate-500 mt-0.5">
-                                    📍 {contact.location}
-                                  </div>
-                                )}
-                              </div>
-                              <div>
-                                <span
-                                  className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-medium border ${
-                                    isUnverified
-                                      ? "bg-amber-50 text-amber-800 border-amber-200"
-                                      : "bg-emerald-50 text-emerald-800 border-emerald-200"
-                                  }`}
-                                >
-                                  {isUnverified
-                                    ? "Unverified, check the source"
-                                    : "Verified"}
-                                </span>
-                              </div>
-                            </div>
-
-                            <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/60 pt-2 text-xs">
-                              <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
-                                {contact.source_url && (
-                                  <a
-                                    href={contact.source_url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-800 underline"
-                                  >
-                                    Source <ExternalLink className="h-3 w-3" />
-                                  </a>
-                                )}
-                                {contact.source_published_date && (
-                                  <span>
-                                    As of:{" "}
-                                    {contact.source_published_date.slice(0, 10)}
-                                  </span>
-                                )}
-                              </div>
-
-                              <button
-                                type="button"
-                                onClick={() => handleSaveContact(contact.id)}
-                                disabled={isSaved || isSaving}
-                                className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition ${
-                                  isSaved
-                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-default"
-                                    : "bg-indigo-600 text-white hover:bg-indigo-700 shadow-xs disabled:opacity-50 cursor-pointer"
-                                }`}
-                              >
-                                {isSaved ? (
-                                  <>
-                                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                                    <span>Saved</span>
-                                  </>
-                                ) : isSaving ? (
-                                  <>
-                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                    <span>Saving...</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Bookmark className="h-3 w-3" />
-                                    <span>Save to my list</span>
-                                  </>
-                                )}
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {/* Agent Steps / Tool Calls Inspection Accordion */}
-                  {hasStepsOrRecords && (
-                    <div className="mt-3 border-t border-slate-100 pt-2 text-xs">
-                      <button
-                        type="button"
-                        onClick={() => toggleSteps(item.id)}
-                        className="flex w-full items-center justify-between text-indigo-600 hover:text-indigo-700"
-                      >
-                        <span className="flex items-center gap-1 font-semibold">
-                          <Database className="h-3.5 w-3.5" />
-                          <span>
-                            {item.records?.length
-                              ? `${item.records.length} record(s) synced`
-                              : `${item.steps?.length} agent step(s)`}
-                          </span>
+                      {/* Short Privacy Note on Results */}
+                      <div className="mt-2 flex items-start gap-1.5 rounded-lg border border-slate-200/80 bg-slate-50/70 p-2.5 text-[11px] text-slate-600">
+                        <ShieldCheck className="h-3.5 w-3.5 text-indigo-600 shrink-0 mt-0.5" />
+                        <span>
+                          Public professional contact info only. Source and date
+                          shown for every record. You can remove any saved
+                          contact from My list at any time.
                         </span>
-                        {isExpanded ? (
-                          <ChevronUp className="h-4 w-4" />
-                        ) : (
-                          <ChevronDown className="h-4 w-4" />
-                        )}
-                      </button>
-
-                      {isExpanded && (
-                        <div className="mt-2 space-y-2 rounded-lg bg-slate-50 p-2.5 font-mono text-[11px] text-slate-700">
-                          {item.records?.map((rec, i) => (
-                            <div
-                              key={i}
-                              className="flex items-center gap-1.5 text-emerald-600 font-sans"
-                            >
-                              <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-                              <span>
-                                {rec.op.toUpperCase()}:{" "}
-                                <strong className="font-semibold">
-                                  {rec.table}
-                                </strong>{" "}
-                                ({rec.id})
-                              </span>
-                            </div>
-                          ))}
-
-                          {item.steps?.map((step, idx) => (
-                            <div
-                              key={idx}
-                              className="border-t border-slate-200 pt-1.5"
-                            >
-                              <div className="font-semibold text-slate-600">
-                                [{step.type}] {step.tool || ""}
-                              </div>
-                              {step.input && (
-                                <pre className="mt-1 overflow-x-auto text-[10px] text-slate-600">
-                                  {JSON.stringify(step.input, null, 2)}
-                                </pre>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                      </div>
                     </div>
                   )}
+
+                  {/* Agent Activity / Step Log Expander */}
+                  {hasStepsOrRecords &&
+                    (() => {
+                      const searchSummaryStep = item.steps?.find(
+                        (s) => s.type === "search_summary" || s.summary
+                      );
+                      const summaryLine =
+                        searchSummaryStep?.summary ||
+                        (searchSummaryStep?.output as any)?.summary ||
+                        (item.records?.length
+                          ? `${item.records.length} record(s) synced • ${item.steps?.length || 0} step(s)`
+                          : `${item.steps?.length || 0} agent step(s) completed`);
+
+                      return (
+                        <div className="mt-3 border-t border-slate-100 pt-2 text-xs">
+                          <button
+                            type="button"
+                            onClick={() => toggleSteps(item.id)}
+                            className="flex w-full items-center justify-between text-indigo-600 hover:text-indigo-700 font-medium py-1"
+                          >
+                            <span className="flex items-center gap-1.5 font-semibold text-slate-700">
+                              <Database className="h-3.5 w-3.5 text-indigo-600" />
+                              <span>Agent activity</span>
+                              <span className="font-normal text-slate-500 text-[11px] truncate max-w-[280px] sm:max-w-md">
+                                — {summaryLine}
+                              </span>
+                            </span>
+                            {isExpanded ? (
+                              <ChevronUp className="h-4 w-4 shrink-0 text-slate-400" />
+                            ) : (
+                              <ChevronDown className="h-4 w-4 shrink-0 text-slate-400" />
+                            )}
+                          </button>
+
+                          {isExpanded && (
+                            <div className="mt-2 space-y-2 rounded-lg bg-slate-50 p-2.5 font-mono text-[11px] text-slate-700">
+                              {item.records?.map((rec, i) => (
+                                <div
+                                  key={i}
+                                  className="flex items-center gap-1.5 text-emerald-600 font-sans"
+                                >
+                                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                                  <span>
+                                    {rec.op.toUpperCase()}:{" "}
+                                    <strong className="font-semibold">
+                                      {rec.table}
+                                    </strong>{" "}
+                                    ({rec.id})
+                                  </span>
+                                </div>
+                              ))}
+
+                              {item.steps?.map((step, idx) => (
+                                <div
+                                  key={idx}
+                                  className="border-t border-slate-200 pt-1.5"
+                                >
+                                  <div className="font-semibold text-slate-600">
+                                    [{step.type}] {step.tool || ""}
+                                  </div>
+                                  {step.summary && (
+                                    <div className="mt-1 text-slate-700 font-sans text-xs">
+                                      Summary: {step.summary}
+                                    </div>
+                                  )}
+                                  {step.input && (
+                                    <pre className="mt-1 overflow-x-auto text-[10px] text-slate-600">
+                                      {JSON.stringify(step.input, null, 2)}
+                                    </pre>
+                                  )}
+                                  {step.output &&
+                                    step.type !== "search_summary" && (
+                                      <pre className="mt-1 overflow-x-auto text-[10px] text-slate-500">
+                                        {JSON.stringify(step.output, null, 2)}
+                                      </pre>
+                                    )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                 </div>
 
                 {isUser && (
@@ -1179,6 +1225,15 @@ export default function ChatPage() {
           </div>
         </div>
       )}
+
+      {/* Outreach Draft Sheet Modal */}
+      <DraftMessageModal
+        isOpen={!!draftingContact}
+        onClose={() => setDraftingContact(null)}
+        contact={draftingContact}
+        token={sessionToken}
+        onToast={showToast}
+      />
     </div>
   );
 }
