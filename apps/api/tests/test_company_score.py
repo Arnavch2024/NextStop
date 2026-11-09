@@ -66,4 +66,3 @@ def test_company_score_clamp_bounds():
     ]
     res_low = compute_company_score(zero_rows)
     assert res_low.score == 0
-

@@ -237,11 +237,23 @@ def handle_upsert(
                 return {"table": table, "id": rec_id, "op": "created"}
 
         elif table == "colleges":
-            # Natural key: (lower(name), lower(city))
+            from app.auth.college_resolution import fuzzy_match_college
+
             clean_data["owner_id"] = user_id
             col_name = clean_data.get("name", "").strip()
             city = clean_data.get("city", "Mumbai").strip()
             clean_data["city"] = city
+
+            matched_college = fuzzy_match_college(col_name, client=supabase_client)
+            if matched_college and matched_college.get("id"):
+                rec_id = str(matched_college["id"])
+                if user.role in (ProfileRole.STUDENT, ProfileRole.PLACEMENT_OFFICER):
+                    try:
+                        supabase_client.table("profiles").update({"college_id": rec_id}).eq("id", user_id).execute()
+                        user.college_id = rec_id
+                    except Exception:
+                        pass
+                return {"table": table, "id": rec_id, "op": "updated"}
 
             existing = (
                 supabase_client.table("colleges")
@@ -253,6 +265,12 @@ def handle_upsert(
             if existing.data and len(existing.data) > 0:
                 rec_id = str(existing.data[0]["id"])
                 supabase_client.table("colleges").update(clean_data).eq("id", rec_id).execute()
+                if user.role in (ProfileRole.STUDENT, ProfileRole.PLACEMENT_OFFICER):
+                    try:
+                        supabase_client.table("profiles").update({"college_id": rec_id}).eq("id", user_id).execute()
+                        user.college_id = rec_id
+                    except Exception:
+                        pass
                 return {"table": table, "id": rec_id, "op": "updated"}
             else:
                 rec_id = str(uuid.uuid4())
@@ -260,6 +278,12 @@ def handle_upsert(
                 res = supabase_client.table("colleges").insert(clean_data).execute()
                 if res.data and len(res.data) > 0:
                     rec_id = str(res.data[0].get("id", rec_id))
+                if user.role in (ProfileRole.STUDENT, ProfileRole.PLACEMENT_OFFICER):
+                    try:
+                        supabase_client.table("profiles").update({"college_id": rec_id}).eq("id", user_id).execute()
+                        user.college_id = rec_id
+                    except Exception:
+                        pass
                 return {"table": table, "id": rec_id, "op": "created"}
 
         elif table == "companies":

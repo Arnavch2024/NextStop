@@ -126,5 +126,20 @@ def check_database_schema(
             raise MissingMigrationError(msg) from exc
         return False
 
-    logger.info("Startup schema check passed: Day 3 and Day 4 migrations (003_search_slice.sql, 004_day3_security.sql, 005_day4_roles.sql) verified.")
+    # Check 6: college_domains table
+    try:
+        client.table("college_domains").select("id").limit(1).execute()
+    except Exception as exc:
+        msg = (
+            "Database schema check failed: missing migration 006_college_domains.sql. "
+            f"Required college_domains table missing: {exc}"
+        )
+        logger.error(msg)
+        if raise_on_error:
+            raise MissingMigrationError(msg) from exc
+        return False
+
+    logger.info(
+        "Startup schema check passed: Day 3 and Day 4 migrations (003_search_slice.sql, 004_day3_security.sql, 005_day4_roles.sql, 006_college_domains.sql) verified."
+    )
     return True

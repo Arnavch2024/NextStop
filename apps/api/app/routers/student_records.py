@@ -110,14 +110,22 @@ async def import_student_records(
         )
 
     college_id = user.college_id
+    if not college_id and user.email:
+        from app.auth.college_resolution import resolve_college_from_email
+
+        resolved = resolve_college_from_email(user.email, is_email_verified=True, client=client)
+        if resolved:
+            college_id = str(resolved["id"])
+            user.college_id = college_id
+
     if not college_id:
         # Fallback to demo college if user is demo
         if user.is_demo:
             college_id = "col-mumbai-1"
         else:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Placement officer profile is not linked to any college.",
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Placement officer college could not be resolved from verified email domain.",
             )
 
     content_bytes = await file.read()
@@ -241,11 +249,7 @@ async def import_student_records(
         email = record.get("email")
         if email:
             existing = (
-                client.table("student_records")
-                .select("id")
-                .eq("college_id", college_id)
-                .eq("email", email)
-                .execute()
+                client.table("student_records").select("id").eq("college_id", college_id).eq("email", email).execute()
             )
             if existing.data and len(existing.data) > 0:
                 rec_id = existing.data[0]["id"]
@@ -291,7 +295,18 @@ def list_student_records(
         query = query.eq("is_demo_data", False)
 
     if user.role == ProfileRole.PLACEMENT_OFFICER:
-        c_id = user.college_id or "col-mumbai-1"
+        c_id = user.college_id
+        if not c_id and user.email:
+            from app.auth.college_resolution import resolve_college_from_email
+
+            resolved = resolve_college_from_email(user.email, is_email_verified=True, client=client)
+            if resolved:
+                c_id = str(resolved["id"])
+                user.college_id = c_id
+        if not c_id and user.is_demo:
+            c_id = "col-mumbai-1"
+        if not c_id:
+            return StudentListResponse(items=[], total=0, page=page, page_size=page_size, status_counts={})
         query = query.eq("college_id", c_id)
     elif user.role in (ProfileRole.COMPANY, ProfileRole.RECRUITER):
         # Additional college filter if provided
@@ -316,7 +331,8 @@ def list_student_records(
     if q and q.strip():
         term = q.strip().lower()
         all_records = [
-            r for r in all_records
+            r
+            for r in all_records
             if term in str(r.get("full_name", "")).lower()
             or term in str(r.get("branch", "")).lower()
             or term in str(r.get("email", "")).lower()
@@ -324,8 +340,7 @@ def list_student_records(
 
     if min_score is not None:
         all_records = [
-            r for r in all_records
-            if r.get("score_value") is not None and float(r["score_value"]) >= min_score
+            r for r in all_records if r.get("score_value") is not None and float(r["score_value"]) >= min_score
         ]
 
     # Apply company/recruiter visibility rule server-side:
@@ -362,7 +377,9 @@ def list_student_records(
                     "college_id": cid,
                     "college_name": colleges_map.get(cid, "Mumbai Partner College"),
                     "current_status": r.get("current_status"),
-                    "student_score": int(r.get("score_value") * 10) if r.get("score_scale") == "cgpa10" and r.get("score_value") else 75,
+                    "student_score": int(r.get("score_value") * 10)
+                    if r.get("score_scale") == "cgpa10" and r.get("score_value")
+                    else 75,
                     "unverified": True,
                 }
                 visible_records.append(card)
@@ -411,7 +428,16 @@ def export_student_records(
             detail="Only placement officers can export student records.",
         )
 
-    c_id = user.college_id or "col-mumbai-1"
+    c_id = user.college_id
+    if not c_id and user.email:
+        from app.auth.college_resolution import resolve_college_from_email
+
+        resolved = resolve_college_from_email(user.email, is_email_verified=True, client=client)
+        if resolved:
+            c_id = str(resolved["id"])
+            user.college_id = c_id
+    if not c_id:
+        c_id = "col-mumbai-1"
     query = client.table("student_records").select("*").eq("college_id", c_id)
     if user.is_demo:
         query = query.eq("is_demo_data", True)
@@ -431,7 +457,8 @@ def export_student_records(
     if q and q.strip():
         term = q.strip().lower()
         records = [
-            r for r in records
+            r
+            for r in records
             if term in str(r.get("full_name", "")).lower()
             or term in str(r.get("email", "")).lower()
             or term in str(r.get("branch", "")).lower()
@@ -475,6 +502,16 @@ def claim_student_record(
         raise HTTPException(status_code=400, detail="Email is required to claim a record.")
 
     clean_email = claim_email.strip().lower()
+
+    # Determine student's college via email domain resolution or user profile
+    user_college_id = user.college_id
+    if not user_college_id:
+        from app.auth.college_resolution import resolve_college_from_email
+
+        resolved = resolve_college_from_email(clean_email, is_email_verified=True, client=client)
+        if resolved and resolved.get("id"):
+            user_college_id = str(resolved["id"])
+
     res = (
         client.table("student_records")
         .select("*")
@@ -491,8 +528,24 @@ def claim_student_record(
         )
 
     matched = res.data[0]
+    record_college_id = str(matched.get("college_id") or "")
+
+    # Security check: student cannot claim record from another college
+    if user_college_id and record_college_id and record_college_id != str(user_college_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot claim a student record from another college.",
+        )
+
     client.table("student_records").update({"claimed_by_profile_id": str(user.id)}).eq("id", matched["id"]).execute()
     matched["claimed_by_profile_id"] = str(user.id)
+
+    if not user.college_id and record_college_id:
+        try:
+            client.table("profiles").update({"college_id": record_college_id}).eq("id", str(user.id)).execute()
+            user.college_id = record_college_id
+        except Exception:
+            pass
 
     return ClaimResponse(
         claimed=True,
@@ -527,31 +580,38 @@ def toggle_batch_share(
     if year not in (2027, 2028):
         raise HTTPException(status_code=400, detail="Batch year must be 2027 or 2028.")
 
-    c_id = user.college_id or "col-mumbai-1"
+    c_id = user.college_id
+    if not c_id and user.email:
+        from app.auth.college_resolution import resolve_college_from_email
 
-    existing = (
-        client.table("batch_sharing")
-        .select("id")
-        .eq("college_id", c_id)
-        .eq("batch_year", year)
-        .execute()
-    )
+        resolved = resolve_college_from_email(user.email, is_email_verified=True, client=client)
+        if resolved:
+            c_id = str(resolved["id"])
+            user.college_id = c_id
+    if not c_id:
+        c_id = "col-mumbai-1"
+
+    existing = client.table("batch_sharing").select("id").eq("college_id", c_id).eq("batch_year", year).execute()
 
     if existing.data and len(existing.data) > 0:
         row_id = existing.data[0]["id"]
-        client.table("batch_sharing").update({
-            "shared_with_recruiters": body.shared,
-            "set_by_profile_id": str(user.id),
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        }).eq("id", row_id).execute()
+        client.table("batch_sharing").update(
+            {
+                "shared_with_recruiters": body.shared,
+                "set_by_profile_id": str(user.id),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+        ).eq("id", row_id).execute()
     else:
-        client.table("batch_sharing").insert({
-            "id": str(uuid.uuid4()),
-            "college_id": c_id,
-            "batch_year": year,
-            "shared_with_recruiters": body.shared,
-            "set_by_profile_id": str(user.id),
-        }).execute()
+        client.table("batch_sharing").insert(
+            {
+                "id": str(uuid.uuid4()),
+                "college_id": c_id,
+                "batch_year": year,
+                "shared_with_recruiters": body.shared,
+                "set_by_profile_id": str(user.id),
+            }
+        ).execute()
 
     return BatchShareResponse(
         college_id=c_id,
@@ -566,7 +626,16 @@ def get_batch_shares(
     client: Client = Depends(get_supabase_client),
 ):
     """Returns current batch sharing status for officer's college for 2027 and 2028."""
-    c_id = user.college_id or "col-mumbai-1"
+    c_id = user.college_id
+    if not c_id and user.email:
+        from app.auth.college_resolution import resolve_college_from_email
+
+        resolved = resolve_college_from_email(user.email, is_email_verified=True, client=client)
+        if resolved:
+            c_id = str(resolved["id"])
+            user.college_id = c_id
+    if not c_id:
+        c_id = "col-mumbai-1"
     res = client.table("batch_sharing").select("batch_year, shared_with_recruiters").eq("college_id", c_id).execute()
     shares_map = {int(r["batch_year"]): bool(r["shared_with_recruiters"]) for r in (res.data or [])}
 

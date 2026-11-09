@@ -1,4 +1,4 @@
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from unittest.mock import MagicMock
 
 import pytest
@@ -23,6 +23,12 @@ class FakeQueryBuilder:
     def insert(self, data: Any):
         self._action = "insert"
         self._payload = data if isinstance(data, list) else [data]
+        return self
+
+    def upsert(self, data: Any, on_conflict: Optional[str] = None):
+        self._action = "upsert"
+        self._payload = data if isinstance(data, list) else [data]
+        self._on_conflict = on_conflict
         return self
 
     def update(self, data: Any):
@@ -110,6 +116,30 @@ class FakeQueryBuilder:
                 created.append(new_row)
             mock_res = MagicMock()
             mock_res.data = created
+            return mock_res
+
+        elif self._action == "upsert":
+            created_or_updated = []
+            on_conf = getattr(self, "_on_conflict", None)
+            for item in self._payload:
+                new_row = dict(item)
+                matched = False
+                if on_conf:
+                    for r in rows:
+                        if r.get(on_conf) == new_row.get(on_conf):
+                            r.update(new_row)
+                            created_or_updated.append(r)
+                            matched = True
+                            break
+                if not matched:
+                    if "id" not in new_row:
+                        import uuid
+
+                        new_row["id"] = str(uuid.uuid4())
+                    rows.append(new_row)
+                    created_or_updated.append(new_row)
+            mock_res = MagicMock()
+            mock_res.data = created_or_updated
             return mock_res
 
         elif self._action == "update":
@@ -209,6 +239,7 @@ class MockSupabaseClient:
             "student_records": [],
             "campus_hiring": [],
             "batch_sharing": [],
+            "college_domains": [],
         }
         self.auth = MagicMock()
         self.auth.get_user.side_effect = self._mock_get_user

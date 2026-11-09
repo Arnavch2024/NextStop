@@ -55,4 +55,3 @@ def get_company_score(
 ):
     result = recompute_company_score(client, company_id=id)
     return result.to_dict()
-

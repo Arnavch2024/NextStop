@@ -87,5 +87,11 @@ def list_user_drafts(
     supabase: Client = Depends(get_supabase_client),
 ):
     """Lists drafts created by the current user."""
-    res = supabase.table("outreach_drafts").select("*").eq("profile_id", str(user.id)).order("created_at", desc=True).execute()
+    res = (
+        supabase.table("outreach_drafts")
+        .select("*")
+        .eq("profile_id", str(user.id))
+        .order("created_at", desc=True)
+        .execute()
+    )
     return res.data or []

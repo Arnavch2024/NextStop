@@ -18,9 +18,7 @@ def compute_company_score(rows: List[Any]) -> ScoreResult:
       10-20 -> +2
       >20 -> +3
     """
-    breakdown: List[BreakdownItem] = [
-        BreakdownItem(reason="Base score", points=50, source="system")
-    ]
+    breakdown: List[BreakdownItem] = [BreakdownItem(reason="Base score", points=50, source="system")]
 
     # Group offers by (college_id, cycle_year)
     campus_cycle_offers: Dict[tuple, int] = defaultdict(int)
@@ -38,7 +36,7 @@ def compute_company_score(rows: List[Any]) -> ScoreResult:
         campus_cycle_offers[key] += offers
 
     # Sort keys for deterministic output
-    for (col_id, cy) in sorted(campus_cycle_offers.keys()):
+    for col_id, cy in sorted(campus_cycle_offers.keys()):
         total_offers = campus_cycle_offers[(col_id, cy)]
         if total_offers == 0:
             breakdown.append(
@@ -106,4 +104,3 @@ def recompute_company_score(supabase: Client, company_id: str) -> ScoreResult:
     """
     rows = load_company_data(supabase, company_id)
     return compute_company_score(rows)
-

@@ -33,9 +33,7 @@ def test_get_college_score_endpoint(client, mock_supabase):
     college_id = "col-mumbai-1"
     comp_id = "comp-morgan"
 
-    mock_supabase.store["companies"].append(
-        {"id": comp_id, "name": "Morgan Stanley", "category": "investment_bank"}
-    )
+    mock_supabase.store["companies"].append({"id": comp_id, "name": "Morgan Stanley", "category": "investment_bank"})
     mock_supabase.store["campus_hiring"].extend(
         [
             {

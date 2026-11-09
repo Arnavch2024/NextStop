@@ -99,12 +99,25 @@ def get_system_prompt_for_role(
     role: Optional[ProfileRole],
     student_data: Optional[Dict[str, Any]] = None,
     missing_fields: Optional[List[str]] = None,
+    has_college: bool = True,
 ) -> str:
     """Returns a role-aware system prompt for Gemini."""
     if role and role in ROLE_SPECIFIC_PROMPTS:
         role_prompt = ROLE_SPECIFIC_PROMPTS[role]
     else:
         role_prompt = "Current User Role: Unassigned (Determine whether they are a Student, Placement Officer, Company, or Recruiter and guide them to provide their details)."
+
+    if role in (ProfileRole.STUDENT, ProfileRole.PLACEMENT_OFFICER) and not has_college:
+        college_rule = """
+COLLEGE IDENTIFICATION RULE:
+The user does not have a confirmed college linked to their profile yet (e.g. they logged in with a non-college email or their domain could not be resolved).
+You MUST ask once in chat which college in Mumbai they are at:
+"Which college in Mumbai are you with?"
+When they reply with their college name, match it against the Mumbai colleges list and ask one short confirmation question:
+"Just to confirm, are you at <Matched College Name>?"
+Never display a form, select dropdown, or list of options.
+"""
+        role_prompt = f"{role_prompt}\n{college_rule}"
 
     if role == ProfileRole.STUDENT and (student_data is not None or missing_fields is not None):
         data_json = json.dumps(student_data or {}, indent=2)

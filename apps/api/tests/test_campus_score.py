@@ -114,4 +114,3 @@ def test_campus_internship_score():
     assert res.score == 53
     assert res.campus_internship_score == 53
     assert any("Internship" in b.reason for b in res.breakdown)
-

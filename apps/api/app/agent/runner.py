@@ -199,7 +199,13 @@ def run_agent_loop(
             except Exception as e:
                 logger.warning(f"Could not load student context for prompt: {e}")
 
-        system_prompt = get_system_prompt_for_role(user.role, student_data=student_data, missing_fields=missing_fields)
+        has_college = bool(user.college_id)
+        system_prompt = get_system_prompt_for_role(
+            user.role,
+            student_data=student_data,
+            missing_fields=missing_fields,
+            has_college=has_college,
+        )
         history = load_recent_events(user.id, limit=50, client=sb)
         contents = build_gemini_contents_from_history(history, message)
 

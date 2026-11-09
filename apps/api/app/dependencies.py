@@ -39,7 +39,13 @@ def get_current_user(
             "student": (ProfileRole.STUDENT, "user-123", "Riya Sharma", None, None),
             "recruiter": (ProfileRole.RECRUITER, "recruiter-456", "Karan Mehta", None, None),
             "officer": (ProfileRole.PLACEMENT_OFFICER, "officer-789", "Placement Officer", "col-mumbai-1", None),
-            "placement_officer": (ProfileRole.PLACEMENT_OFFICER, "officer-789", "Placement Officer", "col-mumbai-1", None),
+            "placement_officer": (
+                ProfileRole.PLACEMENT_OFFICER,
+                "officer-789",
+                "Placement Officer",
+                "col-mumbai-1",
+                None,
+            ),
             "company": (ProfileRole.COMPANY, "company-999", "Company HR", None, "comp-tcs-1"),
         }
         if role_part in role_map:
@@ -77,12 +83,47 @@ def get_current_user(
         # Load user profile and role from the database
         profile = get_user_profile(user_id, client=client)
 
+        auth_email = getattr(auth_user, "email", None)
+        if auth_email and not profile.email:
+            profile.email = auth_email
+
         # If display_name is not set in DB profile, use metadata if available
         if not profile.display_name:
             user_metadata = getattr(auth_user, "user_metadata", {}) or {}
-            profile.display_name = user_metadata.get("full_name") or getattr(auth_user, "email", None)
+            profile.display_name = user_metadata.get("full_name") or auth_email
 
-        logger.info(f"Authenticated user: id={user_id}, role={profile.role}")
+        # Email verification check
+        is_verified = bool(getattr(auth_user, "email_confirmed_at", None) or getattr(auth_user, "confirmed_at", None))
+
+        # On verified login: resolve college from email domain if not already set
+        if not profile.college_id and auth_email and is_verified:
+            from app.auth.college_resolution import resolve_college_from_email
+
+            resolved = resolve_college_from_email(
+                email=auth_email,
+                is_email_verified=True,
+                client=client,
+            )
+            if resolved and resolved.get("id"):
+                c_id = str(resolved["id"])
+                try:
+                    client.table("profiles").update({"college_id": c_id}).eq("id", user_id).execute()
+                    profile.college_id = c_id
+                    logger.info(f"Resolved college_id={c_id} for user {user_id} from email {auth_email}")
+                except Exception as exc:
+                    logger.warning(f"Could not update profile college_id: {exc}")
+
+                # If student, auto-link any unclaimed student_records matching this email and college
+                if profile.role == ProfileRole.STUDENT:
+                    try:
+                        clean_email = auth_email.strip().lower()
+                        client.table("student_records").update({"claimed_by_profile_id": user_id}).ilike(
+                            "email", clean_email
+                        ).eq("college_id", c_id).is_("claimed_by_profile_id", None).execute()
+                    except Exception as exc:
+                        logger.warning(f"Could not auto-link student_records: {exc}")
+
+        logger.info(f"Authenticated user: id={user_id}, role={profile.role}, college_id={profile.college_id}")
         return profile
 
     except HTTPException:

@@ -32,7 +32,9 @@ class CampusHiringRecord(BaseModel):
 
 @router.post("", response_model=ImportReport)
 async def import_campus_hiring(
-    file: UploadFile = File(..., description="Consent notice: We'll read this file to build your campus hiring records."),
+    file: UploadFile = File(
+        ..., description="Consent notice: We'll read this file to build your campus hiring records."
+    ),
     user: UserProfile = Depends(get_current_user),
     client: Client = Depends(get_supabase_client),
 ):
@@ -124,11 +126,13 @@ async def import_campus_hiring(
             # Create college if absent
             col_id = str(uuid.uuid4())
             try:
-                client.table("colleges").insert({
-                    "id": col_id,
-                    "name": col_name,
-                    "city": "Mumbai",
-                }).execute()
+                client.table("colleges").insert(
+                    {
+                        "id": col_id,
+                        "name": col_name,
+                        "city": "Mumbai",
+                    }
+                ).execute()
                 colleges_by_name[col_name.lower().strip()] = col_id
             except Exception:
                 col_id = "col-mumbai-1"

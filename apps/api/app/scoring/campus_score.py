@@ -82,9 +82,7 @@ def _compute_score_for_rows(
     Pure computation for campus score or campus internship score.
     Starts at 50, clamps at 100.
     """
-    breakdown: List[BreakdownItem] = [
-        BreakdownItem(reason="Base score", points=50, source="system")
-    ]
+    breakdown: List[BreakdownItem] = [BreakdownItem(reason="Base score", points=50, source="system")]
     flagged_ids: Set[str] = set()
 
     # Group by cycle_year
@@ -233,4 +231,3 @@ def recompute_campus_score(
         "flagged": all_flagged,
         "next_best_actions": actions,
     }
-
