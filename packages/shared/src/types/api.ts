@@ -12,13 +12,15 @@ export interface ChatRequest {
   message: string;
 }
 
-export type AgentStepType = "tool_call" | "tool_result" | "final_reply";
+export type AgentStepType =
+  "tool_call" | "tool_result" | "final_reply" | "search_summary";
 
 export interface AgentStep {
-  type: AgentStepType;
+  type: AgentStepType | string;
   tool?: string | null;
   input?: Record<string, any> | null;
   output?: Record<string, any> | null;
+  summary?: string | null;
   at?: string | null;
 }
 
@@ -32,6 +34,7 @@ export interface ChatResponse {
   reply: string;
   steps: AgentStep[];
   records_created: RecordRef[];
+  contacts?: ContactCard[];
 }
 
 export interface TranscribeResponse {
@@ -165,6 +168,13 @@ export interface ContactCard {
   role_type: string;
   email?: string | null;
   linkedin_url?: string | null;
+  location?: string | null;
+  source?: string | null;
+  source_url?: string | null;
+  source_published_date?: string | null;
+  stale?: boolean | null;
+  confidence?: number | null;
+  unverified?: boolean;
   saved: boolean;
   is_sample: boolean;
   sources: ContactSourceModel[];

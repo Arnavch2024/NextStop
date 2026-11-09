@@ -49,10 +49,47 @@ class RecordRef(BaseModel):
     op: str = Field(description="'created', 'updated' or 'merged'")
 
 
+# --- Day 3 Contact Models ---
+
+
+class ContactSourceModel(BaseModel):
+    source: str = Field(description="'seed' | 'resume' | 'user_said' | 'web'")
+    source_url: Optional[str] = None
+    domain: Optional[str] = None
+    fetched_at: Optional[datetime] = None
+    confidence: float = 1.0
+
+
+class ContactCard(BaseModel):
+    id: str
+    name: str
+    title: Optional[str] = None
+    company_id: Optional[str] = None
+    company_name: Optional[str] = None
+    college_id: Optional[str] = None
+    college_name: Optional[str] = None
+    role_type: str = "other"
+    email: Optional[str] = None
+    linkedin_url: Optional[str] = None
+    location: Optional[str] = None
+    source: Optional[str] = None
+    source_url: Optional[str] = None
+    source_published_date: Optional[str] = None
+    stale: Optional[bool] = None
+    confidence: Optional[float] = None
+    unverified: Optional[bool] = None
+    saved: bool = False
+    is_sample: bool = False
+    sources: List[ContactSourceModel] = Field(default_factory=list)
+    first_seen_at: Optional[datetime] = None
+    last_verified_at: Optional[datetime] = None
+
+
 class ChatResponse(BaseModel):
     reply: str
     steps: List[AgentStep] = Field(default_factory=list)
     records_created: List[RecordRef] = Field(default_factory=list)
+    contacts: List[ContactCard] = Field(default_factory=list)
 
 
 # --- Day 2 Models for Student Slice ---
@@ -92,32 +129,6 @@ class TranscribeResponse(BaseModel):
 
 
 # --- Day 3 Models for Search Slice ---
-
-
-class ContactSourceModel(BaseModel):
-    source: str = Field(description="'seed' | 'resume' | 'user_said' | 'web'")
-    source_url: Optional[str] = None
-    domain: Optional[str] = None
-    fetched_at: Optional[datetime] = None
-    confidence: float = 1.0
-
-
-class ContactCard(BaseModel):
-    id: str
-    name: str
-    title: Optional[str] = None
-    company_id: Optional[str] = None
-    company_name: Optional[str] = None
-    college_id: Optional[str] = None
-    college_name: Optional[str] = None
-    role_type: str = "other"
-    email: Optional[str] = None
-    linkedin_url: Optional[str] = None
-    saved: bool = False
-    is_sample: bool = False
-    sources: List[ContactSourceModel] = Field(default_factory=list)
-    first_seen_at: Optional[datetime] = None
-    last_verified_at: Optional[datetime] = None
 
 
 class ContactListResponse(BaseModel):

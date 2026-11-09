@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 
 from app.config import settings
+from app.db import check_database_schema
 from app.llm.check_models import check_configured_models, should_skip_model_check
 from app.logger import logger
 from app.routers import (
@@ -24,6 +25,8 @@ async def lifespan(app: FastAPI):
     if not should_skip_model_check():
         logger.info("Executing startup check: verifying configured LLM models...")
         check_configured_models(raise_on_error=True)
+    # Verify database schema on startup
+    check_database_schema(raise_on_error=True)
     yield
 
 

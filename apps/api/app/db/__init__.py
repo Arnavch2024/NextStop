@@ -1,3 +1,4 @@
+from app.db.schema_check import MissingMigrationError, check_database_schema
 from app.db.supabase import (
     close_agent_run,
     create_agent_run,
@@ -14,4 +15,6 @@ __all__ = [
     "close_agent_run",
     "write_raw_event",
     "load_recent_events",
+    "check_database_schema",
+    "MissingMigrationError",
 ]

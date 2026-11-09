@@ -18,6 +18,7 @@ from app.models.api import (
     SaveResponse,
 )
 from app.models.db import UserProfile
+from app.search.data_lake import _get_suppressed_contact_ids, _hydrate_contacts_metadata
 
 router = APIRouter(prefix="/v1/contacts", tags=["Contacts"])
 
@@ -41,8 +42,11 @@ def list_contacts(
     client: Client = Depends(get_supabase_client),
 ) -> ContactListResponse:
     # 1. Fetch caller's saved contacts
-    saved_res = client.table("user_saved_contacts").select("contact_id").eq("profile_id", current_user.id).execute()
-    saved_contact_ids = {str(r["contact_id"]) for r in (saved_res.data or []) if r.get("contact_id")}
+    try:
+        saved_res = client.table("user_saved_contacts").select("contact_id").eq("profile_id", current_user.id).execute()
+        saved_contact_ids = {str(r["contact_id"]) for r in (saved_res.data or []) if r.get("contact_id")}
+    except Exception:
+        saved_contact_ids = set()
 
     if saved_only and not saved_contact_ids:
         return ContactListResponse(items=[], page=page, page_size=page_size, total=0)
@@ -55,17 +59,24 @@ def list_contacts(
     coll_map = {str(c["id"]): c.get("name") for c in (coll_res.data or []) if c.get("id")}
 
     # 3. Base contacts query (exclude suppressed_at is not null)
-    query_builder = client.table("contacts").select("*").is_("suppressed_at", "null")
+    try:
+        query_builder = client.table("contacts").select("*").is_("suppressed_at", "null")
+        if company_id:
+            query_builder = query_builder.eq("company_id", company_id)
+        if college_id:
+            query_builder = query_builder.eq("college_id", college_id)
+        if role_type:
+            query_builder = query_builder.eq("role_type", role_type)
+        contacts_res = query_builder.execute()
+    except Exception:
+        query_builder = client.table("contacts").select("*")
+        if company_id:
+            query_builder = query_builder.eq("company_id", company_id)
+        contacts_res = query_builder.execute()
 
-    if company_id:
-        query_builder = query_builder.eq("company_id", company_id)
-    if college_id:
-        query_builder = query_builder.eq("college_id", college_id)
-    if role_type:
-        query_builder = query_builder.eq("role_type", role_type)
-
-    contacts_res = query_builder.execute()
     raw_contacts = contacts_res.data or []
+    _hydrate_contacts_metadata(client, raw_contacts)
+    suppressed_ids = _get_suppressed_contact_ids(client)
 
     # 4. Filter in memory for saved_only, q text search, suppression, and sample data controls
     clean_q = q.strip().lower() if q else ""
@@ -79,10 +90,9 @@ def list_contacts(
 
     matched: list[dict] = []
     for c in raw_contacts:
-        if c.get("suppressed_at") is not None:
-            continue
-
         cid = str(c["id"])
+        if c.get("suppressed_at") is not None or cid in suppressed_ids:
+            continue
         if saved_only and cid not in saved_contact_ids:
             continue
 
@@ -90,7 +100,7 @@ def list_contacts(
         if not show_sample and is_sample_val:
             continue
 
-        c_name = str(c.get("name", "")).lower()
+        c_name = str(c.get("name") or c.get("full_name") or "").lower()
         c_title = str(c.get("title", "")).lower()
         c_email = str(c.get("email", "")).lower()
         comp_name = comp_map.get(str(c.get("company_id", "")), "")
@@ -112,8 +122,22 @@ def list_contacts(
         item["is_sample"] = is_sample_val
         matched.append(item)
 
-    # Order: real (non-seed) contacts rank above sample ones
-    matched.sort(key=lambda c: 1 if c.get("is_sample") else 0)
+    # Order: real contacts rank above sample ones; within real, Mumbai-stated and fresh contacts rank highest
+    def _rank_contact(c: dict):
+        sample_key = 1 if c.get("is_sample") else 0
+        loc = (c.get("location") or "").lower()
+        mumbai_key = 0 if "mumbai" in loc else 1
+        stale_val = c.get("stale")
+        if stale_val is False:
+            stale_key = 0
+        elif stale_val is None:
+            stale_key = 1
+        else:
+            stale_key = 2
+        conf_key = -float(c.get("confidence") or 0.0)
+        return (sample_key, mumbai_key, stale_key, conf_key)
+
+    matched.sort(key=_rank_contact)
 
     total = len(matched)
     start_idx = (page - 1) * page_size
@@ -167,18 +191,38 @@ def list_contacts(
             else (c.get("source") == "seed" or (c.get("note") == "synthetic" and c.get("source") != "web"))
         )
 
+        email_val = c.get("email")
+        if email_val and str(email_val).endswith("@unverified.placeholder"):
+            email_val = None
+
         cards.append(
             ContactCard(
                 id=cid,
-                name=c.get("name") or "",
+                name=c.get("name") or c.get("full_name") or "",
                 title=c.get("title"),
                 company_id=str(c.get("company_id")) if c.get("company_id") else None,
                 company_name=c.get("company_name"),
                 college_id=str(c.get("college_id")) if c.get("college_id") else None,
                 college_name=c.get("college_name"),
                 role_type=c.get("role_type", "other"),
-                email=c.get("email"),
+                email=email_val,
                 linkedin_url=c.get("linkedin_url"),
+                location=c.get("location"),
+                source=c.get("source") or (c_sources[0].source if c_sources else "web"),
+                source_url=c.get("source_url") or (c_sources[0].source_url if c_sources else None),
+                source_published_date=c.get("source_published_date"),
+                stale=c.get("stale"),
+                confidence=(
+                    float(c.get("confidence"))
+                    if c.get("confidence") is not None
+                    else (c_sources[0].confidence if c_sources else 0.6)
+                ),
+                unverified=(
+                    bool(c.get("unverified"))
+                    or (c.get("source") == "web" and float(c.get("confidence", 1.0) or 1.0) <= 0.6)
+                    or (c.get("source") == "user_said")
+                    or False
+                ),
                 saved=c.get("saved", False),
                 is_sample=is_sample_val,
                 sources=c_sources,

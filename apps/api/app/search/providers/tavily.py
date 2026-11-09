@@ -41,12 +41,14 @@ class TavilySearchProvider(SearchProvider):
                     data = resp.json()
                     results: List[SearchResult] = []
                     for r in data.get("results", []):
+                        pub_date = r.get("published_date") or r.get("publishedDate") or r.get("date")
                         results.append(
                             SearchResult(
                                 url=r.get("url", ""),
                                 title=r.get("title", ""),
                                 snippet=r.get("content", "") or "",
                                 score=r.get("score"),
+                                published_date=str(pub_date) if pub_date else None,
                             )
                         )
                     return results

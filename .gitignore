@@ -16,6 +16,9 @@ __pycache__
 .pytest_cache
 .mypy_cache
 .ruff_cache
+.cache
+.cache/
+apps/api/.cache/
 
 # Environment variables
 .env
@@ -27,3 +30,4 @@ __pycache__
 .DS_Store
 .turbo
 *.tsbuildinfo
+supabase/.temp/

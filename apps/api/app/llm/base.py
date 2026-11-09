@@ -14,6 +14,7 @@ class ToolCall(BaseModel):
 class LLMResponse(BaseModel):
     text: Optional[str] = None
     tool_calls: List[ToolCall] = Field(default_factory=list)
+    raw_response: Optional[Any] = None
 
 
 class LLMError(Exception):

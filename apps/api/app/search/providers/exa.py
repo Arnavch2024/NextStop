@@ -29,6 +29,7 @@ class ExaSearchProvider(SearchProvider):
             "query": query,
             "numResults": num_results,
             "useAutoprompt": True,
+            "contents": {"highlights": {"numSentences": 2}},
         }
 
         # Retry once with backoff
@@ -41,12 +42,22 @@ class ExaSearchProvider(SearchProvider):
                     data = resp.json()
                     results: List[SearchResult] = []
                     for r in data.get("results", []):
+                        pub_date = r.get("published_date") or r.get("publishedDate") or r.get("date")
+                        highlights = r.get("highlights")
+                        if isinstance(highlights, list):
+                            highlight_text = " ".join(str(h) for h in highlights if h)
+                        elif isinstance(highlights, str):
+                            highlight_text = highlights
+                        else:
+                            highlight_text = ""
+                        snippet = highlight_text or r.get("text", "") or r.get("highlight", "") or ""
                         results.append(
                             SearchResult(
                                 url=r.get("url", ""),
                                 title=r.get("title", ""),
-                                snippet=r.get("text", "") or r.get("highlight", "") or "",
+                                snippet=snippet,
                                 score=r.get("score"),
+                                published_date=str(pub_date) if pub_date else None,
                             )
                         )
                     return results

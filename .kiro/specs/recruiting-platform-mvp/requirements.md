@@ -254,3 +254,114 @@ Day 3 turns the platform into a searchable talent/contact data lake: seeded Mumb
 - Lake contact deletion by end users (admin/decay only — open decision).
 - Candidate scoring changes (Day 2 rules unchanged).
 - Recruiter dashboards/analytics beyond "My list".
+
+---
+
+## 10. Day 4 — Officer, Company & Recruiter slices + scoring modules
+
+Extends the spec. Unchanged: the stack, Day 1-3 contracts (`/health`, `/v1/chat` response shape including the additive `contacts` array), Day 2 student scoring, the rule that web-derived contacts enter the lake only through the ingestion pipeline, and the rule that nothing is ever auto-sent. LLM calls go through the existing `LLMProvider` (Gemini default). Consent flows (pre-verify, reference check) and the railway timeline are Day 5. Every ambiguity is recorded as an open decision in design §12.13.
+
+### 10.1 Auth & roles
+
+- **FR-AUTH-D4-1**: `placement_officer`, `company` and `recruiter` SHALL register/login with an official email.
+- **FR-AUTH-D4-2**: THE SYSTEM SHALL perform a basic domain sanity check on the official email at registration (reject disposable/free domains; MX lookup optional) and SHALL document that real organisation verification is out of scope.
+- **FR-AUTH-D4-3**: THE SYSTEM SHALL seed one demo account per role, flagged `is_demo`, selectable from the login screen. Demo accounts see **only** synthetic `student_records` rows flagged `is_demo_data = true`; real student data is never visible to demo users.
+- **FR-AUTH-D4-4**: THE SYSTEM SHALL expose a demo-account login helper gated by `DEMO_LOGIN_ENABLED` (default false, off in production); returns 403 when off.
+
+### 10.2 Colleges & student records
+
+- **FR-SR-1**: `student_records` (college, batch 2027/2028, branch, degree, cgpa/percentage, `current_status` [in_college | internship | full_time | not_placed], `resume_ref` nullable, `claimed_by_profile_id` nullable, plus `full_name` and `email` for claim/display) SHALL be created by a student's own profile OR imported by the placement officer.
+- **FR-SR-2**: Import via **CSV only** (XLSX is Future Work) through a file picker, after a consent sheet ("We'll read this file to build your student list"). Parsing is **deterministic only** — supported headers and aliases, unmapped columns reported but not blocked, no LLM mapping (LLM header mapping is Future Work). The officer is never asked to fill a field. Cell contents are untrusted data — never instructions. Report rows imported, skipped and why.
+- **FR-SR-2a**: A fixed-template CSV with expected headers is available at `GET /v1/student-records/template`.
+- **FR-SR-3**: A student SHALL claim their record by registering with the matching college email.
+- **FR-SR-4 (visibility)**: the officer sees all records of their own college. Companies and recruiters see a student ONLY if the officer has marked the batch "shared with recruiters" AND the student has not opted out (`opted_out = false`). Companies never see Aadhaar, phone, email or documents. Minimal visible fields are defined in `docs/privacy.md`. Student individual discoverable toggle is Future Work.
+
+### 10.3 Placement officer dashboard & agent tools
+
+- **FR-OFF-1**: search by student name, batch and status; status counts.
+- **FR-OFF-2**: "share batch with recruiters" toggle.
+- **FR-OFF-3**: list and CSV export of the filtered view, neutralising formula injection (prefix cells starting with `=`, `+`, `-`, `@`).
+- **FR-OFF-4**: company outreach list (lake companies filtered by category) with generated invitation letters as DRAFTS (copy + mailto only, never sent).
+- **FR-OFF-5**: chat examples from the brief must work, e.g. "List all companies in Mumbai I can contact for BE Computer Science/IT/AI students; give emails, or LinkedIn links if no email."
+
+### 10.4 Company dashboard & agent tools
+
+- **FR-CO-1**: college outreach — list Mumbai colleges and their placement-officer contacts from the lake; generate invitation drafts (email and LinkedIn note); track status (`not_contacted`, `drafted`, `contacted`, `visited`, `interviewed`) set by the company's own statements in chat.
+- **FR-CO-2**: campus hiring file — permission-gated import (**CSV only**) of campuses visited, interviews and offers per college and cycle (`campus_hiring`: company, college, cycle_year, type [internship | full_time], students_interviewed, offers_made).
+- **FR-CO-3**: a student search tool filtered by college, branch, degree, CGPA/percentage threshold, batch, applying the visibility rule. Results are cards with only the minimal visible fields and the student score. e.g. "final-year MBA (Finance) students with over 90% or CGPA above 9".
+- **FR-CO-4**: invitation letter drafts only (interview/offer letters are Future Work).
+
+### 10.5 Recruiter slice
+
+- **FR-REC-1**: chat only, using lake search for placement officers at colleges (`role_type = placement_officer`), with the same outreach drafts and saved list. No separate dashboard beyond My list.
+
+### 10.6 Scoring modules
+
+- **FR-SC-D4-1**: `campus_score`, `campus_internship_score` (start 50, max 100, NOT CTC-based) and `company_score` (start 50, clamp 0..100) SHALL be pure Python (no LLM, no DB inside the compute functions), unit-tested, and documented in `docs/scoring.md` as decisions A10 onward with explicit defaults.
+- **FR-SC-D4-2**: companies classified by `category` — tier 1: `investment_bank`, `institutional_investor`, `fortune500_global`; tier 2: `gcc` and other global companies; tier 3: everything else; unknown category → tier 3 + flagged.
+- **FR-SC-D4-3**: campus score per recruitment year: +3 if more than 5 students recruited in tier 1 (GCC/offshore excluded even if Fortune 500), +2 if more than 5 in tier 2, +1 if more than 5 in tier 3. Tiers stack; counts aggregate across companies within a tier; "more than 5" = 6 or more; years accumulate; clamp 100. Internships are computed the same way as a separate `campus_internship_score`.
+- **FR-SC-D4-4**: company score per campus-and-cycle: 0 offers = -1; 1 to 4 = 0; 5 to 9 = +1; 10 to 20 = +2; more than 20 = +3. Each campus-cycle counts once. Clamp 0..100. Returns a breakdown like the student score.
+- **FR-SC-D4-5**: each score endpoint SHALL return a breakdown.
+
+### 10.7 API (additive)
+
+- **FR-API-D4-1**: additive endpoints for `student_records` import/search/claim/export, `campus_hiring` import/list, colleges and companies score endpoints with breakdown, letter/draft endpoints (extending the existing outreach drafts), and a demo-account login helper.
+- **FR-API-D4-2**: `POST /v1/chat` SHALL remain unchanged in shape; `records_created` may include `student_records`/`campus_hiring` additively.
+- **FR-API-D4-3**: RLS for every new table (officer: own college only; company: own rows only; recruiter: own saved list only; students: own record; shared lake read as today). Server-side checks beyond RLS enforce the visibility rule.
+
+### 10.8 Clients
+
+- **FR-UI-D4-1**: role-specific home screens (officer: student table with filters + counts, share toggle, export; company: outreach tracker, hiring table, student search results, score with breakdown; recruiter: chat + My list), each opened by the same chat.
+- **FR-UI-D4-2**: cards carry explicit "Unverified, check the source" labels as in Day 3.
+- **FR-UI-D4-3**: empty, loading and error states for every screen.
+- **FR-UI-D4-4**: web is the priority for dashboards; mobile shows chat, lists and scores.
+
+### 10.9 Migrations
+
+- **FR-MIG-D4-1**: the Day 4 migration SHALL be non-destructive and idempotent, applied manually in the Supabase SQL editor.
+- **FR-MIG-D4-2**: if the migration is absent, the app SHALL fail with a `MissingMigrationError` naming the migration; no silent fallbacks.
+
+### 10.10 Quality
+
+- **FR-QUAL-D4-1**: scoring boundary tests; import tests (messy headers, bad rows, formula-injection cells, prompt-injection text in a cell); visibility-rule tests for every role; CSV export injection test; a test asserting no auto-send path exists; demo-account tests.
+
+### 10.11 Day 4 Non-Goals
+
+- Consent/pre-verify and reference-check flows (Day 5).
+- Railway timeline visual (Day 5).
+- Real organisation verification.
+- Auto-sending any message or letter (never).
+
+---
+
+## 11. Day 5 — Consent flows + Student railway-route timeline
+
+Scope: ≈1 day of build. Unchanged: all prior contracts, Day 2 student scoring rules, never-auto-send. The +2 scoring bonuses for pre-verify and reference-check were already accepted by the scoring engine (Day 2 design §10.3 — `documents_pre_verified` and `reference_check_authorized` parameters); Day 5 wires them. Open decisions in design §13.8.
+
+### 11.1 Consent flows
+
+#### Pre-verify (+2 scoring points)
+
+- **FR-D5-CV-1**: Before the file picker is shown, THE SYSTEM SHALL display an upload notice: _"Demo only: please upload sample documents, not your real Aadhaar or PAN."_
+- **FR-D5-CV-2**: WHEN a student uploads a document the client SHALL automatically call `POST /v1/students/me/verify-mock` (env-gated `MOCK_VERIFY_ENABLED`, on in the demo project). The student sees a single flow — upload → consent acknowledged → verified.
+- **FR-D5-CV-3**: The mock verification SHALL set `verification_status = 'pre_verified'` and `verification_note = 'Demo verification (mocked)'`. THE SYSTEM SHALL NEVER read the document file contents, extract text, or send any document, its text, or any ID number to any LLM, OCR, or external service.
+- **FR-D5-CV-4**: Only the following SHALL be stored: `doc_type_verified` (document type from MIME/extension only), `verification_note`, and — only if the student states an Aadhaar or PAN in chat — `masked_id_tail` (Aadhaar: `XXXX-XXXX-1234`; PAN: last 4 characters). Address text is never stored.
+- **FR-D5-CV-5**: Document contents SHALL NEVER appear in application logs. The file path only may be logged.
+- **FR-D5-CV-6**: WHEN `verification_status = 'pre_verified'` the scoring engine's `documents_pre_verified` flag SHALL be set to `true` (DB-only; never derived from LLM output); `recompute_score` is triggered. Score breakdown labels the +2 points as `"Documents pre-verified (Demo)"`.
+- **FR-D5-CV-7**: THE UI SHALL show a "Demo verification (mocked)" badge on the score card and on the documents section.
+
+#### Reference check authorization (+2 scoring points)
+
+- **FR-D5-RC-1**: A student SHALL authorize a reference check via chat ("I authorize a reference check") or an explicit consent button.
+- **FR-D5-RC-2**: Authorization is stored in a `reference_authorizations` table (student_id, authorized_at, revoked_at nullable).
+- **FR-D5-RC-3**: WHEN a valid (non-revoked) authorization exists the scoring engine's `reference_check_authorized` flag SHALL be set to `true`; score is recomputed.
+- **FR-D5-RC-4**: The student SHALL be able to revoke authorization via chat or the UI; `revoked_at` is set; score is recomputed.
+
+### 11.2 Student railway-route timeline
+
+- **FR-D5-TL-1**: The student home screen SHALL display a **railway-route timeline** — a vertical track with named stations and the student's current position highlighted.
+- **FR-D5-TL-2**: Stations (in chronological order): School (10th), Higher Secondary (12th), College (start → current or graduation year), each Internship (company + role + dates), first Full-Time Job, additional jobs. Future stations (grayed out): pre-verify, reference check.
+- **FR-D5-TL-3**: The current position (last station with `start_year` and no `end_year`; fallback = highest `start_year` with data) SHALL be highlighted with a distinct marker ("You are here"). A college station with no `end_year` shows "in college" as a subtitle. Stations are ordered by `start_year` ascending.
+- **FR-D5-TL-4**: Each station SHALL show its year or date range, a title, and a badge for the source (`Resume`, `User said`).
+- **FR-D5-TL-5**: Data is derived from existing `education`, `internships`, `jobs` rows — no new tables.
+- **FR-D5-TL-6**: The timeline is web-first; mobile shows a simplified list version.

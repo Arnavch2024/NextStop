@@ -39,6 +39,38 @@ class Settings(BaseSettings):
     SEED_ENABLED: bool = Field(default=False)
     DEMO_SHOW_SAMPLE: bool = Field(default=False)
 
+    # Ingestion queries per company (wide-run default 2, configurable per run)
+    INGEST_QUERIES_PER_COMPANY: int = Field(default=2)
+    TAVILY_FALLBACK_MIN_RESULTS: int = Field(default=3)
+    INGEST_QUERY_TEMPLATES: List[str] = Field(
+        default=[
+            "campus recruiter {company} Mumbai",
+            "{company} early careers campus hiring placement report appointment news",
+            "university relations talent acquisition {company} India",
+            "early careers hiring {company} India",
+        ]
+    )
+
+    # Data broker blocklist (people-data aggregators rejected before extraction)
+    DATA_BROKER_DOMAINS: List[str] = Field(
+        default=[
+            "rocketreach.co",
+            "zoominfo.com",
+            "apollo.io",
+            "signalhire.com",
+            "contactout.com",
+            "lusha.com",
+            "cognism.com",
+            "lead411.com",
+            "upconversion.com",
+            "swordfish.ai",
+            "seamless.ai",
+            "kendoemailapp.com",
+            "hunter.io",
+            "aeroleads.com",
+        ]
+    )
+
     # Server settings
     PORT: int = Field(default=8000)
     HOST: str = Field(default="0.0.0.0")

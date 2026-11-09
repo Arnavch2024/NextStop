@@ -11,6 +11,8 @@ class SearchResult(BaseModel):
     score: Optional[float] = None
     page_text: Optional[str] = None
     linkedin: bool = False
+    published_date: Optional[str] = None
+    fetch_status: Optional[str] = None  # "ok", "blocked", "not_fetched"
 
 
 class ProviderError(Exception):

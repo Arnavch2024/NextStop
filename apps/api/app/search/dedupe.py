@@ -30,13 +30,14 @@ def get_or_create_company(client: Client, company_name: str, user_id: str) -> Op
         return str(res.data[0]["id"])
 
     cid = str(uuid.uuid4())
+    owner = user_id if user_id and user_id != "00000000-0000-0000-0000-000000000000" else None
     ins = (
         client.table("companies")
         .insert(
             {
                 "id": cid,
                 "name": clean,
-                "owner_id": user_id,
+                "owner_id": owner,
             }
         )
         .execute()
@@ -56,6 +57,7 @@ def get_or_create_college(client: Client, college_name: str, user_id: str) -> Op
         return str(res.data[0]["id"])
 
     cid = str(uuid.uuid4())
+    owner = user_id if user_id and user_id != "00000000-0000-0000-0000-000000000000" else None
     ins = (
         client.table("colleges")
         .insert(
@@ -63,7 +65,7 @@ def get_or_create_college(client: Client, college_name: str, user_id: str) -> Op
                 "id": cid,
                 "name": clean,
                 "city": "Mumbai",
-                "owner_id": user_id,
+                "owner_id": owner,
             }
         )
         .execute()
@@ -71,6 +73,28 @@ def get_or_create_college(client: Client, college_name: str, user_id: str) -> Op
     if ins.data and len(ins.data) > 0:
         return str(ins.data[0].get("id", cid))
     return cid
+
+
+def classify_recruiter_role(title: Optional[str], default_role: str = "other") -> str:
+    """Sets role_type to campus_recruiter when title matches campus/early-careers/university recruiting."""
+    if not title:
+        return default_role
+    t = title.lower()
+    if any(
+        k in t
+        for k in (
+            "campus",
+            "early career",
+            "early-career",
+            "early careers",
+            "university recruit",
+            "university relations",
+        )
+    ):
+        return "campus_recruiter"
+    if "placement" in t:
+        return "placement_officer"
+    return default_role
 
 
 def upsert_contact(
@@ -112,15 +136,27 @@ def upsert_contact(
     user_id = str(user.id)
     now_iso = datetime.now(timezone.utc).isoformat()
 
-    # Resolve company_id if company name given as string
+    # Resolve company_id if company name given as string or if company_id is not a valid UUID
     company_id = data.get("company_id")
+    if company_id:
+        try:
+            uuid.UUID(str(company_id))
+        except (ValueError, AttributeError):
+            company_id = None
+
     if not company_id and data.get("company"):
         company_id = get_or_create_company(client, data["company"], user_id)
     if not company_id and data.get("company_name"):
         company_id = get_or_create_company(client, data["company_name"], user_id)
 
-    # Resolve college_id if college name given as string
+    # Resolve college_id if college name given as string or if college_id is not a valid UUID
     college_id = data.get("college_id")
+    if college_id:
+        try:
+            uuid.UUID(str(college_id))
+        except (ValueError, AttributeError):
+            college_id = None
+
     if not college_id and data.get("college"):
         college_id = get_or_create_college(client, data["college"], user_id)
     if not college_id and data.get("college_name"):
@@ -128,34 +164,72 @@ def upsert_contact(
 
     email = data.get("email", "").strip().lower() if data.get("email") else None
     linkedin = data.get("linkedin_url", "").strip().lower() if data.get("linkedin_url") else None
-    role_type = data.get("role_type") or "other"
     title = data.get("title")
+    role_type = classify_recruiter_role(title, default_role=data.get("role_type") or "other")
 
     # 1. Match against existing (non-suppressed) contacts
     existing = None
 
     # Step 1: linkedin_url
     if linkedin:
-        q = client.table("contacts").select("*").ilike("linkedin_url", linkedin).is_("suppressed_at", "null").execute()
-        if q.data and len(q.data) > 0:
-            existing = q.data[0]
+        try:
+            q = (
+                client.table("contacts")
+                .select("*")
+                .ilike("linkedin_url", linkedin)
+                .is_("suppressed_at", "null")
+                .execute()
+            )
+            if q.data and len(q.data) > 0:
+                existing = q.data[0]
+        except Exception:
+            try:
+                q = client.table("contacts").select("*").ilike("linkedin_url", linkedin).execute()
+                if q.data and len(q.data) > 0:
+                    existing = q.data[0]
+            except Exception:
+                pass
 
     # Step 2: email
     if not existing and email:
-        q = client.table("contacts").select("*").ilike("email", email).is_("suppressed_at", "null").execute()
-        if q.data and len(q.data) > 0:
-            existing = q.data[0]
+        try:
+            q = client.table("contacts").select("*").ilike("email", email).is_("suppressed_at", "null").execute()
+            if q.data and len(q.data) > 0:
+                existing = q.data[0]
+        except Exception:
+            try:
+                q = client.table("contacts").select("*").ilike("email", email).execute()
+                if q.data and len(q.data) > 0:
+                    existing = q.data[0]
+            except Exception:
+                pass
 
     # Step 3: normalized name + company_id
     if not existing and name and company_id:
-        q = client.table("contacts").select("*").eq("company_id", company_id).is_("suppressed_at", "null").execute()
-        candidates = q.data or []
+        try:
+            q = client.table("contacts").select("*").eq("company_id", company_id).is_("suppressed_at", "null").execute()
+            candidates = q.data or []
+        except Exception:
+            try:
+                q = client.table("contacts").select("*").eq("company_id", company_id).execute()
+                candidates = q.data or []
+            except Exception:
+                candidates = []
         for cand in candidates:
-            if normalize_name(cand.get("name", "")) == normalize_name(name):
+            cand_name = cand.get("name") or cand.get("full_name") or ""
+            if normalize_name(cand_name) == normalize_name(name):
                 existing = cand
                 break
 
     op = "created"
+    fetch_status = data.get("fetch_status")
+    is_unverified = (
+        (source == "user_said")
+        or bool(data.get("unverified", False))
+        or (fetch_status != "ok")
+        or (not data.get("verified", False))
+    )
+    conf = float(data.get("confidence", 1.0))
 
     if existing:
         op = "merged"
@@ -178,13 +252,28 @@ def upsert_contact(
                 update_fields["company_id"] = company_id
             if college_id and not existing.get("college_id"):
                 update_fields["college_id"] = college_id
-            if role_type and role_type != "other" and existing.get("role_type") in ("other", None):
+            if role_type == "campus_recruiter" and existing.get("role_type") != "campus_recruiter":
+                update_fields["role_type"] = "campus_recruiter"
+            elif role_type and role_type != "other" and existing.get("role_type") in ("other", None):
                 update_fields["role_type"] = role_type
+
+            if data.get("location"):
+                update_fields["location"] = data["location"]
+            if data.get("published_date") or data.get("source_published_date"):
+                update_fields["source_published_date"] = data.get("published_date") or data.get("source_published_date")
+            if "stale" in data:
+                update_fields["stale"] = data["stale"]
 
             update_fields["source"] = "web"
             update_fields["source_url"] = source_url or data.get("source_url")
             update_fields["last_verified_at"] = now_iso
-            update_fields["confidence"] = data.get("confidence", 1.0)
+            # Confidence capping: 0.4 if stale, 0.6 if not stale for single unfetched source
+            if is_unverified:
+                if data.get("stale") is True:
+                    conf = min(conf, 0.4)
+                else:
+                    conf = min(conf, 0.6)
+            update_fields["confidence"] = conf
 
         elif source == "user_said":
             # user_said fills empty fields only, never overwrites
@@ -248,6 +337,20 @@ def upsert_contact(
     else:
         # Create new contact
         contact_id = str(uuid.uuid4())
+        fetch_status = data.get("fetch_status")
+        is_single_unverified = (
+            (source == "user_said")
+            or data.get("unverified", False)
+            or (fetch_status != "ok")
+            or (not data.get("verified", False))
+        )
+        conf = float(data.get("confidence", 1.0))
+        if is_single_unverified and source == "web":
+            if data.get("stale") is True:
+                conf = min(conf, 0.4)
+            else:
+                conf = min(conf, 0.6)
+
         new_row = {
             "id": contact_id,
             "name": name,
@@ -257,10 +360,13 @@ def upsert_contact(
             "role_type": role_type,
             "email": email,
             "linkedin_url": linkedin,
+            "location": data.get("location"),
+            "source_published_date": data.get("published_date") or data.get("source_published_date"),
+            "stale": data.get("stale"),
             "source": source,
             "source_url": source_url or data.get("source_url"),
-            "confidence": data.get("confidence", 1.0),
-            "created_by_profile_id": user_id,
+            "confidence": conf,
+            "created_by_profile_id": user_id if user_id and user_id != "00000000-0000-0000-0000-000000000000" else None,
             "first_seen_at": now_iso,
             "last_verified_at": now_iso if source == "web" else None,
         }
@@ -281,20 +387,57 @@ def upsert_contact(
             ).execute()
 
     # Append provenance in contact_sources
+    fetch_status = data.get("fetch_status")
+    is_source_unverified = (
+        (source == "user_said")
+        or data.get("unverified", False)
+        or (fetch_status != "ok")
+        or (not data.get("verified", False))
+    )
+    conf = float(data.get("confidence", 1.0))
+    if is_source_unverified and source == "web":
+        conf = min(conf, 0.6)
+
     source_row = {
         "id": str(uuid.uuid4()),
         "contact_id": contact_id,
         "source": source,
         "source_url": source_url or data.get("source_url"),
         "fetched_at": now_iso if source == "web" else None,
-        "confidence": data.get("confidence", 1.0),
-        "unverified": (source == "user_said"),
-        "note": data.get("note"),
+        "confidence": conf,
+        "unverified": is_source_unverified,
+        "fetch_status": fetch_status or ("ok" if source == "seed" else "not_fetched"),
+        "published_date": data.get("published_date"),
+        "note": "synthetic"
+        if data.get("note") == "synthetic"
+        else f"fetch_status={fetch_status};published_date={data.get('published_date')}",
+    }
+    client.table("contact_sources").insert(source_row).execute()
+
+    # Record metadata in raw_events for lakes with legacy/unmigrated schema
+    meta_payload = {
+        "contact_id": contact_id,
+        "location": data.get("location") or (existing.get("location") if existing else None),
+        "source_url": source_url or data.get("source_url") or (existing.get("source_url") if existing else None),
+        "source_published_date": data.get("published_date")
+        or data.get("source_published_date")
+        or (existing.get("source_published_date") if existing else None),
+        "stale": data.get("stale") if "stale" in data else (existing.get("stale") if existing else None),
+        "confidence": conf,
+        "unverified": is_unverified,
+        "source": source,
     }
     try:
-        client.table("contact_sources").insert(source_row).execute()
-    except Exception as e:
-        logger.warning(f"Could not record contact_sources row: {e}")
+        client.table("raw_events").insert(
+            {
+                "id": str(uuid.uuid4()),
+                "actor_id": None,
+                "source": "contact_metadata",
+                "payload": meta_payload,
+            }
+        ).execute()
+    except Exception as e_meta:
+        logger.debug(f"Could not record raw_events contact_metadata: {e_meta}")
 
     logger.info(f"upsert_contact {op}: id={contact_id}, source={source}")
     return {"contact_id": contact_id, "op": op}

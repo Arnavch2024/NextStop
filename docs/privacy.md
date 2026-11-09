@@ -13,6 +13,7 @@
 ## Web sourcing
 
 - Public sources only: contact data in the shared lake is derived exclusively from publicly available web sources and search results, never from private databases, scraping gated networks, or non-public directories.
+- Data-broker blocklist: search results from commercial people-data aggregator domains (e.g., `rocketreach.co`, `zoominfo.com`, `apollo.io`, `signalhire.com`, `contactout.com`, `lusha.com`, `cognism.com`, `lead411.com`, `upconversion.com`, `swordfish.ai`, `seamless.ai`, `hunter.io`) are blocked and rejected before extraction. Results from these domains are never passed to the LLM and never stored as a source in the shared lake.
 - Public pages only; robots.txt is respected for any direct fetch.
 - LinkedIn pages are never scraped — only the public profile URL, name, title and company shown in a search result are stored.
 - All web content is treated as untrusted data (wrapped in `<web_content>`; the agent never follows instructions found there).
@@ -41,3 +42,97 @@ A contact can be suppressed from the shared lake via a manual removal request:
 ## Notes
 
 - This is a design approach, not legal compliance.
+
+## Day 4 — student_records visibility (DPDP-minded)
+
+This extends the Day 3 privacy approach to placement-officer student lists. It is a **design
+approach, not legal compliance**.
+
+### What is stored in `student_records`
+
+- `full_name`, `email` (the student's college email, used for claim matching), `college_id`,
+  `batch_year` (2027/2028), `branch`, `degree`, `score_value` + `score_scale` (cgpa/percentage),
+  `current_status` (in_college | internship | full_time | not_placed), `resume_ref` (nullable),
+  `claimed_by_profile_id` (nullable), `discoverable` (bool), `opted_out` (bool),
+  `created_by_profile_id`, timestamps.
+- No Aadhaar, no personal phone, no home address. (A student's own phone, if ever collected, lives
+  only in their private saved row, as in Day 3.)
+
+### Who sees what
+
+- **Placement officer** (linked to one college): sees all `student_records` for their own college,
+  including email and resume_ref. They do not see other colleges' records.
+- **Company / Recruiter** (Day 4 rule): see a student record ONLY if the officer has marked the
+  student's batch "shared with recruiters" (`batch_sharing.shared_with_recruiters = true` for
+  `(college_id, batch_year)`) AND the student has not `opted_out`. The student individual
+  `discoverable` toggle is in the schema for forward compatibility but is not part of the Day 4
+  visibility rule — it is Future Work. This rule is enforced **server-side** (spans `student_records`
+  - `batch_sharing`; RLS alone cannot express it).
+- **Student**: sees only their own claimed record (`claimed_by_profile_id = auth.uid()`).
+- **Demo users** (`profiles.is_demo = true`): see **only** `student_records` rows flagged
+  `is_demo_data = true` (synthetic seeded data). Real student data is never returned to demo
+  profiles. Enforced at the service layer, not just via RLS.
+
+### Minimal visible fields to companies/recruiters
+
+When a student is visible to a company/recruiter, the API returns **only**:
+`full_name`, `branch`, `degree`, `score_value` + `score_scale`, `batch_year`, `college_name`,
+`current_status`, and the student **score** (with breakdown).
+
+Companies/recruiters **never** receive: `email`, phone, Aadhaar, `resume_ref`, documents, or any
+contact detail of the student. Outreach to a visible student is via a **draft only** (named, not
+auto-sent); delivery is manual because the company does not receive the student's email.
+
+### Batch sharing
+
+- "Share batch with recruiters" is a per `(college, batch_year)` toggle set by the officer via `POST /v1/colleges/me/batches/{year}/share`.
+- A student can `opted_out` to remove themselves from batch sharing results.
+- **Day 4:** the student individual `discoverable` flag exists in the schema for forward compatibility but is not surfaced in the UI or the visibility rule — that is Future Work.
+
+### Removal
+
+- A student may remove their own `discoverable` flag and/or `opt_out` (self-service).
+- Suppression/removal-request handling for student records follows the same manual process as Day 3
+  contacts (see the "Removal requests" section above), applied to the `student_records` row.
+
+## Day 5 — Document verification (DPDP-minded, design approach)
+
+### Upload notice
+
+Before the document file picker is shown, the UI displays:
+
+> **"Demo only: please upload sample documents, not your real Aadhaar or PAN."**
+
+This is shown on web and mobile. It is not a legal disclaimer — it is an explicit request to use synthetic data in the demo environment.
+
+### What is stored from document verification
+
+The mock verification process **never reads the document file**. It sets a flag only. The following and only the following are stored:
+
+| Field                           | Value                                      | Purpose                              |
+| ------------------------------- | ------------------------------------------ | ------------------------------------ |
+| `documents.verification_status` | `'pre_verified'`                           | Drives the +2 scoring flag (DB-only) |
+| `documents.verification_note`   | `'Demo verification (mocked)'`             | UI label                             |
+| `documents.doc_type_verified`   | Derived from MIME/extension (e.g. `'pdf'`) | Document type only                   |
+| `documents.masked_id_tail`      | Last 4 digits only, if stated in chat      | See masking rules below              |
+
+**NOT stored:** document text, Aadhaar number, PAN number, address, or any other content from the document file. `verified_fields`, `pgcrypto` encryption, and address text storage were explicitly removed from the design.
+
+### Document file handling
+
+- File bytes are stored in the private `resumes` Supabase Storage bucket.
+- Access is only via short-lived signed URLs generated on demand.
+- File bytes are **never** loaded into application memory during the verify-mock flow.
+- Document contents **never appear in application logs** — only the storage path may be logged.
+- Nothing from the document is sent to any LLM, OCR, or external service.
+
+### Masking rules (applies only to values stated in chat — never to document contents)
+
+- **Aadhaar** (12 digits, if student mentions it in chat): stored as `XXXX-XXXX-1234` (last 4 only). Full 12-digit number is never stored or logged.
+- **PAN** (10 chars, if student mentions it in chat): stored as last 4 characters only (e.g. `1234`). Full PAN is never stored or logged.
+- **Email**: not masked (no email in document flows).
+- **Address**: not stored at all.
+
+### Scoring flags
+
+Both `documents_pre_verified` and `reference_check_authorized` scoring flags are derived from the database only. They are never set from LLM output, document text, or external API responses.
