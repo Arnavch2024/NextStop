@@ -216,3 +216,104 @@ export interface AgentRunResponse {
   summary?: string | null;
   created_at?: string | null;
 }
+
+// --- Day 4 Models ---
+
+export interface CampusScoreResponse {
+  campus_score: number;
+  campus_internship_score: number;
+  breakdown: BreakdownItem[];
+  flagged: string[];
+  next_best_actions: string[];
+}
+
+export interface CompanyScoreResponse {
+  score: number;
+  breakdown: BreakdownItem[];
+  next_best_actions: string[];
+}
+
+export interface ImportReport {
+  imported: number;
+  skipped: number;
+  reasons: string[];
+}
+
+export interface StudentCard {
+  id: string;
+  full_name: string;
+  branch?: string | null;
+  degree?: string | null;
+  score_value?: number | null;
+  score_scale?: string | null;
+  batch_year: number;
+  college_name?: string | null;
+  college_id?: string | null;
+  current_status: string;
+  student_score?: number | null;
+  unverified: boolean;
+}
+
+export interface StudentListResponse {
+  items: any[];
+  total: number;
+  page: number;
+  page_size: number;
+  status_counts?: Record<string, number> | null;
+}
+
+export interface CampusHiringRecord {
+  id: string;
+  company_id?: string | null;
+  college_id: string;
+  college_name?: string | null;
+  cycle_year: number;
+  type: string;
+  students_interviewed: number;
+  offers_made: number;
+  created_at?: string | null;
+}
+
+export interface DemoAccount {
+  role: string;
+  display_name: string;
+  email: string;
+  description: string;
+  college_id?: string | null;
+  company_id?: string | null;
+}
+
+export interface DemoLoginResponse {
+  access_token: string;
+  token_type: string;
+  user: {
+    id: string;
+    email: string;
+    role: string;
+    display_name: string;
+    college_id?: string | null;
+    company_id?: string | null;
+    is_demo: boolean;
+  };
+}
+
+export interface LetterDraftRequest {
+  kind: "invitation" | "interview" | "offer";
+  contact_id: string;
+  channel?: "email" | "linkedin";
+  sender_context?: string | null;
+}
+
+export interface LetterDraftResponse {
+  draft_id: string;
+  subject?: string | null;
+  body: string;
+  channel: string;
+  kind: string;
+}
+
+export interface BatchShareResponse {
+  college_id: string;
+  batch_year: number;
+  shared_with_recruiters: boolean;
+}

@@ -53,10 +53,33 @@ class VerificationStatus(str, Enum):
     REJECTED = "rejected"
 
 
+class StudentStatus(str, Enum):
+    IN_COLLEGE = "in_college"
+    INTERNSHIP = "internship"
+    FULL_TIME = "full_time"
+    NOT_PLACED = "not_placed"
+
+
+class CampusHiringType(str, Enum):
+    INTERNSHIP = "internship"
+    FULL_TIME = "full_time"
+
+
+class OutreachDraftKind(str, Enum):
+    OUTREACH = "outreach"
+    INVITATION = "invitation"
+    INTERVIEW = "interview"
+    OFFER = "offer"
+
+
 class UserProfile(BaseModel):
     id: str
     role: Optional[ProfileRole] = None
     display_name: Optional[str] = None
+    email: Optional[str] = None
+    college_id: Optional[str] = None
+    company_id: Optional[str] = None
+    is_demo: bool = False
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 

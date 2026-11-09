@@ -11,7 +11,9 @@ import {
   ScrollView,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { getMobileSupabaseClient } from "../lib/supabase";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { getMobileSupabaseClient, API_BASE_URL } from "../lib/supabase";
+import { demoLogin } from "@recruiting/shared";
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -22,6 +24,7 @@ export default function LoginScreen() {
   const [isSignUp, setIsSignUp] = useState(false);
   const [useMagicLink, setUseMagicLink] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [demoRoleLoading, setDemoRoleLoading] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [infoMsg, setInfoMsg] = useState<string | null>(null);
 
@@ -32,6 +35,8 @@ export default function LoginScreen() {
     setInfoMsg(null);
 
     try {
+      await AsyncStorage.removeItem("demo_session");
+
       if (useMagicLink) {
         const { error } = await supabase.auth.signInWithOtp({ email });
         if (error) throw error;
@@ -60,6 +65,8 @@ export default function LoginScreen() {
 
         if (!profile || !profile.role) {
           router.replace("/onboarding");
+        } else if (profile.role === "student") {
+          router.replace("/(tabs)/home");
         } else {
           router.replace("/chat");
         }
@@ -68,6 +75,24 @@ export default function LoginScreen() {
       setErrorMsg(err.message || "Authentication failed.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleDemoLogin(role: string) {
+    setDemoRoleLoading(role);
+    setErrorMsg(null);
+    try {
+      const res = await demoLogin(API_BASE_URL, role);
+      await AsyncStorage.setItem("demo_session", JSON.stringify(res));
+      if (role === "student") {
+        router.replace("/(tabs)/home");
+      } else {
+        router.replace("/chat");
+      }
+    } catch (err: any) {
+      setErrorMsg(err?.message || "Demo login failed");
+    } finally {
+      setDemoRoleLoading(null);
     }
   }
 
@@ -98,11 +123,12 @@ export default function LoginScreen() {
           <Text style={styles.label}>EMAIL ADDRESS</Text>
           <TextInput
             style={styles.input}
-            placeholder="name@college.edu or company.com"
-            value={email}
-            onChangeText={setEmail}
             autoCapitalize="none"
             keyboardType="email-address"
+            value={email}
+            onChangeText={setEmail}
+            placeholder="name@college.edu or company.com"
+            placeholderTextColor="#94a3b8"
           />
 
           {!useMagicLink && (
@@ -110,21 +136,22 @@ export default function LoginScreen() {
               <Text style={styles.label}>PASSWORD</Text>
               <TextInput
                 style={styles.input}
-                placeholder="••••••••"
+                secureTextEntry
                 value={password}
                 onChangeText={setPassword}
-                secureTextEntry
+                placeholder="••••••••"
+                placeholderTextColor="#94a3b8"
               />
             </>
           )}
 
           <TouchableOpacity
             style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={handleAuth}
             disabled={loading}
+            onPress={handleAuth}
           >
             {loading ? (
-              <ActivityIndicator color="#fff" />
+              <ActivityIndicator color="#ffffff" />
             ) : (
               <Text style={styles.buttonText}>
                 {useMagicLink
@@ -159,6 +186,32 @@ export default function LoginScreen() {
               </Text>
             </TouchableOpacity>
           )}
+
+          {/* Quick Demo Access Buttons */}
+          <View style={styles.demoSection}>
+            <Text style={styles.demoHeader}>TRY DEMO PERSONAS</Text>
+            <View style={styles.demoGrid}>
+              {[
+                { role: "placement_officer", label: "Placement Officer" },
+                { role: "company", label: "Company HR" },
+                { role: "recruiter", label: "Talent Recruiter" },
+                { role: "student", label: "Student" },
+              ].map((item) => (
+                <TouchableOpacity
+                  key={item.role}
+                  style={styles.demoButton}
+                  disabled={demoRoleLoading !== null}
+                  onPress={() => handleDemoLogin(item.role)}
+                >
+                  {demoRoleLoading === item.role ? (
+                    <ActivityIndicator size="small" color="#4f46e5" />
+                  ) : (
+                    <Text style={styles.demoButtonText}>{item.label}</Text>
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -173,7 +226,7 @@ const styles = StyleSheet.create({
   scroll: {
     flexGrow: 1,
     justifyContent: "center",
-    padding: 24,
+    padding: 20,
   },
   card: {
     backgroundColor: "#ffffff",
@@ -232,7 +285,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   switchButton: {
-    marginTop: 16,
+    marginTop: 14,
     alignItems: "center",
   },
   switchText: {
@@ -263,5 +316,40 @@ const styles = StyleSheet.create({
   infoText: {
     color: "#047857",
     fontSize: 13,
+  },
+  demoSection: {
+    marginTop: 24,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#f1f5f9",
+  },
+  demoHeader: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#64748b",
+    letterSpacing: 0.5,
+    textAlign: "center",
+    marginBottom: 10,
+  },
+  demoGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    justifyContent: "space-between",
+  },
+  demoButton: {
+    width: "48%",
+    backgroundColor: "#eef2ff",
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#c7d2fe",
+  },
+  demoButtonText: {
+    color: "#4338ca",
+    fontSize: 11,
+    fontWeight: "600",
   },
 });

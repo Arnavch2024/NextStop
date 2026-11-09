@@ -4,17 +4,22 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { getSupabaseBrowserClient, API_BASE_URL } from "@/lib/supabase";
+import { getCurrentSession, logout } from "@/lib/auth";
 import {
   chat,
   transcribeAudio,
   uploadResume,
   saveContact,
+  listContacts,
+  draftLetter,
   AgentStep,
   RecordRef,
   RawEvent,
   ResumeResponse,
   ContactCard,
+  LetterDraftResponse,
 } from "@recruiting/shared";
+import { DraftLetterModal } from "@/components/DraftLetterModal";
 import {
   Send,
   Mic,
@@ -37,6 +42,7 @@ import {
   RefreshCw,
   Bookmark,
   ExternalLink,
+  Mail,
 } from "lucide-react";
 
 interface ChatItem {
@@ -79,11 +85,17 @@ export default function ChatPage() {
   // Cross-device sync toast state
   const [crossDeviceToast, setCrossDeviceToast] = useState<string | null>(null);
 
-  // Saved contacts state
+  // Saved contacts state & My List drawer
   const [savedContactIds, setSavedContactIds] = useState<
     Record<string, boolean>
   >({});
   const [savingContactId, setSavingContactId] = useState<string | null>(null);
+  const [isMyListOpen, setIsMyListOpen] = useState(false);
+  const [myListContacts, setMyListContacts] = useState<ContactCard[]>([]);
+  const [myListLoading, setMyListLoading] = useState(false);
+  const [selectedMyListContact, setSelectedMyListContact] =
+    useState<ContactCard | null>(null);
+  const [isDraftModalOpen, setIsDraftModalOpen] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -101,6 +113,31 @@ export default function ChatPage() {
     }, 4500);
   }
 
+  // Load My list contacts
+  async function loadMyList() {
+    if (!sessionToken) return;
+    setMyListLoading(true);
+    try {
+      const res = await listContacts(
+        API_BASE_URL,
+        { saved_only: true, page_size: 50 },
+        sessionToken
+      );
+      if (res && res.items) {
+        setMyListContacts(res.items);
+      }
+    } catch (err: any) {
+      console.error("Failed to load saved contacts:", err);
+    } finally {
+      setMyListLoading(false);
+    }
+  }
+
+  function handleOpenMyList() {
+    setIsMyListOpen(true);
+    loadMyList();
+  }
+
   // Save contact to user's list
   async function handleSaveContact(contactId: string) {
     if (!sessionToken || savingContactId) return;
@@ -109,6 +146,9 @@ export default function ChatPage() {
       await saveContact(API_BASE_URL, contactId, sessionToken);
       setSavedContactIds((prev) => ({ ...prev, [contactId]: true }));
       showToast("Contact saved to your list");
+      if (isMyListOpen) {
+        loadMyList();
+      }
     } catch (err: any) {
       console.error("Failed to save contact:", err);
       showToast(err?.message || "Failed to save contact");
@@ -139,32 +179,20 @@ export default function ChatPage() {
       }
     }
 
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (!session) {
+    getCurrentSession().then(async (userSession) => {
+      if (!userSession) {
         router.replace("/login");
         return;
       }
-      setSessionToken(session.access_token);
-      setUserId(session.user.id);
+      setSessionToken(userSession.token);
+      setUserId(userSession.user.id);
+      setRole(userSession.user.role);
+      setDisplayName(userSession.user.displayName);
 
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", session.user.id)
-        .single();
-
-      if (!profile || !profile.role) {
-        router.replace("/onboarding");
-        return;
+      // Load initial message history for non-demo users or if actor exists
+      if (!userSession.user.isDemo) {
+        loadInitialHistory(userSession.user.id);
       }
-
-      setRole(profile.role);
-      setDisplayName(
-        profile.display_name || session.user.email?.split("@")[0] || "User"
-      );
-
-      // Load initial message history from raw_events
-      loadInitialHistory(session.user.id);
     });
   }, [router, supabase]);
 
@@ -577,8 +605,26 @@ export default function ChatPage() {
   }
 
   async function handleSignOut() {
-    await supabase.auth.signOut();
+    await logout();
     router.replace("/login");
+  }
+
+  async function handleGenerateLetter(
+    kind: "invitation" | "interview" | "offer"
+  ): Promise<LetterDraftResponse> {
+    if (!sessionToken || !selectedMyListContact) {
+      throw new Error("Missing contact or session");
+    }
+    return await draftLetter(
+      API_BASE_URL,
+      {
+        kind,
+        contact_id: selectedMyListContact.id,
+        channel: "email",
+        sender_context: `${displayName}, ${role?.replace("_", " ")}`,
+      },
+      sessionToken
+    );
   }
 
   function toggleSteps(id: string) {
@@ -643,12 +689,41 @@ export default function ChatPage() {
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={handleOpenMyList}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition shadow-2xs"
+          >
+            <Bookmark className="h-3.5 w-3.5 text-indigo-600" />
+            <span>My List</span>
+          </button>
+
           {role === "student" && (
             <Link
               href="/home"
               className="flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 hover:text-indigo-600"
             >
-              <span>Dashboard</span>
+              <span>Student Dashboard</span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          )}
+
+          {role === "placement_officer" && (
+            <Link
+              href="/officer/home"
+              className="flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 hover:text-indigo-600"
+            >
+              <span>Officer Dashboard</span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          )}
+
+          {role === "company" && (
+            <Link
+              href="/company/home"
+              className="flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 hover:text-indigo-600"
+            >
+              <span>Company Dashboard</span>
               <ArrowRight className="h-3.5 w-3.5" />
             </Link>
           )}
@@ -1130,7 +1205,136 @@ export default function ChatPage() {
         </form>
       </footer>
 
-      {/* Consent Sheet / Modal */}
+      {/* My List Slide-Over Drawer */}
+      {isMyListOpen && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/40 backdrop-blur-2xs">
+          <div className="w-full max-w-md bg-white shadow-2xl flex flex-col h-full animate-in slide-in-from-right duration-200">
+            {/* Drawer Header */}
+            <div className="flex items-center justify-between border-b border-slate-200 p-4">
+              <div className="flex items-center gap-2">
+                <Bookmark className="h-4 w-4 text-indigo-600" />
+                <h3 className="font-bold text-slate-900 text-sm">
+                  My Saved Contacts
+                </h3>
+                <span className="rounded-full bg-indigo-100 px-2 py-0.2 text-[10px] font-bold text-indigo-700">
+                  {myListContacts.length}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsMyListOpen(false)}
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Drawer Body */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {myListLoading ? (
+                <div className="flex h-36 items-center justify-center">
+                  <Loader2 className="h-5 w-5 animate-spin text-indigo-600" />
+                </div>
+              ) : myListContacts.length === 0 ? (
+                <div className="py-12 text-center text-xs text-slate-500">
+                  <Bookmark className="mx-auto h-8 w-8 text-slate-300 mb-2" />
+                  <p className="font-semibold text-slate-700">
+                    No saved contacts
+                  </p>
+                  <p className="mt-1">
+                    Ask the assistant for candidates or recruiters, then click
+                    &ldquo;Save to my list&rdquo;.
+                  </p>
+                </div>
+              ) : (
+                myListContacts.map((contact) => (
+                  <div
+                    key={contact.id}
+                    className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 space-y-2 shadow-2xs"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <h4 className="font-bold text-slate-900 text-xs">
+                          {contact.name}
+                        </h4>
+                        <p className="text-[11px] text-slate-600">
+                          {contact.title || "Talent Partner"}{" "}
+                          {contact.company_name
+                            ? `• ${contact.company_name}`
+                            : ""}
+                        </p>
+                        {contact.location && (
+                          <p className="text-[10px] text-slate-400 mt-0.5">
+                            📍 {contact.location}
+                          </p>
+                        )}
+                      </div>
+
+                      <span
+                        className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[9px] font-medium border ${
+                          contact.unverified !== false
+                            ? "bg-amber-50 text-amber-800 border-amber-200"
+                            : "bg-emerald-50 text-emerald-800 border-emerald-200"
+                        }`}
+                      >
+                        {contact.unverified !== false
+                          ? "Unverified"
+                          : "Verified"}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-200/60">
+                      {contact.source_url ? (
+                        <a
+                          href={contact.source_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-[11px] text-indigo-600 hover:underline"
+                        >
+                          <span>Source</span>
+                          <ExternalLink className="h-2.5 w-2.5" />
+                        </a>
+                      ) : (
+                        <span className="text-[10px] text-slate-400 font-mono">
+                          Saved contact
+                        </span>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedMyListContact(contact);
+                          setIsDraftModalOpen(true);
+                        }}
+                        className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-indigo-700 transition"
+                      >
+                        <Mail className="h-3 w-3" />
+                        <span>Draft Outreach</span>
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Draft Letter Modal */}
+      {selectedMyListContact && (
+        <DraftLetterModal
+          isOpen={isDraftModalOpen}
+          onClose={() => {
+            setIsDraftModalOpen(false);
+            setSelectedMyListContact(null);
+          }}
+          recipientName={selectedMyListContact.name}
+          recipientRole={selectedMyListContact.title || "Contact"}
+          recipientEmail={selectedMyListContact.email}
+          defaultKind="invitation"
+          onGenerateDraft={handleGenerateLetter}
+        />
+      )}
       {isConsentOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
           <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl border border-slate-100 p-6 animate-in fade-in zoom-in-95">

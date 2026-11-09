@@ -99,6 +99,7 @@ def create_outreach_draft(
     contact_id: str,
     channel: str = "email",
     sender_context: Optional[str] = None,
+    kind: str = "outreach",
     llm_provider: Optional[LLMProvider] = None,
 ) -> Dict[str, Any]:
     """
@@ -118,9 +119,48 @@ def create_outreach_draft(
     contact["company_name"] = company_name
 
     # 2. Generate content
-    draft_content = generate_outreach_text(contact, channel, sender_context, user, llm_provider=llm_provider)
-    subject = draft_content["subject"]
-    body = draft_content["body"] or ""
+    if kind == "invitation":
+        c_name = contact.get("name") or "Campus Partner"
+        c_company = contact.get("company_name") or "Your Organization"
+        sender_name = user.display_name or "Training & Placement Officer"
+        subject = "Campus Placement Drive Invitation — Mumbai Batches 2027/2028"
+        body = (
+            f"Dear {c_name},\n\n"
+            f"Greetings from the Placement Office. On behalf of our institution, we cordially invite {c_company} "
+            f"to participate in our campus placement and internship drive for students graduating in 2027 and 2028.\n\n"
+            f"Our students have completed rigorous coursework in engineering, computer science, and data disciplines. "
+            f"We would be delighted to host your recruitment team for pre-placement talks and assessments.\n\n"
+            f"Please let us know your preferred recruitment slots.\n\n"
+            f"Warm regards,\n"
+            f"{sender_name}\n"
+            f"Training & Placement Cell"
+        )
+    elif kind == "interview":
+        c_name = contact.get("name") or "Candidate"
+        subject = "Invitation to Interview — Campus Recruitment Drive"
+        body = (
+            f"Dear {c_name},\n\n"
+            f"Thank you for your interest in our early careers opportunities. We are pleased to invite you "
+            f"for an interview with our technical panel.\n\n"
+            f"Please prepare your project walkthroughs and academic portfolio.\n\n"
+            f"Best regards,\n"
+            f"{user.display_name or 'Campus Hiring Team'}"
+        )
+    elif kind == "offer":
+        c_name = contact.get("name") or "Candidate"
+        subject = "Letter of Intent / Campus Offer"
+        body = (
+            f"Dear {c_name},\n\n"
+            f"Following your successful completion of our selection process, we are delighted to extend "
+            f"this offer of employment / internship.\n\n"
+            f"We look forward to welcoming you to our team.\n\n"
+            f"Sincerely,\n"
+            f"{user.display_name or 'Human Resources'}"
+        )
+    else:
+        draft_content = generate_outreach_text(contact, channel, sender_context, user, llm_provider=llm_provider)
+        subject = draft_content["subject"]
+        body = draft_content["body"] or ""
 
     # 3. Store private draft in outreach_drafts
     draft_id = str(uuid.uuid4())
@@ -131,6 +171,7 @@ def create_outreach_draft(
         "channel": channel,
         "subject": subject,
         "body": body,
+        "kind": kind,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -138,11 +179,12 @@ def create_outreach_draft(
     if ins.data and len(ins.data) > 0:
         draft_id = str(ins.data[0].get("id", draft_id))
 
-    logger.info(f"Created outreach draft {draft_id} for user {user.id} (channel={channel})")
+    logger.info(f"Created {kind} draft {draft_id} for user {user.id} (channel={channel})")
 
     return {
         "draft_id": draft_id,
         "subject": subject,
         "body": body,
         "channel": channel,
+        "kind": kind,
     }

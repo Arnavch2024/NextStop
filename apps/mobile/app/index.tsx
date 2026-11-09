@@ -1,14 +1,33 @@
 import { useEffect } from "react";
 import { View, ActivityIndicator, StyleSheet } from "react-native";
 import { useRouter } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getMobileSupabaseClient } from "../lib/supabase";
 
 export default function IndexScreen() {
   const router = useRouter();
 
   useEffect(() => {
-    const supabase = getMobileSupabaseClient();
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    async function checkAuth() {
+      const demoRaw = await AsyncStorage.getItem("demo_session");
+      if (demoRaw) {
+        try {
+          const demo = JSON.parse(demoRaw);
+          if (demo.user?.role === "student") {
+            router.replace("/(tabs)/home");
+          } else {
+            router.replace("/chat");
+          }
+          return;
+        } catch {
+          // ignore corrupted demo session
+        }
+      }
+
+      const supabase = getMobileSupabaseClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (!session) {
         router.replace("/login");
         return;
@@ -22,10 +41,14 @@ export default function IndexScreen() {
 
       if (!profile || !profile.role) {
         router.replace("/onboarding");
+      } else if (profile.role === "student") {
+        router.replace("/(tabs)/home");
       } else {
         router.replace("/chat");
       }
-    });
+    }
+
+    checkAuth();
   }, [router]);
 
   return (

@@ -14,6 +14,7 @@ import {
   Alert,
 } from "react-native";
 import { useRouter } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Audio } from "expo-av";
 import * as DocumentPicker from "expo-document-picker";
 import { getMobileSupabaseClient, API_BASE_URL } from "../lib/supabase";
@@ -79,7 +80,24 @@ export default function ChatScreen() {
 
   // 1. Authenticate & fetch user profile
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    async function initAuth() {
+      const demoRaw = await AsyncStorage.getItem("demo_session");
+      if (demoRaw) {
+        try {
+          const demo = JSON.parse(demoRaw);
+          setSessionToken(demo.access_token);
+          setUserId(demo.user.id);
+          setRole(demo.user.role);
+          setDisplayName(demo.user.display_name || "Demo User");
+          return;
+        } catch (err) {
+          console.warn("Failed to parse demo session", err);
+        }
+      }
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (!session) {
         router.replace("/login");
         return;
@@ -122,7 +140,8 @@ export default function ChatScreen() {
           }))
         );
       }
-    });
+    }
+    initAuth();
   }, [router, supabase]);
 
   // 2. Supabase Realtime Subscription for cross-device sync
@@ -481,6 +500,7 @@ export default function ChatScreen() {
   }
 
   async function handleSignOut() {
+    await AsyncStorage.removeItem("demo_session");
     await supabase.auth.signOut();
     router.replace("/login");
   }

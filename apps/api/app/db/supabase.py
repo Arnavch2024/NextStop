@@ -38,6 +38,10 @@ def get_user_profile(user_id: str, client: Optional[Client] = None) -> UserProfi
                 id=str(row["id"]),
                 role=role,
                 display_name=row.get("display_name"),
+                email=row.get("email"),
+                college_id=str(row["college_id"]) if row.get("college_id") else None,
+                company_id=str(row["company_id"]) if row.get("company_id") else None,
+                is_demo=bool(row.get("is_demo", False)),
                 created_at=row.get("created_at"),
                 updated_at=row.get("updated_at"),
             )

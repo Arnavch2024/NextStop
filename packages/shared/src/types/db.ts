@@ -11,6 +11,9 @@ export interface Profile {
   id: string;
   role: ProfileRole | null;
   display_name: string | null;
+  college_id?: string | null;
+  company_id?: string | null;
+  is_demo?: boolean;
   created_at: string;
   updated_at: string;
 }
