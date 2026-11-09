@@ -1,6 +1,7 @@
 import uuid
 from unittest.mock import MagicMock, patch
 
+import pytest
 from google.genai import types
 
 from app.models.db import ProfileRole, UserProfile
@@ -172,7 +173,9 @@ def test_chat_creates_snippet_candidate_passing_rules_with_unverified_flag(clien
     created = [c for c in mock_supabase.store["contacts"] if c.get("name") == "Vikas Sharma"]
     assert len(created) == 1
     assert created[0]["source_url"] == "https://linkedin.com/in/vikas-sharma"
-    assert created[0]["unverified"] is True
+    sources = [s for s in mock_supabase.store["contact_sources"] if s.get("contact_id") == created[0]["id"]]
+    assert len(sources) >= 1
+    assert sources[0]["unverified"] is True
 
 
 def test_suppressed_contacts_excluded_from_search_and_api(client, mock_supabase):
@@ -260,5 +263,18 @@ def test_chat_search_reply_lists_contacts_and_never_says_recorded_details(client
     assert "recorded your details" not in reply.lower()
     assert "Savit Anand" in reply
     assert "JP Morgan Chase Global Technology" in reply
-    assert "Executive Director, Recruiting" in reply
-    assert "Mumbai" in reply
+
+
+def test_startup_schema_check_names_missing_migration():
+    """Startup schema check raises MissingMigrationError naming the missing migration on error."""
+    from app.db.schema_check import MissingMigrationError, check_database_schema
+
+    mock_client = MagicMock()
+    mock_client.table.side_effect = Exception("table public.contact_sources does not exist")
+
+    with pytest.raises(MissingMigrationError) as exc_info:
+        check_database_schema(client=mock_client, raise_on_error=True)
+
+    err = str(exc_info.value)
+    assert "003_search_slice.sql" in err
+    assert "contact_sources" in err

@@ -217,7 +217,12 @@ def list_contacts(
                     if c.get("confidence") is not None
                     else (c_sources[0].confidence if c_sources else 0.6)
                 ),
-                unverified=bool(c.get("unverified", False)),
+                unverified=(
+                    bool(c.get("unverified"))
+                    or (c.get("source") == "web" and float(c.get("confidence", 1.0) or 1.0) <= 0.6)
+                    or (c.get("source") == "user_said")
+                    or False
+                ),
                 saved=c.get("saved", False),
                 is_sample=is_sample_val,
                 sources=c_sources,

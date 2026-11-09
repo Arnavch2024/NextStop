@@ -250,7 +250,6 @@ def upsert_contact(
                 else:
                     conf = min(conf, 0.6)
             update_fields["confidence"] = conf
-            update_fields["unverified"] = is_unverified
 
         elif source == "user_said":
             # user_said fills empty fields only, never overwrites
@@ -277,20 +276,7 @@ def upsert_contact(
                 conflicts["phone"] = phone_override
 
         if update_fields:
-            try:
-                client.table("contacts").update(update_fields).eq("id", contact_id).execute()
-            except Exception:
-                compat_updates = {}
-                for k, v in update_fields.items():
-                    if k == "name":
-                        compat_updates["full_name"] = v
-                    elif k in ("title", "email", "company_id"):
-                        compat_updates[k] = v
-                if compat_updates:
-                    try:
-                        client.table("contacts").update(compat_updates).eq("id", contact_id).execute()
-                    except Exception as e_up:
-                        logger.warning(f"Could not update contact compatibly: {e_up}")
+            client.table("contacts").update(update_fields).eq("id", contact_id).execute()
 
         # Handle user_said conflicts: store in user's private user_saved_contacts
         if (conflicts or phone_override) and source == "user_said":
@@ -356,30 +342,13 @@ def upsert_contact(
             "source": source,
             "source_url": source_url or data.get("source_url"),
             "confidence": conf,
-            "unverified": is_single_unverified,
             "created_by_profile_id": user_id if user_id and user_id != "00000000-0000-0000-0000-000000000000" else None,
             "first_seen_at": now_iso,
             "last_verified_at": now_iso if source == "web" else None,
         }
-        try:
-            ins = client.table("contacts").insert(new_row).execute()
-            if ins.data and len(ins.data) > 0:
-                contact_id = str(ins.data[0].get("id", contact_id))
-        except Exception:
-            # If the database has the legacy unique index (company_id, lower(coalesce(email,''))),
-            # contacts without emails would collide on (company_id, ''). Use a unique placeholder.
-            compat_email = email or f"{contact_id}@unverified.placeholder"
-            compat_row = {
-                "id": contact_id,
-                "full_name": name,
-                "title": title,
-                "company_id": company_id,
-                "email": compat_email,
-                "owner_id": None,
-            }
-            ins = client.table("contacts").insert(compat_row).execute()
-            if ins.data and len(ins.data) > 0:
-                contact_id = str(ins.data[0].get("id", contact_id))
+        ins = client.table("contacts").insert(new_row).execute()
+        if ins.data and len(ins.data) > 0:
+            contact_id = str(ins.data[0].get("id", contact_id))
 
         if phone_override and source == "user_said":
             # Save user phone in private user_saved_contacts
@@ -419,14 +388,7 @@ def upsert_contact(
         if data.get("note") == "synthetic"
         else f"fetch_status={fetch_status};published_date={data.get('published_date')}",
     }
-    try:
-        client.table("contact_sources").insert(source_row).execute()
-    except Exception:
-        clean_row = {k: v for k, v in source_row.items() if k not in ("fetch_status", "published_date")}
-        try:
-            client.table("contact_sources").insert(clean_row).execute()
-        except Exception as e2:
-            logger.warning(f"Could not record contact_sources row: {e2}")
+    client.table("contact_sources").insert(source_row).execute()
 
     # Record metadata in raw_events for lakes with legacy/unmigrated schema
     meta_payload = {

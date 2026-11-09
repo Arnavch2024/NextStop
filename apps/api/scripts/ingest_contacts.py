@@ -21,6 +21,7 @@ api_root = Path(__file__).resolve().parent.parent
 if str(api_root) not in sys.path:
     sys.path.insert(0, str(api_root))
 
+from app.db.schema_check import check_database_schema  # noqa: E402
 from app.db.supabase import get_supabase_client  # noqa: E402
 from app.search.ingest import run_ingest  # noqa: E402
 
@@ -64,6 +65,12 @@ def main() -> int:
     print("--------------------------------------------------")
 
     client = get_supabase_client()
+    try:
+        check_database_schema(client=client, raise_on_error=True)
+    except Exception as exc:
+        print(f"\n[ERROR] Schema verification failed: {exc}")
+        return 1
+
     try:
         stats = run_ingest(
             client=client,

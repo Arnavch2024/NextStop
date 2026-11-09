@@ -211,7 +211,12 @@ def search_data_lake(
             enriched["confidence"] = (
                 float(contact.get("confidence", 0.6)) if contact.get("confidence") is not None else 0.6
             )
-            enriched["unverified"] = bool(contact.get("unverified", False))
+            enriched["unverified"] = (
+                bool(contact.get("unverified"))
+                or (contact.get("source") == "web" and float(enriched["confidence"]) <= 0.6)
+                or (contact.get("source") == "user_said")
+                or False
+            )
             matched_contacts.append(enriched)
 
     # Order: real contacts rank above sample ones; within real, Mumbai-stated and fresh contacts rank highest
