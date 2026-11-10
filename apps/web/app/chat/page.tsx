@@ -10,16 +10,17 @@ import {
   transcribeAudio,
   uploadResume,
   saveContact,
+  removeSavedContact,
   listContacts,
-  draftLetter,
   AgentStep,
   RecordRef,
   RawEvent,
   ResumeResponse,
   ContactCard,
-  LetterDraftResponse,
+  ApiError,
 } from "@recruiting/shared";
-import { DraftLetterModal } from "@/components/DraftLetterModal";
+import { ContactCardItem } from "@/app/components/ContactCardItem";
+import { DraftMessageModal } from "@/app/components/DraftMessageModal";
 import {
   Send,
   Mic,
@@ -43,6 +44,7 @@ import {
   Bookmark,
   ExternalLink,
   Mail,
+  ShieldCheck,
 } from "lucide-react";
 
 interface ChatItem {
@@ -64,6 +66,7 @@ export default function ChatPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState<string | null>(null);
+  const [isDemo, setIsDemo] = useState(false);
   const [messages, setMessages] = useState<ChatItem[]>([]);
   const [inputText, setInputText] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -85,17 +88,16 @@ export default function ChatPage() {
   // Cross-device sync toast state
   const [crossDeviceToast, setCrossDeviceToast] = useState<string | null>(null);
 
-  // Saved contacts state & My List drawer
+  // Saved contacts state
   const [savedContactIds, setSavedContactIds] = useState<
     Record<string, boolean>
   >({});
   const [savingContactId, setSavingContactId] = useState<string | null>(null);
-  const [isMyListOpen, setIsMyListOpen] = useState(false);
-  const [myListContacts, setMyListContacts] = useState<ContactCard[]>([]);
-  const [myListLoading, setMyListLoading] = useState(false);
-  const [selectedMyListContact, setSelectedMyListContact] =
-    useState<ContactCard | null>(null);
-  const [isDraftModalOpen, setIsDraftModalOpen] = useState(false);
+
+  // Outreach draft modal state
+  const [draftingContact, setDraftingContact] = useState<ContactCard | null>(
+    null
+  );
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -113,31 +115,6 @@ export default function ChatPage() {
     }, 4500);
   }
 
-  // Load My list contacts
-  async function loadMyList() {
-    if (!sessionToken) return;
-    setMyListLoading(true);
-    try {
-      const res = await listContacts(
-        API_BASE_URL,
-        { saved_only: true, page_size: 50 },
-        sessionToken
-      );
-      if (res && res.items) {
-        setMyListContacts(res.items);
-      }
-    } catch (err: any) {
-      console.error("Failed to load saved contacts:", err);
-    } finally {
-      setMyListLoading(false);
-    }
-  }
-
-  function handleOpenMyList() {
-    setIsMyListOpen(true);
-    loadMyList();
-  }
-
   // Save contact to user's list
   async function handleSaveContact(contactId: string) {
     if (!sessionToken || savingContactId) return;
@@ -146,12 +123,37 @@ export default function ChatPage() {
       await saveContact(API_BASE_URL, contactId, sessionToken);
       setSavedContactIds((prev) => ({ ...prev, [contactId]: true }));
       showToast("Contact saved to your list");
-      if (isMyListOpen) {
-        loadMyList();
-      }
     } catch (err: any) {
       console.error("Failed to save contact:", err);
-      showToast(err?.message || "Failed to save contact");
+      if (err instanceof ApiError && err.status === 429) {
+        showToast("Rate limit reached. Please wait a moment.");
+      } else {
+        showToast(err?.message || "Failed to save contact");
+      }
+    } finally {
+      setSavingContactId(null);
+    }
+  }
+
+  // Remove contact from user's list
+  async function handleRemoveContact(contactId: string) {
+    if (!sessionToken || savingContactId) return;
+    setSavingContactId(contactId);
+    try {
+      await removeSavedContact(API_BASE_URL, contactId, sessionToken);
+      setSavedContactIds((prev) => {
+        const next = { ...prev };
+        delete next[contactId];
+        return next;
+      });
+      showToast("Contact removed from your list");
+    } catch (err: any) {
+      console.error("Failed to remove contact:", err);
+      if (err instanceof ApiError && err.status === 429) {
+        showToast("Rate limit reached. Please wait a moment.");
+      } else {
+        showToast(err?.message || "Failed to remove contact");
+      }
     } finally {
       setSavingContactId(null);
     }
@@ -189,10 +191,25 @@ export default function ChatPage() {
       setRole(userSession.user.role);
       setDisplayName(userSession.user.displayName);
 
+      setIsDemo(Boolean(userSession.user.isDemo));
+
       // Load initial message history for non-demo users or if actor exists
       if (!userSession.user.isDemo) {
         loadInitialHistory(userSession.user.id);
       }
+
+      // Load initial saved contacts
+      listContacts(API_BASE_URL, userSession.token, { saved_only: true })
+        .then((res) => {
+          if (res?.items) {
+            const savedMap: Record<string, boolean> = {};
+            for (const c of res.items) {
+              savedMap[c.id] = true;
+            }
+            setSavedContactIds((prev) => ({ ...prev, ...savedMap }));
+          }
+        })
+        .catch(() => {});
     });
   }, [router, supabase]);
 
@@ -290,10 +307,44 @@ export default function ChatPage() {
       )
       .subscribe();
 
+    // D. Realtime updates of user saved contacts with the "updated from your phone" toast
+    const savedContactsChannel = supabase
+      .channel(`saved_contacts_sync_${userId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "user_saved_contacts",
+          filter: `profile_id=eq.${userId}`,
+        },
+        (payload) => {
+          if (payload.eventType === "INSERT") {
+            showToast("Saved contacts updated from your phone");
+            const cid = (payload.new as any)?.contact_id;
+            if (cid) {
+              setSavedContactIds((prev) => ({ ...prev, [cid]: true }));
+            }
+          } else if (payload.eventType === "DELETE") {
+            showToast("Contact removed from your list from your phone");
+            const cid = (payload.old as any)?.contact_id;
+            if (cid) {
+              setSavedContactIds((prev) => {
+                const next = { ...prev };
+                delete next[cid];
+                return next;
+              });
+            }
+          }
+        }
+      )
+      .subscribe();
+
     return () => {
       supabase.removeChannel(chatChannel);
       supabase.removeChannel(scoreChannel);
       supabase.removeChannel(profileChannel);
+      supabase.removeChannel(savedContactsChannel);
       if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
     };
   }, [userId, supabase]);
@@ -609,24 +660,6 @@ export default function ChatPage() {
     router.replace("/login");
   }
 
-  async function handleGenerateLetter(
-    kind: "invitation" | "interview" | "offer"
-  ): Promise<LetterDraftResponse> {
-    if (!sessionToken || !selectedMyListContact) {
-      throw new Error("Missing contact or session");
-    }
-    return await draftLetter(
-      API_BASE_URL,
-      {
-        kind,
-        contact_id: selectedMyListContact.id,
-        channel: "email",
-        sender_context: `${displayName}, ${role?.replace("_", " ")}`,
-      },
-      sessionToken
-    );
-  }
-
   function toggleSteps(id: string) {
     setExpandedSteps((prev) => ({ ...prev, [id]: !prev[id] }));
   }
@@ -689,14 +722,13 @@ export default function ChatPage() {
         </div>
 
         <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={handleOpenMyList}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition shadow-2xs"
+          <Link
+            href="/my-list"
+            className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 hover:text-indigo-600 shadow-2xs"
           >
             <Bookmark className="h-3.5 w-3.5 text-indigo-600" />
-            <span>My List</span>
-          </button>
+            <span>My list</span>
+          </Link>
 
           {role === "student" && (
             <Link
@@ -737,6 +769,22 @@ export default function ChatPage() {
           </button>
         </div>
       </header>
+
+      {/* Demo Session Notice */}
+      {isDemo && (
+        <div className="bg-amber-50 border-b border-amber-200 px-6 py-2 text-xs text-amber-800 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="inline-block w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+            <span>
+              <strong>Demo Mode:</strong> You are logged into an isolated demo
+              session.
+            </span>
+          </div>
+          <span className="text-[10px] text-amber-600 font-semibold uppercase tracking-wider">
+            Sandboxed
+          </span>
+        </div>
+      )}
 
       {/* Error Banners */}
       {(voiceError || resumeError) && (
@@ -903,163 +951,127 @@ export default function ChatPage() {
                   {/* Recruiter / Contact Cards */}
                   {item.contacts && item.contacts.length > 0 && (
                     <div className="mt-3 space-y-2.5">
-                      {item.contacts.map((contact) => {
-                        const isSaved =
-                          savedContactIds[contact.id] || contact.saved;
-                        const isSaving = savingContactId === contact.id;
-                        const isUnverified = contact.unverified !== false;
-
-                        return (
-                          <div
+                      {item.contacts
+                        .filter((contact) => {
+                          // Student record cards must render only for company and recruiter roles
+                          if (
+                            contact.role_type === "student" ||
+                            contact.title?.toLowerCase().includes("student") ||
+                            contact.title?.toLowerCase().includes("candidate")
+                          ) {
+                            return role === "company" || role === "recruiter";
+                          }
+                          return true;
+                        })
+                        .map((contact) => (
+                          <ContactCardItem
                             key={contact.id}
-                            className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-slate-800 shadow-xs"
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <div>
-                                <div className="font-semibold text-slate-900 text-sm">
-                                  {contact.name}
-                                </div>
-                                <div className="text-xs text-slate-600">
-                                  {contact.title || "Recruiter"}
-                                  {contact.company_name
-                                    ? ` at ${contact.company_name}`
-                                    : ""}
-                                </div>
-                                {contact.location && (
-                                  <div className="text-[11px] text-slate-500 mt-0.5">
-                                    📍 {contact.location}
-                                  </div>
-                                )}
-                              </div>
-                              <div>
-                                <span
-                                  className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-medium border ${
-                                    isUnverified
-                                      ? "bg-amber-50 text-amber-800 border-amber-200"
-                                      : "bg-emerald-50 text-emerald-800 border-emerald-200"
-                                  }`}
-                                >
-                                  {isUnverified
-                                    ? "Unverified, check the source"
-                                    : "Verified"}
-                                </span>
-                              </div>
-                            </div>
+                            contact={contact}
+                            isSaved={
+                              !!savedContactIds[contact.id] || !!contact.saved
+                            }
+                            isBusy={savingContactId === contact.id}
+                            onSave={handleSaveContact}
+                            onRemove={handleRemoveContact}
+                            onDraft={(c) => setDraftingContact(c)}
+                          />
+                        ))}
 
-                            <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/60 pt-2 text-xs">
-                              <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
-                                {contact.source_url && (
-                                  <a
-                                    href={contact.source_url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-800 underline"
-                                  >
-                                    Source <ExternalLink className="h-3 w-3" />
-                                  </a>
-                                )}
-                                {contact.source_published_date && (
-                                  <span>
-                                    As of:{" "}
-                                    {contact.source_published_date.slice(0, 10)}
-                                  </span>
-                                )}
-                              </div>
-
-                              <button
-                                type="button"
-                                onClick={() => handleSaveContact(contact.id)}
-                                disabled={isSaved || isSaving}
-                                className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition ${
-                                  isSaved
-                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-default"
-                                    : "bg-indigo-600 text-white hover:bg-indigo-700 shadow-xs disabled:opacity-50 cursor-pointer"
-                                }`}
-                              >
-                                {isSaved ? (
-                                  <>
-                                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                                    <span>Saved</span>
-                                  </>
-                                ) : isSaving ? (
-                                  <>
-                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                    <span>Saving...</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Bookmark className="h-3 w-3" />
-                                    <span>Save to my list</span>
-                                  </>
-                                )}
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {/* Agent Steps / Tool Calls Inspection Accordion */}
-                  {hasStepsOrRecords && (
-                    <div className="mt-3 border-t border-slate-100 pt-2 text-xs">
-                      <button
-                        type="button"
-                        onClick={() => toggleSteps(item.id)}
-                        className="flex w-full items-center justify-between text-indigo-600 hover:text-indigo-700"
-                      >
-                        <span className="flex items-center gap-1 font-semibold">
-                          <Database className="h-3.5 w-3.5" />
-                          <span>
-                            {item.records?.length
-                              ? `${item.records.length} record(s) synced`
-                              : `${item.steps?.length} agent step(s)`}
-                          </span>
+                      {/* Short Privacy Note on Results */}
+                      <div className="mt-2 flex items-start gap-1.5 rounded-lg border border-slate-200/80 bg-slate-50/70 p-2.5 text-[11px] text-slate-600">
+                        <ShieldCheck className="h-3.5 w-3.5 text-indigo-600 shrink-0 mt-0.5" />
+                        <span>
+                          Public professional contact info only. Source and date
+                          shown for every record. You can remove any saved
+                          contact from My list at any time.
                         </span>
-                        {isExpanded ? (
-                          <ChevronUp className="h-4 w-4" />
-                        ) : (
-                          <ChevronDown className="h-4 w-4" />
-                        )}
-                      </button>
-
-                      {isExpanded && (
-                        <div className="mt-2 space-y-2 rounded-lg bg-slate-50 p-2.5 font-mono text-[11px] text-slate-700">
-                          {item.records?.map((rec, i) => (
-                            <div
-                              key={i}
-                              className="flex items-center gap-1.5 text-emerald-600 font-sans"
-                            >
-                              <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-                              <span>
-                                {rec.op.toUpperCase()}:{" "}
-                                <strong className="font-semibold">
-                                  {rec.table}
-                                </strong>{" "}
-                                ({rec.id})
-                              </span>
-                            </div>
-                          ))}
-
-                          {item.steps?.map((step, idx) => (
-                            <div
-                              key={idx}
-                              className="border-t border-slate-200 pt-1.5"
-                            >
-                              <div className="font-semibold text-slate-600">
-                                [{step.type}] {step.tool || ""}
-                              </div>
-                              {step.input && (
-                                <pre className="mt-1 overflow-x-auto text-[10px] text-slate-600">
-                                  {JSON.stringify(step.input, null, 2)}
-                                </pre>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                      </div>
                     </div>
                   )}
+
+                  {/* Agent Activity / Step Log Expander */}
+                  {hasStepsOrRecords &&
+                    (() => {
+                      const searchSummaryStep = item.steps?.find(
+                        (s) => s.type === "search_summary" || s.summary
+                      );
+                      const summaryLine =
+                        searchSummaryStep?.summary ||
+                        (searchSummaryStep?.output as any)?.summary ||
+                        (item.records?.length
+                          ? `${item.records.length} record(s) synced • ${item.steps?.length || 0} step(s)`
+                          : `${item.steps?.length || 0} agent step(s) completed`);
+
+                      return (
+                        <div className="mt-3 border-t border-slate-100 pt-2 text-xs">
+                          <button
+                            type="button"
+                            onClick={() => toggleSteps(item.id)}
+                            className="flex w-full items-center justify-between text-indigo-600 hover:text-indigo-700 font-medium py-1"
+                          >
+                            <span className="flex items-center gap-1.5 font-semibold text-slate-700">
+                              <Database className="h-3.5 w-3.5 text-indigo-600" />
+                              <span>Agent activity</span>
+                              <span className="font-normal text-slate-500 text-[11px] truncate max-w-[280px] sm:max-w-md">
+                                — {summaryLine}
+                              </span>
+                            </span>
+                            {isExpanded ? (
+                              <ChevronUp className="h-4 w-4 shrink-0 text-slate-400" />
+                            ) : (
+                              <ChevronDown className="h-4 w-4 shrink-0 text-slate-400" />
+                            )}
+                          </button>
+
+                          {isExpanded && (
+                            <div className="mt-2 space-y-2 rounded-lg bg-slate-50 p-2.5 font-mono text-[11px] text-slate-700">
+                              {item.records?.map((rec, i) => (
+                                <div
+                                  key={i}
+                                  className="flex items-center gap-1.5 text-emerald-600 font-sans"
+                                >
+                                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                                  <span>
+                                    {rec.op.toUpperCase()}:{" "}
+                                    <strong className="font-semibold">
+                                      {rec.table}
+                                    </strong>{" "}
+                                    ({rec.id})
+                                  </span>
+                                </div>
+                              ))}
+
+                              {item.steps?.map((step, idx) => (
+                                <div
+                                  key={idx}
+                                  className="border-t border-slate-200 pt-1.5"
+                                >
+                                  <div className="font-semibold text-slate-600">
+                                    [{step.type}] {step.tool || ""}
+                                  </div>
+                                  {step.summary && (
+                                    <div className="mt-1 text-slate-700 font-sans text-xs">
+                                      Summary: {step.summary}
+                                    </div>
+                                  )}
+                                  {step.input && (
+                                    <pre className="mt-1 overflow-x-auto text-[10px] text-slate-600">
+                                      {JSON.stringify(step.input, null, 2)}
+                                    </pre>
+                                  )}
+                                  {step.output &&
+                                    step.type !== "search_summary" && (
+                                      <pre className="mt-1 overflow-x-auto text-[10px] text-slate-500">
+                                        {JSON.stringify(step.output, null, 2)}
+                                      </pre>
+                                    )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                 </div>
 
                 {isUser && (
@@ -1205,136 +1217,6 @@ export default function ChatPage() {
         </form>
       </footer>
 
-      {/* My List Slide-Over Drawer */}
-      {isMyListOpen && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/40 backdrop-blur-2xs">
-          <div className="w-full max-w-md bg-white shadow-2xl flex flex-col h-full animate-in slide-in-from-right duration-200">
-            {/* Drawer Header */}
-            <div className="flex items-center justify-between border-b border-slate-200 p-4">
-              <div className="flex items-center gap-2">
-                <Bookmark className="h-4 w-4 text-indigo-600" />
-                <h3 className="font-bold text-slate-900 text-sm">
-                  My Saved Contacts
-                </h3>
-                <span className="rounded-full bg-indigo-100 px-2 py-0.2 text-[10px] font-bold text-indigo-700">
-                  {myListContacts.length}
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsMyListOpen(false)}
-                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            {/* Drawer Body */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {myListLoading ? (
-                <div className="flex h-36 items-center justify-center">
-                  <Loader2 className="h-5 w-5 animate-spin text-indigo-600" />
-                </div>
-              ) : myListContacts.length === 0 ? (
-                <div className="py-12 text-center text-xs text-slate-500">
-                  <Bookmark className="mx-auto h-8 w-8 text-slate-300 mb-2" />
-                  <p className="font-semibold text-slate-700">
-                    No saved contacts
-                  </p>
-                  <p className="mt-1">
-                    Ask the assistant for candidates or recruiters, then click
-                    &ldquo;Save to my list&rdquo;.
-                  </p>
-                </div>
-              ) : (
-                myListContacts.map((contact) => (
-                  <div
-                    key={contact.id}
-                    className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 space-y-2 shadow-2xs"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <h4 className="font-bold text-slate-900 text-xs">
-                          {contact.name}
-                        </h4>
-                        <p className="text-[11px] text-slate-600">
-                          {contact.title || "Talent Partner"}{" "}
-                          {contact.company_name
-                            ? `• ${contact.company_name}`
-                            : ""}
-                        </p>
-                        {contact.location && (
-                          <p className="text-[10px] text-slate-400 mt-0.5">
-                            📍 {contact.location}
-                          </p>
-                        )}
-                      </div>
-
-                      <span
-                        className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[9px] font-medium border ${
-                          contact.unverified !== false
-                            ? "bg-amber-50 text-amber-800 border-amber-200"
-                            : "bg-emerald-50 text-emerald-800 border-emerald-200"
-                        }`}
-                      >
-                        {contact.unverified !== false
-                          ? "Unverified"
-                          : "Verified"}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center justify-between pt-2 border-t border-slate-200/60">
-                      {contact.source_url ? (
-                        <a
-                          href={contact.source_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-[11px] text-indigo-600 hover:underline"
-                        >
-                          <span>Source</span>
-                          <ExternalLink className="h-2.5 w-2.5" />
-                        </a>
-                      ) : (
-                        <span className="text-[10px] text-slate-400 font-mono">
-                          Saved contact
-                        </span>
-                      )}
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedMyListContact(contact);
-                          setIsDraftModalOpen(true);
-                        }}
-                        className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-indigo-700 transition"
-                      >
-                        <Mail className="h-3 w-3" />
-                        <span>Draft Outreach</span>
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Draft Letter Modal */}
-      {selectedMyListContact && (
-        <DraftLetterModal
-          isOpen={isDraftModalOpen}
-          onClose={() => {
-            setIsDraftModalOpen(false);
-            setSelectedMyListContact(null);
-          }}
-          recipientName={selectedMyListContact.name}
-          recipientRole={selectedMyListContact.title || "Contact"}
-          recipientEmail={selectedMyListContact.email}
-          defaultKind="invitation"
-          onGenerateDraft={handleGenerateLetter}
-        />
-      )}
       {isConsentOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
           <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl border border-slate-100 p-6 animate-in fade-in zoom-in-95">
@@ -1383,6 +1265,15 @@ export default function ChatPage() {
           </div>
         </div>
       )}
+
+      {/* Outreach Draft Sheet Modal */}
+      <DraftMessageModal
+        isOpen={!!draftingContact}
+        onClose={() => setDraftingContact(null)}
+        contact={draftingContact}
+        token={sessionToken}
+        onToast={showToast}
+      />
     </div>
   );
 }

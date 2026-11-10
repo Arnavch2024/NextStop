@@ -22,11 +22,18 @@ import {
   chat,
   transcribeAudio,
   uploadResume,
+  saveContact,
+  removeSavedContact,
+  listContacts,
   AgentStep,
   RecordRef,
   RawEvent,
   ResumeResponse,
+  ContactCard,
+  ApiError,
 } from "@recruiting/shared";
+import { MobileContactCard } from "./components/MobileContactCard";
+import { DraftMessageSheet } from "./components/DraftMessageSheet";
 
 interface ChatMessage {
   id: string;
@@ -34,6 +41,7 @@ interface ChatMessage {
   text: string;
   steps?: AgentStep[];
   records?: RecordRef[];
+  contacts?: ContactCard[];
   resumeSummary?: ResumeResponse;
   timestamp: string;
 }
@@ -63,6 +71,17 @@ export default function ChatScreen() {
   const [isUploadingResume, setIsUploadingResume] = useState(false);
   const [resumeError, setResumeError] = useState<string | null>(null);
 
+  // Saved contacts state
+  const [savedContactIds, setSavedContactIds] = useState<
+    Record<string, boolean>
+  >({});
+  const [savingContactId, setSavingContactId] = useState<string | null>(null);
+
+  // Draft outreach modal state
+  const [draftingContact, setDraftingContact] = useState<ContactCard | null>(
+    null
+  );
+
   // Realtime cross-device toast
   const [crossDeviceToast, setCrossDeviceToast] = useState<string | null>(null);
 
@@ -78,6 +97,48 @@ export default function ChatScreen() {
     }, 4500);
   }
 
+  // Save contact to user's list
+  async function handleSaveContact(contactId: string) {
+    if (!sessionToken || savingContactId) return;
+    setSavingContactId(contactId);
+    try {
+      await saveContact(API_BASE_URL, contactId, sessionToken);
+      setSavedContactIds((prev) => ({ ...prev, [contactId]: true }));
+      showToast("Contact saved to your list");
+    } catch (err: any) {
+      if (err instanceof ApiError && err.status === 429) {
+        showToast("Rate limit reached. Please wait a moment.");
+      } else {
+        showToast(err?.message || "Failed to save contact");
+      }
+    } finally {
+      setSavingContactId(null);
+    }
+  }
+
+  // Remove contact from user's list
+  async function handleRemoveContact(contactId: string) {
+    if (!sessionToken || savingContactId) return;
+    setSavingContactId(contactId);
+    try {
+      await removeSavedContact(API_BASE_URL, contactId, sessionToken);
+      setSavedContactIds((prev) => {
+        const next = { ...prev };
+        delete next[contactId];
+        return next;
+      });
+      showToast("Contact removed from your list");
+    } catch (err: any) {
+      if (err instanceof ApiError && err.status === 429) {
+        showToast("Rate limit reached. Please wait a moment.");
+      } else {
+        showToast(err?.message || "Failed to remove contact");
+      }
+    } finally {
+      setSavingContactId(null);
+    }
+  }
+
   // 1. Authenticate & fetch user profile
   useEffect(() => {
     async function initAuth() {
@@ -89,6 +150,18 @@ export default function ChatScreen() {
           setUserId(demo.user.id);
           setRole(demo.user.role);
           setDisplayName(demo.user.display_name || "Demo User");
+          // Load initial saved contacts for demo session
+          listContacts(API_BASE_URL, demo.access_token, { saved_only: true })
+            .then((res) => {
+              if (res?.items) {
+                const savedMap: Record<string, boolean> = {};
+                for (const c of res.items) {
+                  savedMap[c.id] = true;
+                }
+                setSavedContactIds((prev) => ({ ...prev, ...savedMap }));
+              }
+            })
+            .catch(() => {});
           return;
         } catch (err) {
           console.warn("Failed to parse demo session", err);
@@ -140,6 +213,19 @@ export default function ChatScreen() {
           }))
         );
       }
+
+      // Load initial saved contacts
+      listContacts(API_BASE_URL, session.access_token, { saved_only: true })
+        .then((res) => {
+          if (res?.items) {
+            const savedMap: Record<string, boolean> = {};
+            for (const c of res.items) {
+              savedMap[c.id] = true;
+            }
+            setSavedContactIds((prev) => ({ ...prev, ...savedMap }));
+          }
+        })
+        .catch(() => {});
     }
     initAuth();
   }, [router, supabase]);
@@ -239,10 +325,44 @@ export default function ChatScreen() {
       )
       .subscribe();
 
+    // Saved contacts sync -> "Updated from your laptop"
+    const savedContactsChannel = supabase
+      .channel(`mobile_saved_contacts_${userId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "user_saved_contacts",
+          filter: `profile_id=eq.${userId}`,
+        },
+        (payload) => {
+          if (payload.eventType === "INSERT") {
+            showToast("Saved contacts updated from your laptop");
+            const cid = (payload.new as any)?.contact_id;
+            if (cid) {
+              setSavedContactIds((prev) => ({ ...prev, [cid]: true }));
+            }
+          } else if (payload.eventType === "DELETE") {
+            showToast("Contact removed from your list from your laptop");
+            const cid = (payload.old as any)?.contact_id;
+            if (cid) {
+              setSavedContactIds((prev) => {
+                const next = { ...prev };
+                delete next[cid];
+                return next;
+              });
+            }
+          }
+        }
+      )
+      .subscribe();
+
     return () => {
       supabase.removeChannel(chatChannel);
       supabase.removeChannel(scoreChannel);
       supabase.removeChannel(profileChannel);
+      supabase.removeChannel(savedContactsChannel);
       if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
     };
   }, [userId, supabase]);
@@ -289,6 +409,7 @@ export default function ChatScreen() {
           text: response.reply,
           steps: response.steps,
           records: response.records_created,
+          contacts: response.contacts,
           timestamp: new Date().toISOString(),
         },
       ]);
@@ -558,6 +679,12 @@ export default function ChatScreen() {
             </Text>
           </View>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <TouchableOpacity
+              onPress={() => router.push("/my-list")}
+              style={styles.myListHeaderBtn}
+            >
+              <Text style={styles.myListHeaderText}>🔖 My List</Text>
+            </TouchableOpacity>
             {role === "student" && (
               <TouchableOpacity
                 onPress={() => router.push("/(tabs)/home")}
@@ -687,32 +814,103 @@ export default function ChatScreen() {
                     </View>
                   )}
 
-                  {/* Agent Steps */}
-                  {hasStepsOrRecords && (
-                    <View style={styles.stepsContainer}>
-                      <TouchableOpacity
-                        onPress={() =>
-                          setExpandedId(isExpanded ? null : item.id)
-                        }
-                      >
-                        <Text style={styles.stepsToggle}>
-                          {item.records?.length
-                            ? `✓ ${item.records.length} record(s) synced [Tap to view]`
-                            : `⚙ ${item.steps?.length} agent step(s) [Tap to view]`}
-                        </Text>
-                      </TouchableOpacity>
+                  {/* Contact Cards */}
+                  {item.contacts && item.contacts.length > 0 && (
+                    <View style={styles.contactsContainer}>
+                      {item.contacts
+                        .filter((contact: ContactCard) => {
+                          // Student record cards must render only for company and recruiter roles
+                          if (
+                            contact.role_type === "student" ||
+                            contact.title?.toLowerCase().includes("student") ||
+                            contact.title?.toLowerCase().includes("candidate")
+                          ) {
+                            return role === "company" || role === "recruiter";
+                          }
+                          return true;
+                        })
+                        .map((contact: ContactCard) => (
+                          <MobileContactCard
+                            key={contact.id}
+                            contact={contact}
+                            isSaved={
+                              !!savedContactIds[contact.id] || !!contact.saved
+                            }
+                            isBusy={savingContactId === contact.id}
+                            onSave={handleSaveContact}
+                            onRemove={handleRemoveContact}
+                            onDraft={(c: ContactCard) => setDraftingContact(c)}
+                          />
+                        ))}
 
-                      {isExpanded && (
-                        <View style={styles.stepsDetails}>
-                          {item.records?.map((rec: RecordRef, i: number) => (
-                            <Text key={i} style={styles.recText}>
-                              ✓ {rec.op.toUpperCase()}: {rec.table}
-                            </Text>
-                          ))}
-                        </View>
-                      )}
+                      {/* Short Privacy Note on Results */}
+                      <View style={styles.privacyNoteBox}>
+                        <Text style={styles.privacyNoteText}>
+                          🛡 Public professional contact info only. Source and
+                          date shown for every record. You can remove any saved
+                          contact from My list at any time.
+                        </Text>
+                      </View>
                     </View>
                   )}
+
+                  {/* Agent Activity Expander */}
+                  {hasStepsOrRecords &&
+                    (() => {
+                      const searchSummaryStep = item.steps?.find(
+                        (s: AgentStep) =>
+                          s.type === "search_summary" || s.summary
+                      );
+                      const summaryLine =
+                        searchSummaryStep?.summary ||
+                        (searchSummaryStep?.output as any)?.summary ||
+                        (item.records?.length
+                          ? `${item.records.length} record(s) synced • ${item.steps?.length || 0} step(s)`
+                          : `${item.steps?.length || 0} agent step(s) completed`);
+
+                      return (
+                        <View style={styles.stepsContainer}>
+                          <TouchableOpacity
+                            onPress={() =>
+                              setExpandedId(isExpanded ? null : item.id)
+                            }
+                            style={styles.stepsToggleBtn}
+                          >
+                            <Text style={styles.stepsToggle}>
+                              {isExpanded ? "▾ " : "▸ "}Agent activity —{" "}
+                              {summaryLine}
+                            </Text>
+                          </TouchableOpacity>
+
+                          {isExpanded && (
+                            <View style={styles.stepsDetails}>
+                              {item.records?.map(
+                                (rec: RecordRef, i: number) => (
+                                  <Text key={i} style={styles.recText}>
+                                    ✓ {rec.op.toUpperCase()}: {rec.table} (
+                                    {rec.id})
+                                  </Text>
+                                )
+                              )}
+                              {item.steps?.map(
+                                (step: AgentStep, idx: number) => (
+                                  <View key={idx} style={styles.stepItem}>
+                                    <Text style={styles.stepItemHeader}>
+                                      [{step.type}] {step.tool || ""}
+                                    </Text>
+                                    {step.summary && (
+                                      <Text style={styles.stepItemSummary}>
+                                        {step.summary}
+                                      </Text>
+                                    )}
+                                  </View>
+                                )
+                              )}
+                            </View>
+                          )}
+                        </View>
+                      );
+                    })()}
                 </View>
               </View>
             );
@@ -858,6 +1056,14 @@ export default function ChatScreen() {
             </View>
           </View>
         </Modal>
+        {/* Outreach Draft Message Sheet Modal */}
+        <DraftMessageSheet
+          visible={!!draftingContact}
+          onClose={() => setDraftingContact(null)}
+          contact={draftingContact}
+          token={sessionToken}
+          showToast={showToast}
+        />
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -967,6 +1173,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#4f46e5",
     fontWeight: "600",
+  },
+  myListHeaderBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#c7d2fe",
+    backgroundColor: "#eef2ff",
+  },
+  myListHeaderText: {
+    fontSize: 12,
+    color: "#4338ca",
+    fontWeight: "700",
   },
   signOutBtn: {
     paddingHorizontal: 10,
@@ -1154,11 +1373,30 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
   },
+  contactsContainer: {
+    marginTop: 8,
+  },
+  privacyNoteBox: {
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 8,
+    padding: 8,
+    marginTop: 6,
+  },
+  privacyNoteText: {
+    fontSize: 10,
+    color: "#64748b",
+    lineHeight: 14,
+  },
   stepsContainer: {
     marginTop: 8,
     borderTopWidth: 1,
     borderTopColor: "#f1f5f9",
     paddingTop: 6,
+  },
+  stepsToggleBtn: {
+    paddingVertical: 2,
   },
   stepsToggle: {
     fontSize: 11,
@@ -1175,6 +1413,23 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#059669",
     fontWeight: "500",
+    marginBottom: 2,
+  },
+  stepItem: {
+    borderTopWidth: 1,
+    borderTopColor: "#e2e8f0",
+    paddingTop: 4,
+    marginTop: 4,
+  },
+  stepItemHeader: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#475569",
+  },
+  stepItemSummary: {
+    fontSize: 10,
+    color: "#334155",
+    marginTop: 2,
   },
   typingIndicator: {
     flexDirection: "row",

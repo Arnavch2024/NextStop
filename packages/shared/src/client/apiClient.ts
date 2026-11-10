@@ -1,8 +1,11 @@
 import type {
+  AgentRunResponse,
   ChatRequest,
   ChatResponse,
   ContactListResponse,
   HealthResponse,
+  OutreachDraftRequest,
+  OutreachDraftResponse,
   ResumeResponse,
   SaveContactRequest,
   SaveResponse,
@@ -250,35 +253,115 @@ export async function saveContact(
 }
 
 /**
+ * Remove saved contact endpoint: DELETE /v1/contacts/{id}/save
+ */
+export async function removeSavedContact(
+  baseUrl: string,
+  contactId: string,
+  token: string
+): Promise<SaveResponse> {
+  const url = `${cleanBaseUrl(baseUrl)}/v1/contacts/${contactId}/save`;
+  const res = await fetch(url, {
+    method: "DELETE",
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!res.ok) {
+    const errorBody = await res.json().catch(() => ({}));
+    throw new ApiError(
+      res.status,
+      errorBody?.detail || "Failed to remove saved contact",
+      errorBody
+    );
+  }
+
+  return (await res.json()) as SaveResponse;
+}
+
+export interface ListContactsParams {
+  q?: string;
+  company_id?: string;
+  college_id?: string;
+  role_type?: string;
+  saved_only?: boolean;
+  include_sample?: boolean;
+  page?: number;
+  page_size?: number;
+}
+
+/**
  * List contacts endpoint: GET /v1/contacts
+ * Supports both (baseUrl, token, params) and (baseUrl, params, token) signatures
  */
 export async function listContacts(
   baseUrl: string,
-  params: {
-    q?: string;
-    company_id?: string;
-    college_id?: string;
-    role_type?: string;
-    saved_only?: boolean;
-    page?: number;
-    page_size?: number;
-  },
-  token: string
+  arg2: string | ListContactsParams,
+  arg3?: string | ListContactsParams
 ): Promise<ContactListResponse> {
-  const query = new URLSearchParams();
-  if (params.q) query.set("q", params.q);
-  if (params.company_id) query.set("company_id", params.company_id);
-  if (params.college_id) query.set("college_id", params.college_id);
-  if (params.role_type) query.set("role_type", params.role_type);
-  if (params.saved_only) query.set("saved_only", "true");
-  if (params.page) query.set("page", params.page.toString());
-  if (params.page_size) query.set("page_size", params.page_size.toString());
+  const token =
+    typeof arg2 === "string" ? arg2 : typeof arg3 === "string" ? arg3 : "";
+  const params =
+    typeof arg2 === "object"
+      ? arg2
+      : typeof arg3 === "object"
+        ? arg3
+        : undefined;
 
-  const url = `${cleanBaseUrl(baseUrl)}/v1/contacts?${query.toString()}`;
+  const cleanBase = cleanBaseUrl(baseUrl);
+  const searchParams = new URLSearchParams();
+
+  if (params) {
+    if (params.q !== undefined && params.q !== null && params.q !== "") {
+      searchParams.append("q", params.q);
+    }
+    if (params.company_id) {
+      searchParams.append("company_id", params.company_id);
+    }
+    if (params.college_id) {
+      searchParams.append("college_id", params.college_id);
+    }
+    if (params.role_type) {
+      searchParams.append("role_type", params.role_type);
+    }
+    if (params.saved_only !== undefined && params.saved_only !== null) {
+      searchParams.append("saved_only", String(params.saved_only));
+    }
+    if (params.include_sample !== undefined && params.include_sample !== null) {
+      searchParams.append("include_sample", String(params.include_sample));
+    }
+    if (params.page !== undefined && params.page !== null) {
+      searchParams.append("page", String(params.page));
+    }
+    if (params.page_size !== undefined && params.page_size !== null) {
+      searchParams.append("page_size", String(params.page_size));
+    }
+  }
+
+  const queryStr = searchParams.toString();
+  const url = queryStr
+    ? `${cleanBase}/v1/contacts?${queryStr}`
+    : `${cleanBase}/v1/contacts`;
+
+  const headers: Record<string, string> = { Accept: "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
   const res = await fetch(url, {
-    headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
+    method: "GET",
+    headers,
   });
-  if (!res.ok) throw new ApiError(res.status, "Failed to load contacts");
+
+  if (!res.ok) {
+    const errorBody = await res.json().catch(() => ({}));
+    throw new ApiError(
+      res.status,
+      errorBody?.detail || "Failed to fetch contacts",
+      errorBody
+    );
+  }
+
   return (await res.json()) as ContactListResponse;
 }
 
@@ -515,4 +598,64 @@ export async function draftLetter(
   });
   if (!res.ok) throw new ApiError(res.status, "Failed to draft letter");
   return await res.json();
+}
+
+/**
+ * Outreach draft endpoint: POST /v1/outreach/draft
+ */
+export async function draftOutreach(
+  baseUrl: string,
+  token: string,
+  body: OutreachDraftRequest
+): Promise<OutreachDraftResponse> {
+  const url = `${cleanBaseUrl(baseUrl)}/v1/outreach/draft`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const errorBody = await res.json().catch(() => ({}));
+    throw new ApiError(
+      res.status,
+      errorBody?.detail || "Failed to draft outreach message",
+      errorBody
+    );
+  }
+
+  return (await res.json()) as OutreachDraftResponse;
+}
+
+/**
+ * Agent run detail endpoint: GET /v1/agent-runs/{id}
+ */
+export async function getAgentRun(
+  baseUrl: string,
+  runId: string,
+  token: string
+): Promise<AgentRunResponse> {
+  const url = `${cleanBaseUrl(baseUrl)}/v1/agent-runs/${runId}`;
+  const res = await fetch(url, {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!res.ok) {
+    const errorBody = await res.json().catch(() => ({}));
+    throw new ApiError(
+      res.status,
+      errorBody?.detail || "Failed to fetch agent run",
+      errorBody
+    );
+  }
+
+  return (await res.json()) as AgentRunResponse;
 }

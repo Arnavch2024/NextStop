@@ -112,7 +112,7 @@ def test_batch_sharing_toggle_and_company_visibility(client, mock_supabase):
     assert share_res.status_code == 200
     assert share_res.json()["shared_with_recruiters"] is True
 
-    # 3. Company searches after batch shared -> returns Kavita Rao with minimal fields only (NO email)
+    # 3. Company & Recruiter search after batch shared -> returns Kavita Rao with minimal fields only (NO email, phone, aadhaar, documents)
     comp_res2 = client.get(
         "/v1/student-records",
         headers={"Authorization": "Bearer valid-token-company"},
@@ -122,8 +122,24 @@ def test_batch_sharing_toggle_and_company_visibility(client, mock_supabase):
     assert len(items) == 1
     card = items[0]
     assert card["full_name"] == "Kavita Rao"
-    assert "email" not in card  # Minimal fields: never contains email!
+    assert "email" not in card  # Minimal fields: never contains personal details!
+    assert "phone" not in card
+    assert "aadhaar" not in card
+    assert "documents" not in card
+    assert "roll_number" not in card
     assert card["unverified"] is True
+
+    # Recruiter also sees only minimal fields
+    rec_res = client.get(
+        "/v1/student-records",
+        headers={"Authorization": "Bearer valid-token-recruiter"},
+    )
+    assert rec_res.status_code == 200
+    rec_items = rec_res.json()["items"]
+    assert len(rec_items) == 1
+    assert "email" not in rec_items[0]
+    assert "phone" not in rec_items[0]
+    assert "aadhaar" not in rec_items[0]
 
     # 4. Student opts out -> disappears from company search
     client.patch(
