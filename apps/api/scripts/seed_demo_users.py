@@ -188,10 +188,9 @@ def seed_demo_users(
                 logger.error(f"Failed to create demo auth user {email}: {exc}")
                 raise
 
-        # Upsert profile matching auth user ID
+        # Upsert profile matching auth user ID (profiles table has no email column; email lives on auth.users)
         profile_data = {
             "id": user_id,
-            "email": email,
             "role": role,
             "display_name": display_name,
             "college_id": spec["college_id"],
@@ -238,3 +237,4 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"Seed failed: {e}", file=sys.stderr)
         sys.exit(1)
+
