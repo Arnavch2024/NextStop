@@ -215,9 +215,11 @@ export default function ChatPage() {
   useEffect(() => {
     if (!userId) return;
 
+    const chanId = Math.random().toString(36).slice(2, 7);
+
     // A. Chat messages sync
     const chatChannel = supabase
-      .channel(`raw_events_${userId}`)
+      .channel(`raw_events_${userId}_${chanId}`)
       .on(
         "postgres_changes",
         {
@@ -251,7 +253,7 @@ export default function ChatPage() {
 
     // B. Realtime updates of score and profile with the "updated from your phone" toast
     const scoreChannel = supabase
-      .channel(`score_events_${userId}`)
+      .channel(`score_events_${userId}_${chanId}`)
       .on(
         "postgres_changes",
         {
@@ -272,7 +274,7 @@ export default function ChatPage() {
       .subscribe();
 
     const profileChannel = supabase
-      .channel(`profile_changes_${userId}`)
+      .channel(`profile_changes_${userId}_${chanId}`)
       .on(
         "postgres_changes",
         {
@@ -307,7 +309,7 @@ export default function ChatPage() {
 
     // D. Realtime updates of user saved contacts with the "updated from your phone" toast
     const savedContactsChannel = supabase
-      .channel(`saved_contacts_sync_${userId}`)
+      .channel(`saved_contacts_sync_${userId}_${chanId}`)
       .on(
         "postgres_changes",
         {

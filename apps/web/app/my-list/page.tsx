@@ -113,8 +113,9 @@ export default function MyListPage() {
   useEffect(() => {
     if (!userId || !sessionToken) return;
 
+    const chanId = Math.random().toString(36).slice(2, 7);
     const channel = supabase
-      .channel(`saved_contacts_sync_${userId}`)
+      .channel(`saved_contacts_sync_${userId}_${chanId}`)
       .on(
         "postgres_changes",
         {
