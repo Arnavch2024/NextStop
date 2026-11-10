@@ -321,3 +321,21 @@ export interface BatchShareResponse {
   batch_year: number;
   shared_with_recruiters: boolean;
 }
+
+export interface OnboardingRequest {
+  role: "student" | "placement_officer" | "company" | "recruiter";
+  display_name?: string | null;
+}
+
+export interface OnboardingResponse {
+  id: string;
+  role: "student" | "placement_officer" | "company" | "recruiter";
+  display_name: string;
+  email?: string | null;
+  college_id?: string | null;
+  college_name?: string | null;
+  company_id?: string | null;
+  company_name?: string | null;
+  is_demo: boolean;
+  message: string;
+}

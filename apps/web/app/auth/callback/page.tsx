@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getSupabaseBrowserClient } from "@/lib/supabase";
+import { getSupabaseBrowserClient, API_BASE_URL } from "@/lib/supabase";
 import { getRoleDashboardPath } from "@/lib/auth";
+import { completeOnboarding } from "@recruiting/shared";
 import { Loader2 } from "lucide-react";
 
 export default function AuthCallbackPage() {
@@ -46,11 +47,20 @@ export default function AuthCallbackPage() {
           console.warn("Could not load user profile:", profileError);
         }
 
-        // Direct to onboarding if no role is chosen yet, else route to role dashboard
+        // Direct to onboarding if no role is chosen yet, else sync and route to role dashboard
         if (!profile?.role) {
           router.replace("/onboarding");
         } else {
-          router.replace(getRoleDashboardPath(profile.role));
+          try {
+            const res = await completeOnboarding(
+              API_BASE_URL,
+              session.access_token,
+              { role: profile.role as any }
+            );
+            router.replace(getRoleDashboardPath(res.role));
+          } catch {
+            router.replace(getRoleDashboardPath(profile.role));
+          }
         }
       } catch (err: any) {
         setErrorMsg(

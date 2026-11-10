@@ -186,6 +186,10 @@ export default function ChatPage() {
         router.replace("/login");
         return;
       }
+      if (!userSession.user.role) {
+        router.replace("/onboarding");
+        return;
+      }
       setSessionToken(userSession.token);
       setUserId(userSession.user.id);
       setRole(userSession.user.role);

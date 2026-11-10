@@ -89,6 +89,10 @@ export default function PlacementOfficerHomePage() {
         router.replace("/login");
         return;
       }
+      if (!userSession.user.role) {
+        router.replace("/onboarding");
+        return;
+      }
       if (
         userSession.user.role !== "placement_officer" &&
         userSession.user.role !== "admin"
