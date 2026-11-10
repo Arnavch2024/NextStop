@@ -13,8 +13,8 @@ begin
     return new;
   end if;
 
-  -- Authenticated users cannot change role, is_demo, college_id, or company_id
-  if (new.role is distinct from old.role) then
+  -- Authenticated users cannot change role once assigned (allows initial setting during onboarding)
+  if (old.role is not null and new.role is distinct from old.role) then
     raise exception 'Changing profile role is not permitted.';
   end if;
 
@@ -22,11 +22,11 @@ begin
     raise exception 'Changing profile is_demo status is not permitted.';
   end if;
 
-  if (new.college_id is distinct from old.college_id) then
+  if (old.college_id is not null and new.college_id is distinct from old.college_id) then
     raise exception 'Changing profile college_id is not permitted.';
   end if;
 
-  if (new.company_id is distinct from old.company_id) then
+  if (old.company_id is not null and new.company_id is distinct from old.company_id) then
     raise exception 'Changing profile company_id is not permitted.';
   end if;
 
