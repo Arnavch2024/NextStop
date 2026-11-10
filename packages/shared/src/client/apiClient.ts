@@ -294,22 +294,13 @@ export interface ListContactsParams {
 
 /**
  * List contacts endpoint: GET /v1/contacts
- * Supports both (baseUrl, token, params) and (baseUrl, params, token) signatures
+ * Signature: (baseUrl, token, params)
  */
 export async function listContacts(
   baseUrl: string,
-  arg2: string | ListContactsParams,
-  arg3?: string | ListContactsParams
+  token: string,
+  params?: ListContactsParams
 ): Promise<ContactListResponse> {
-  const token =
-    typeof arg2 === "string" ? arg2 : typeof arg3 === "string" ? arg3 : "";
-  const params =
-    typeof arg2 === "object"
-      ? arg2
-      : typeof arg3 === "object"
-        ? arg3
-        : undefined;
-
   const cleanBase = cleanBaseUrl(baseUrl);
   const searchParams = new URLSearchParams();
 

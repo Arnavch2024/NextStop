@@ -57,20 +57,21 @@ cp apps/mobile/.env.example apps/mobile/.env
 
 Fill in the values:
 
-| App        | Variable                                                          | Description                                                        |
-| ---------- | ----------------------------------------------------------------- | ------------------------------------------------------------------ |
-| api        | `SUPABASE_URL`                                                    | Your Supabase project URL                                          |
-| api        | `SUPABASE_ANON_KEY`                                               | Supabase anon/public key                                           |
-| api        | `SUPABASE_SERVICE_KEY`                                            | Supabase service-role key (**server-side only**)                   |
-| api        | `GEMINI_API_KEY`                                                  | Google AI Studio API key                                           |
-| api        | `LLM_PROVIDER`                                                    | LLM provider (default: `gemini`, swappable via env)                |
-| api        | `LLM_AGENT_MODEL`                                                 | Agent loop reasoning model (pinned: `gemini-3.5-flash`)            |
-| api        | `LLM_FAST_MODEL`                                                  | Fast structured extraction model (pinned: `gemini-3.5-flash-lite`) |
-| api        | `EXA_API_KEY` / `TAVILY_API_KEY`                                  | Public web search provider keys (Day 3 search)                     |
-| api        | `DEMO_SHOW_SAMPLE`                                                | Show sample/seed data in lake by default (default: `false`)        |
-| web/mobile | `NEXT_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_URL`           | Same Supabase URL                                                  |
-| web/mobile | `NEXT_PUBLIC_SUPABASE_ANON_KEY` / `EXPO_PUBLIC_SUPABASE_ANON_KEY` | Same anon key                                                      |
-| web/mobile | `NEXT_PUBLIC_API_BASE_URL` / `EXPO_PUBLIC_API_BASE_URL`           | URL of `apps/api` (e.g. `http://localhost:8000`)                   |
+| App        | Variable                                                          | Description                                                           |
+| ---------- | ----------------------------------------------------------------- | --------------------------------------------------------------------- |
+| api        | `SUPABASE_URL`                                                    | Your Supabase project URL                                             |
+| api        | `SUPABASE_ANON_KEY`                                               | Supabase anon/public key                                              |
+| api        | `SUPABASE_SERVICE_KEY`                                            | Supabase service-role key (**server-side only**)                      |
+| api        | `GEMINI_API_KEY`                                                  | Google AI Studio API key                                              |
+| api        | `LLM_PROVIDER`                                                    | LLM provider (default: `gemini`, swappable via env)                   |
+| api        | `LLM_AGENT_MODEL`                                                 | Agent loop reasoning model (pinned: `gemini-3.5-flash`)               |
+| api        | `LLM_FAST_MODEL`                                                  | Fast structured extraction model (pinned: `gemini-3.5-flash-lite`)    |
+| api        | `EXA_API_KEY` / `TAVILY_API_KEY`                                  | Public web search provider keys (Day 3 search)                        |
+| api        | `DEMO_SHOW_SAMPLE`                                                | Show sample/seed data in lake by default (default: `false`)           |
+| api        | `DEMO_LOGIN_ENABLED`                                              | Enable instant demo-account logins on auth screens (default: `false`) |
+| web/mobile | `NEXT_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_URL`           | Same Supabase URL                                                     |
+| web/mobile | `NEXT_PUBLIC_SUPABASE_ANON_KEY` / `EXPO_PUBLIC_SUPABASE_ANON_KEY` | Same anon key                                                         |
+| web/mobile | `NEXT_PUBLIC_API_BASE_URL` / `EXPO_PUBLIC_API_BASE_URL`           | URL of `apps/api` (e.g. `http://localhost:8000`)                      |
 
 ### 3. Apply the database migration
 

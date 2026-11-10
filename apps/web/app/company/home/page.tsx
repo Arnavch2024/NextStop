@@ -143,11 +143,10 @@ export default function CompanyHomePage() {
   const loadCollegeOfficers = useCallback(async (token: string) => {
     setOfficersLoading(true);
     try {
-      const res = await listContacts(
-        API_BASE_URL,
-        { role_type: "officer", page_size: 20 },
-        token
-      );
+      const res = await listContacts(API_BASE_URL, token, {
+        role_type: "officer",
+        page_size: 20,
+      });
       if (res && res.items) {
         setCollegeOfficers(res.items);
       }

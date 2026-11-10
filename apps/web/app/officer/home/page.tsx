@@ -175,11 +175,10 @@ export default function PlacementOfficerHomePage() {
   const loadCompanyPartners = useCallback(async (token: string) => {
     setCompaniesLoading(true);
     try {
-      const res = await listContacts(
-        API_BASE_URL,
-        { role_type: "recruiter", page_size: 20 },
-        token
-      );
+      const res = await listContacts(API_BASE_URL, token, {
+        role_type: "recruiter",
+        page_size: 20,
+      });
       if (res && res.items) {
         setCompanies(res.items);
       }
