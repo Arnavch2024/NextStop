@@ -352,20 +352,23 @@ The following tasks from the original Day 4 scope are moved to Future Work:
 
 ## Phase 8 — Day 5: Consent flows + Railway-route timeline
 
-> ≈1 day of build. Unchanged: all prior contracts, Day 2 scoring rules, never-auto-send. Wires the `documents_pre_verified` and `reference_check_authorized` scoring flags that the engine already accepts. Open decisions in design §13.8.
+> ≈1 day of build. Migration: `008_day5_consent.sql`. Unchanged: all prior contracts, Day 2 scoring rules, never-auto-send. Scoring flags are DB-only. Chat tools propose consent; UI confirm endpoints grant it. All decisions resolved in design §13.8.
 
 ---
 
-### Task 8.1 — Schema migration `006_day5_consent.sql` + startup check
+### Task 8.1 — Schema migration `008_day5_consent.sql` + startup check + verifier interface
 
 **Estimate: 0.25 day**
 
-- [ ] Write `supabase/migrations/006_day5_consent.sql` (non-destructive, idempotent):
-  - `reference_authorizations` table + indexes + RLS (`profile_id = auth.uid()`).
-  - `documents.verification_note text`, `documents.masked_id_tail text`, `documents.doc_type_verified text` (`add column if not exists`). No `verified_fields`, no `pgcrypto`.
-  - Rollback note at top.
-- [ ] Extend `check_database_schema` to probe `reference_authorizations`; raise `MissingMigrationError("006_day5_consent.sql")`.
-- **DoD:** Migration runs twice cleanly; app raises `MissingMigrationError` naming `006_day5_consent.sql` if absent; Day 1-4 tests pass; no `pgcrypto` extension or encrypted column referenced anywhere.
+- [ ] Write `supabase/migrations/008_day5_consent.sql` (non-destructive, idempotent; migrations 005/006/007 are taken):
+  - `reference_authorizations` table + `ref_auth_student_active_uidx` (partial, `revoked_at is null`) + profile index + RLS (`auth.uid() = profile_id`).
+  - `documents` additions (`add column if not exists`): `document_type text`, `masked_id_tail text`, `verified_flag boolean not null default false`, `verified_at timestamptz`, `verification_note text`. No `verified_fields`, no `pgcrypto`.
+  - Demo/seed backfill: `UPDATE documents SET verified_flag = true WHERE verification_status = 'pre_verified' AND id IN (SELECT d.id FROM documents d JOIN students s ON s.id = d.student_id JOIN profiles p ON p.id = s.profile_id WHERE p.is_demo = true)` — clearly labelled comment; production rows not touched.
+  - Hard-rule and rollback comment blocks at top of file.
+- [ ] Extend `check_database_schema` to probe `reference_authorizations` and `documents.verified_flag`; raise `MissingMigrationError("008_day5_consent.sql")` if absent.
+- [ ] `apps/api/app/verification/verifier.py`: `DocumentVerifier` ABC, `MockVerifier`, `DigiLockerVerifier` stub (raises `NotImplementedError`), `get_verifier()` factory (returns `MockVerifier` by default).
+- [ ] Demo web-search block: agent runner checks `user.is_demo` before including `web_search_enrich` / ingestion tools; demo users get only `search_data_lake` for search.
+- **DoD:** Migration runs twice cleanly against a DB with 001–007 applied; app raises `MissingMigrationError("008_day5_consent.sql")` without it; Day 2 scoring tests updated to use `verified_flag = true` (not `verification_status`); demo/seed rows backfilled; production rows untouched; `DigiLockerVerifier().verify(...)` raises `NotImplementedError`; demo user session has no web-search tool in the tool list.
 
 ---
 
@@ -373,26 +376,31 @@ The following tasks from the original Day 4 scope are moved to Future Work:
 
 **Estimate: 0.25 day**
 
-- [ ] Display upload notice _"Demo only: please upload sample documents, not your real Aadhaar or PAN."_ on the client before the file picker (web + mobile).
-- [ ] `POST /v1/students/me/verify-mock` (student only, env-gated `MOCK_VERIFY_ENABLED`): without reading the file, set `verification_status = 'pre_verified'`, `verification_note = 'Demo verification (mocked)'`, `doc_type_verified` from MIME/extension only; call `recompute_score(trigger='pre_verify')`. File bytes are never loaded; document contents never logged; nothing sent to any LLM/OCR.
-- [ ] Client calls `verify-mock` automatically after upload confirmation (no extra user action).
-- [ ] Update `load_student_for_scoring`: `documents_pre_verified = exists (documents where student_id=? and verification_status='pre_verified')` (DB-only).
+- [ ] Upload notice _"Demo only: please upload sample documents, not your real Aadhaar or PAN."_ shown before the file picker (web + mobile).
+- [ ] After upload, UI shows a consent confirmation card ("Confirm demo verification of this document"). Tapping "Confirm" calls `POST /v1/students/me/verify-mock` (env-gated `DEMO_VERIFY_ENABLED`; 403 if off). The agent tool `propose_verify()` only returns the card — it never calls the endpoint directly.
+- [ ] `verify-mock` **without reading the file**: set `verified_flag = true`, `verified_at = now()`, `verification_note = 'Demo verification (mocked)'`, `document_type` from MIME/extension; call `recompute_score(trigger='pre_verify')`. File bytes never loaded; nothing logged from document contents; nothing sent to LLM/OCR.
+- [ ] Update `load_student_for_scoring`: `documents_pre_verified = exists (documents where student_id=? and verified_flag=true)` (DB-only; `verification_status` no longer used by scorer).
+- [ ] Update any Day 2 `test_scoring.py` assertions that relied on `verification_status = 'pre_verified'` to set `verified_flag = true` instead.
 - [ ] Score breakdown label: `"Documents pre-verified (Demo)" | +2 | system`.
 - [ ] Web: "Demo verification (mocked)" badge on score card and documents section.
-- **DoD:** Student uploads a PDF → badge changes to "Demo verification (mocked)"; score increases by +2; `score_events` row has `documents_pre_verified=true`; no document text appears in any API response or log; calling the endpoint without `MOCK_VERIFY_ENABLED` returns 403.
+- [ ] Revoke path: `masked_id_tail = null`, `verified_flag = false`, recompute score. Called from UI "Revoke" button directly or from the `propose_revoke_reference_check()` card → "Confirm Revoke" in UI.
+- **DoD:** Student uploads PDF → consent card → "Confirm" → `verified_flag=true`; score +2; `score_events` row with `documents_pre_verified=true`; no document text in any log or response; calling the endpoint without `DEMO_VERIFY_ENABLED` → 403; revoking → `verified_flag=false`, score drops 2.
 
 ---
 
-### Task 8.3 — Reference-check authorization + score wiring + agent tool
+### Task 8.3 — Reference-check authorization + score wiring + agent tools
 
 **Estimate: 0.25 day**
 
-- [ ] `POST /v1/students/me/reference-auth`: upserts `reference_authorizations`; calls `recompute_score(trigger='reference_auth')`.
-- [ ] `DELETE /v1/students/me/reference-auth`: sets `revoked_at = now()`; calls `recompute_score(trigger='reference_revoked')`.
-- [ ] Update `load_student_for_scoring`: `reference_check_authorized = exists (reference_authorizations where student_id=? and revoked_at is null)`.
-- [ ] Agent tools for `student` role: `authorize_reference_check()` and `revoke_reference_check()` (Gemini `FunctionDeclaration`s).
-- [ ] Web: "Authorize reference check" consent button + "Revoke" link; score card updates; a "This authorizes a reference check — for demo purposes only" disclaimer is shown.
-- **DoD:** Student says "I authorize a reference check" in chat → score increases by +2; student says "I revoke my reference check" → score drops by 2; `reference_authorizations.revoked_at` is set; the consent button is correctly toggled.
+- [ ] Agent tool `propose_reference_check()`: returns a UI confirmation card; does NOT call `reference-auth` or grant consent.
+- [ ] Agent tool `propose_revoke_reference_check()`: returns a UI confirmation card ("Revoke reference check authorization?"); does NOT call the delete endpoint directly.
+- [ ] UI "Revoke" button calls `DELETE /v1/students/me/reference-auth` directly (one tap from button; propose-and-confirm only from chat).
+- [ ] `POST /v1/students/me/reference-auth` (called from UI "Authorize" button): inserts/reactivates `reference_authorizations`; calls `recompute_score(trigger='reference_auth')`.
+- [ ] `DELETE /v1/students/me/reference-auth`: sets `revoked_at = now()`; calls `recompute_score(trigger='reference_revoked')`; score drops immediately.
+- [ ] Update `load_student_for_scoring`: `reference_check_authorized = exists (reference_authorizations where student_id=? and revoked_at is null)` (DB-only).
+- [ ] Web: "Authorize reference check" button (calls `POST` from UI) + "Revoke" link; "Demo purposes only" disclaimer; score card updates.
+- [ ] `GET /v1/students/me/profile` (officer/company view): adds `reference_check_authorized: boolean` to `StudentCard`; never exposes documents, storage paths, or masked values to officers/companies.
+- **DoD:** Chat proposes → card shown → student taps Authorize → `POST` called → score +2; student taps UI Revoke button → score drops 2 (one tap, no confirm card from button); student says "revoke" in chat → propose card shown → student taps "Confirm Revoke" → `DELETE` called → score drops 2; a company querying the student card sees only `reference_check_authorized: true/false`, no document data.
 
 ---
 
@@ -400,8 +408,8 @@ The following tasks from the original Day 4 scope are moved to Future Work:
 
 **Estimate: 0.25 day**
 
-- [ ] `GET /v1/students/me/timeline` (student): sorts stations by `start_year` ascending; applies current-station rule (`start_year not null AND end_year null`; fallback = highest `start_year` with data); college station with `start_year` + no `end_year` gets `subtitle = 'in college'`; adds grayed-out future stations for pre-verify and reference-check.
-- [ ] Add `TimelineStation`, `TimelineResponse` to `packages/shared/src/types/api.ts`; add `getTimeline(base, token)` to `apiClient.ts`; rebuild `dist`.
-- [ ] Web `app/(student)/home/page.tsx`: add `<RailwayTimeline>` component — vertical SVG/CSS track, circle stations, current-station filled marker ("You are here"), source badges. Reuses Day 3 badge components.
+- [ ] `GET /v1/students/me/timeline`: builds `TimelineStation[]` from `education`/`internships`/`jobs`; ordered by `start_year` ascending; current-station rule (last `start_year not null AND end_year null`; fallback = highest `start_year` with data); college with no `end_year` → `subtitle = 'in college'`; grayed-out future stations for pre-verify and reference-check (status derived from `verified_flag` and `reference_authorizations`).
+- [ ] `TimelineStation`, `TimelineResponse` in `packages/shared/src/types/api.ts`; `getTimeline(base, token)` in `apiClient.ts`; rebuild `dist`.
+- [ ] Web `app/(student)/home/page.tsx`: `<RailwayTimeline>` — vertical SVG/CSS track; circle stations; filled marker on current station ("You are here"); source badges (reuse Day 3). Pre-verify future station shows "Demo verification (mocked)" or "Pending".
 - [ ] Mobile: flat station list (no SVG), same data.
-- **DoD:** A student with 10th (2020), 12th (2022), college (2022, no end year), one internship (2024, ended), and one job (2025, ongoing) sees 5 stations in that order; college shows "in college" ~~unless~~ if no end year; the job station is "You are here" (latest ongoing); future stations grayed out; source badges show `Resume` or `User said`; mobile renders the same stations as a flat list.
+- **DoD:** A student with 10th (2020), 12th (2022), college (2022, no end year), internship (2024, ended 2024), job (2025, ongoing) sees 5 stations in `start_year` order; college shows subtitle "in college" (ongoing, but job 2025 is later and ongoing so job is "You are here"); future stations grayed; source badges correct; mobile shows identical data as a list.

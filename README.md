@@ -284,3 +284,36 @@ Browser / Mobile App
 - RLS policies ensure users can only read/write their own rows
 - `upsert_record` tool enforces an explicit allow-list of tables and Pydantic-validated schemas
 - `batch_year` is restricted to 2027 or 2028 at the API layer
+
+---
+
+## Future Work
+
+Features deferred from Day 1–5 scope; listed in rough priority order.
+
+### Identity verification
+
+- **Real Aadhaar/PAN verification via DigiLocker / API Setu** — replace `MockVerifier` with `DigiLockerVerifier` using the DigiLocker API or the [API Setu](https://apisetu.gov.in) identity stack. This requires: (1) UIDAI AUA/KUA certification, (2) partner registration with API Setu or directly with NIC/DigiLocker, (3) DPDP compliance review, (4) a Supabase Vault or equivalent secrets store for the partner credentials. The `DigiLockerVerifier` stub in `apps/api/app/verification/verifier.py` raises `NotImplementedError` as a placeholder.
+
+### Authentication
+
+- **Native Google sign-in on mobile** — replace the current email/password + magic-link flow on Expo with the Expo Google Auth plugin for a smoother mobile onboarding; requires Google Cloud OAuth credentials.
+
+### Import & parsing
+
+- **LLM header mapping for CSV** — use `LLMProvider.generate_structured` to map non-standard column headers to known fields when the deterministic alias list fails. Only headers are sent to the LLM; cell values are never sent.
+- **XLSX import** — extend the student-records and campus-hiring import pipeline to accept `.xlsx` files via openpyxl; CSV-only for now.
+
+### Student visibility
+
+- **Individual student discoverable toggle** — let students mark themselves discoverable independently of officer batch-sharing. The `discoverable` column already exists in `student_records`; the UI and visibility rule are Day 5+.
+
+### Outreach
+
+- **Interview and offer letter drafts** — extend `outreach_draft_kind` with `'interview'` and `'offer'`; add letter-generation prompts for each kind.
+- **Outreach status tracking UI** — the `user_saved_contacts.status` column is already populated by migration 005; add a UI chip and agent tool to surface it.
+
+### Recruiter
+
+- **Recruiter dashboard polish** — dedicated home screen beyond My list (Day 3); recruiter currently uses chat + My list only.
+- **Mobile dashboards** — officer, company and recruiter web dashboards on mobile; mobile currently shows chat, lists and scores from Days 1–3.
