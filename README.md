@@ -69,6 +69,7 @@ Fill in the values:
 | api        | `EXA_API_KEY` / `TAVILY_API_KEY`                                  | Public web search provider keys (Day 3 search)                        |
 | api        | `DEMO_SHOW_SAMPLE`                                                | Show sample/seed data in lake by default (default: `false`)           |
 | api        | `DEMO_LOGIN_ENABLED`                                              | Enable instant demo-account logins on auth screens (default: `false`) |
+| api        | `DEMO_USER_PASSWORD`                                              | Password for pre-seeded demo accounts (optional in dev, env-gated)    |
 | web/mobile | `NEXT_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_URL`           | Same Supabase URL                                                     |
 | web/mobile | `NEXT_PUBLIC_SUPABASE_ANON_KEY` / `EXPO_PUBLIC_SUPABASE_ANON_KEY` | Same anon key                                                         |
 | web/mobile | `NEXT_PUBLIC_API_BASE_URL` / `EXPO_PUBLIC_API_BASE_URL`           | URL of `apps/api` (e.g. `http://localhost:8000`)                      |

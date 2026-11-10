@@ -287,6 +287,8 @@ export interface DemoAccount {
 
 export interface DemoLoginResponse {
   access_token: string;
+  refresh_token?: string | null;
+  expires_at?: number | null;
   token_type: string;
   user: {
     id: string;

@@ -193,10 +193,8 @@ export default function ChatPage() {
 
       setIsDemo(Boolean(userSession.user.isDemo));
 
-      // Load initial message history for non-demo users or if actor exists
-      if (!userSession.user.isDemo) {
-        loadInitialHistory(userSession.user.id);
-      }
+      // Load initial message history
+      loadInitialHistory(userSession.user.id);
 
       // Load initial saved contacts
       listContacts(API_BASE_URL, userSession.token, { saved_only: true })

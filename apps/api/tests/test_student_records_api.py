@@ -155,6 +155,10 @@ def test_batch_sharing_toggle_and_company_visibility(client, mock_supabase):
 
 
 def test_demo_auth_endpoints(client, monkeypatch):
+    from app.routers import demo_auth
+
+    demo_auth._demo_login_attempts.clear()
+
     # 1. List demo accounts (public)
     res = client.get("/v1/auth/demo-accounts")
     assert res.status_code == 200
@@ -166,16 +170,17 @@ def test_demo_auth_endpoints(client, monkeypatch):
     assert "recruiter" in roles
     assert "student" in roles
 
-    # 2. Demo login disabled by default -> 403
+    # 2. Demo login disabled by default -> 404
     monkeypatch.setattr(settings, "DEMO_LOGIN_ENABLED", False)
     res_disabled = client.post("/v1/auth/demo-login", json={"role": "placement_officer"})
-    assert res_disabled.status_code == 403
+    assert res_disabled.status_code == 404
 
-    # 3. Demo login enabled -> 200 with access token
+    # 3. Demo login enabled -> 200 with real access and refresh tokens
     monkeypatch.setattr(settings, "DEMO_LOGIN_ENABLED", True)
     res_enabled = client.post("/v1/auth/demo-login", json={"role": "placement_officer"})
     assert res_enabled.status_code == 200
     data = res_enabled.json()
-    assert data["access_token"].startswith("demo-token-placement_officer")
+    assert data["access_token"] == "valid-token-demo-officer"
+    assert data["refresh_token"] == "valid-refresh-demo-officer"
     assert data["user"]["role"] == "placement_officer"
     assert data["user"]["is_demo"] is True

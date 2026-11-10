@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi.testclient import TestClient
 
-from app.db.supabase import get_supabase_client
+from app.db.supabase import get_anon_client, get_supabase_client
 from app.main import app
 
 
@@ -201,23 +201,58 @@ class MockSupabaseClient:
                     "id": "user-123",
                     "role": "student",
                     "display_name": "Riya Sharma",
+                    "is_demo": False,
                 },
                 {
                     "id": "recruiter-456",
                     "role": "recruiter",
                     "display_name": "Karan Mehta",
+                    "is_demo": False,
                 },
                 {
                     "id": "officer-789",
                     "role": "placement_officer",
                     "display_name": "Placement Officer",
                     "college_id": "col-mumbai-1",
+                    "is_demo": False,
                 },
                 {
                     "id": "company-999",
                     "role": "company",
                     "display_name": "Company HR",
                     "company_id": "comp-tcs-1",
+                    "is_demo": False,
+                },
+                {
+                    "id": "demo-officer-id",
+                    "role": "placement_officer",
+                    "display_name": "Prof. Sunita Patil",
+                    "email": "demo-officer@example.com",
+                    "college_id": "col-mumbai-1",
+                    "is_demo": True,
+                },
+                {
+                    "id": "demo-company-id",
+                    "role": "company",
+                    "display_name": "Pooja Sharma",
+                    "email": "demo-company@example.com",
+                    "company_id": "comp-tcs-1",
+                    "is_demo": True,
+                },
+                {
+                    "id": "demo-recruiter-id",
+                    "role": "recruiter",
+                    "display_name": "Karan Mehta",
+                    "email": "demo-recruiter@example.com",
+                    "is_demo": True,
+                },
+                {
+                    "id": "demo-student-id",
+                    "role": "student",
+                    "display_name": "Riya Sharma",
+                    "email": "demo-student@example.com",
+                    "college_id": "col-mumbai-1",
+                    "is_demo": True,
                 },
             ],
             "students": [],
@@ -243,7 +278,61 @@ class MockSupabaseClient:
         }
         self.auth = MagicMock()
         self.auth.get_user.side_effect = self._mock_get_user
+        self.auth.sign_in_with_password.side_effect = self._mock_sign_in_with_password
         self.storage = FakeStorageClient()
+
+    def _mock_sign_in_with_password(self, credentials: dict):
+        email = credentials.get("email")
+        if email in ["demo-officer@example.com", "placement.officer@stxaviers.edu"]:
+            session = MagicMock()
+            session.access_token = "valid-token-demo-officer"
+            session.refresh_token = "valid-refresh-demo-officer"
+            session.expires_at = 1999999999
+            user = MagicMock()
+            user.id = "demo-officer-id"
+            user.email = email
+            resp = MagicMock()
+            resp.session = session
+            resp.user = user
+            return resp
+        elif email in ["demo-company@example.com", "pooja.sharma@tcs.com"]:
+            session = MagicMock()
+            session.access_token = "valid-token-demo-company"
+            session.refresh_token = "valid-refresh-demo-company"
+            session.expires_at = 1999999999
+            user = MagicMock()
+            user.id = "demo-company-id"
+            user.email = email
+            resp = MagicMock()
+            resp.session = session
+            resp.user = user
+            return resp
+        elif email in ["demo-recruiter@example.com", "karan.recruiter@apexsearch.com"]:
+            session = MagicMock()
+            session.access_token = "valid-token-demo-recruiter"
+            session.refresh_token = "valid-refresh-demo-recruiter"
+            session.expires_at = 1999999999
+            user = MagicMock()
+            user.id = "demo-recruiter-id"
+            user.email = email
+            resp = MagicMock()
+            resp.session = session
+            resp.user = user
+            return resp
+        elif email in ["demo-student@example.com", "riya.sharma@stxaviers.edu"]:
+            session = MagicMock()
+            session.access_token = "valid-token-demo-student"
+            session.refresh_token = "valid-refresh-demo-student"
+            session.expires_at = 1999999999
+            user = MagicMock()
+            user.id = "demo-student-id"
+            user.email = email
+            resp = MagicMock()
+            resp.session = session
+            resp.user = user
+            return resp
+        else:
+            raise Exception("Invalid login credentials")
 
     def _mock_get_user(self, token: str):
         if token == "valid-token-student":
@@ -278,6 +367,38 @@ class MockSupabaseClient:
             resp = MagicMock()
             resp.user = user_obj
             return resp
+        elif token == "valid-token-demo-officer":
+            user_obj = MagicMock()
+            user_obj.id = "demo-officer-id"
+            user_obj.email = "demo-officer@example.com"
+            user_obj.user_metadata = {"full_name": "Prof. Sunita Patil", "is_demo": True}
+            resp = MagicMock()
+            resp.user = user_obj
+            return resp
+        elif token == "valid-token-demo-company":
+            user_obj = MagicMock()
+            user_obj.id = "demo-company-id"
+            user_obj.email = "demo-company@example.com"
+            user_obj.user_metadata = {"full_name": "Pooja Sharma", "is_demo": True}
+            resp = MagicMock()
+            resp.user = user_obj
+            return resp
+        elif token == "valid-token-demo-recruiter":
+            user_obj = MagicMock()
+            user_obj.id = "demo-recruiter-id"
+            user_obj.email = "demo-recruiter@example.com"
+            user_obj.user_metadata = {"full_name": "Karan Mehta", "is_demo": True}
+            resp = MagicMock()
+            resp.user = user_obj
+            return resp
+        elif token == "valid-token-demo-student":
+            user_obj = MagicMock()
+            user_obj.id = "demo-student-id"
+            user_obj.email = "demo-student@example.com"
+            user_obj.user_metadata = {"full_name": "Riya Sharma", "is_demo": True}
+            resp = MagicMock()
+            resp.user = user_obj
+            return resp
         else:
             raise Exception("Invalid JWT token")
 
@@ -300,6 +421,7 @@ def mock_supabase():
 @pytest.fixture
 def client(mock_supabase):
     app.dependency_overrides[get_supabase_client] = lambda: mock_supabase
+    app.dependency_overrides[get_anon_client] = lambda: mock_supabase
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()

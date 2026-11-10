@@ -83,7 +83,12 @@ export default function LoginScreen() {
     setErrorMsg(null);
     try {
       const res = await demoLogin(API_BASE_URL, role);
-      await AsyncStorage.setItem("demo_session", JSON.stringify(res));
+      if (res.access_token && res.refresh_token) {
+        await supabase.auth.setSession({
+          access_token: res.access_token,
+          refresh_token: res.refresh_token,
+        });
+      }
       if (role === "student") {
         router.replace("/(tabs)/home");
       } else {

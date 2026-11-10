@@ -80,6 +80,8 @@ def run_ingest(
     Stops cleanly on provider errors / quota exhaustion.
     """
     user = admin_user or SYSTEM_ADMIN_USER
+    if user and getattr(user, "is_demo", False):
+        raise ValueError("Demo users cannot run ingestion pipeline: demo accounts search existing lake only.")
 
     # 1. Fetch companies
     try:

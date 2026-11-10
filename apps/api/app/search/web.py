@@ -171,6 +171,18 @@ def web_search_enrich(
        ONLY accepted contacts with lake IDs, plus counts. Raw snippets/text are never returned.
     """
     clean_query = query.strip()
+    if user and getattr(user, "is_demo", False):
+        logger.info(f"Demo user {getattr(user, 'id', 'unknown')} blocked from web_search_enrich")
+        return {
+            "results": 0,
+            "accepted": 0,
+            "dropped": 0,
+            "broker_rejected": 0,
+            "contacts": [],
+            "error": "demo_users_cannot_run_live_search",
+            "message": "Demo users search existing data lake only; live web search and ingestion are disabled for demo accounts.",
+        }
+
     if not clean_query:
         if extract_and_ingest:
             return {"results": 0, "accepted": 0, "dropped": 0, "broker_rejected": 0, "contacts": []}

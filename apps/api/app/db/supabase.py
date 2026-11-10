@@ -21,6 +21,14 @@ def get_supabase_client() -> Client:
     return _supabase_client
 
 
+def get_anon_client() -> Client:
+    """Creates a short-lived Supabase client with SUPABASE_ANON_KEY (safe for sign-in and token operations)."""
+    return create_client(
+        supabase_url=settings.SUPABASE_URL,
+        supabase_key=settings.SUPABASE_ANON_KEY,
+    )
+
+
 def get_user_profile(user_id: str, client: Optional[Client] = None) -> UserProfile:
     """Loads a user's profile from the database, or initializes one if not present."""
     cli = client or get_supabase_client()

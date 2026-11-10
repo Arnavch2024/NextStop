@@ -4,7 +4,7 @@ from fastapi import Depends, HTTPException, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from supabase import Client
 
-from app.db.supabase import get_supabase_client, get_user_profile
+from app.db.supabase import get_anon_client, get_supabase_client, get_user_profile
 from app.logger import logger
 from app.models.db import ProfileRole, UserProfile
 
@@ -14,10 +14,11 @@ security_bearer = HTTPBearer(auto_error=False)
 def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Security(security_bearer),
     client: Client = Depends(get_supabase_client),
+    anon_client: Client = Depends(get_anon_client),
 ) -> UserProfile:
     """
     FastAPI dependency verifying the Supabase access token (JWT).
-    Validates token via Supabase Auth and loads the user's profile and role.
+    Validates token via short-lived anon Supabase Auth client and loads the user's profile and role.
     Rejects with 401 if missing or invalid.
     Never logs secrets or full tokens.
     """
@@ -31,44 +32,9 @@ def get_current_user(
 
     token = credentials.credentials
 
-    # Handle demo tokens when DEMO_LOGIN_ENABLED or in test/placeholder environment
-    if token.startswith("demo-token-") or token.startswith("valid-token-"):
-        role_part = token.replace("demo-token-", "").replace("valid-token-", "")
-        # Map role part to ProfileRole
-        role_map = {
-            "student": (ProfileRole.STUDENT, "user-123", "Riya Sharma", None, None),
-            "recruiter": (ProfileRole.RECRUITER, "recruiter-456", "Karan Mehta", None, None),
-            "officer": (ProfileRole.PLACEMENT_OFFICER, "officer-789", "Placement Officer", "col-mumbai-1", None),
-            "placement_officer": (
-                ProfileRole.PLACEMENT_OFFICER,
-                "officer-789",
-                "Placement Officer",
-                "col-mumbai-1",
-                None,
-            ),
-            "company": (ProfileRole.COMPANY, "company-999", "Company HR", None, "comp-tcs-1"),
-        }
-        if role_part in role_map:
-            p_role, p_id, p_name, col_id, comp_id = role_map[role_part]
-            # Try to fetch existing profile in db or fallback
-            try:
-                db_p = get_user_profile(p_id, client=client)
-                if db_p.role:
-                    return db_p
-            except Exception:
-                pass
-            return UserProfile(
-                id=p_id,
-                role=p_role,
-                display_name=p_name,
-                college_id=col_id,
-                company_id=comp_id,
-                is_demo=token.startswith("demo-token-"),
-            )
-
     try:
-        # Validate JWT with Supabase Auth
-        auth_response = client.auth.get_user(token)
+        # Validate JWT with Supabase Auth using anon client
+        auth_response = anon_client.auth.get_user(token)
         if not auth_response or not getattr(auth_response, "user", None):
             logger.warning("Authentication failure: token verification returned no user")
             raise HTTPException(
@@ -96,7 +62,8 @@ def get_current_user(
         is_verified = bool(getattr(auth_user, "email_confirmed_at", None) or getattr(auth_user, "confirmed_at", None))
 
         # On verified login: resolve college from email domain if not already set
-        if not profile.college_id and auth_email and is_verified:
+        # Demo profiles must NEVER have their college_id overridden by email domain resolution!
+        if not profile.is_demo and not profile.college_id and auth_email and is_verified:
             from app.auth.college_resolution import resolve_college_from_email
 
             resolved = resolve_college_from_email(
@@ -123,7 +90,7 @@ def get_current_user(
                     except Exception as exc:
                         logger.warning(f"Could not auto-link student_records: {exc}")
 
-        logger.info(f"Authenticated user: id={user_id}, role={profile.role}, college_id={profile.college_id}")
+        logger.info(f"Authenticated user: id={user_id}, role={profile.role}, college_id={profile.college_id}, is_demo={profile.is_demo}")
         return profile
 
     except HTTPException:

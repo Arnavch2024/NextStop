@@ -79,6 +79,7 @@ class Settings(BaseSettings):
 
     # Day 4 Role & Demo Settings
     DEMO_LOGIN_ENABLED: bool = Field(default=False)
+    DEMO_USER_PASSWORD: Optional[str] = Field(default=None)
     OFFICIAL_EMAIL_DENYLIST: List[str] = Field(
         default=[
             "gmail.com",

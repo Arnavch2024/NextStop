@@ -142,32 +142,6 @@ export default function ChatScreen() {
   // 1. Authenticate & fetch user profile
   useEffect(() => {
     async function initAuth() {
-      const demoRaw = await AsyncStorage.getItem("demo_session");
-      if (demoRaw) {
-        try {
-          const demo = JSON.parse(demoRaw);
-          setSessionToken(demo.access_token);
-          setUserId(demo.user.id);
-          setRole(demo.user.role);
-          setDisplayName(demo.user.display_name || "Demo User");
-          // Load initial saved contacts for demo session
-          listContacts(API_BASE_URL, demo.access_token, { saved_only: true })
-            .then((res) => {
-              if (res?.items) {
-                const savedMap: Record<string, boolean> = {};
-                for (const c of res.items) {
-                  savedMap[c.id] = true;
-                }
-                setSavedContactIds((prev) => ({ ...prev, ...savedMap }));
-              }
-            })
-            .catch(() => {});
-          return;
-        } catch (err) {
-          console.warn("Failed to parse demo session", err);
-        }
-      }
-
       const {
         data: { session },
       } = await supabase.auth.getSession();
