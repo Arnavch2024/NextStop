@@ -90,6 +90,7 @@ class ChatResponse(BaseModel):
     steps: List[AgentStep] = Field(default_factory=list)
     records_created: List[RecordRef] = Field(default_factory=list)
     contacts: List[ContactCard] = Field(default_factory=list)
+    cards: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 # --- Day 2 Models for Student Slice ---
@@ -166,3 +167,68 @@ class AgentRunResponse(BaseModel):
     steps: List[Dict[str, Any]] = Field(default_factory=list)
     summary: Optional[str] = None
     created_at: Optional[datetime] = None
+
+
+# --- Day 5 Models: Consent Flows & Railway-Route Timeline ---
+
+
+class VerifyMockRequest(BaseModel):
+    document_id: Optional[str] = None
+    document_type: Optional[str] = None
+    masked_id_tail: Optional[str] = None
+
+
+class VerifyMockResponse(BaseModel):
+    status: str = "pre_verified"
+    document_id: str
+    verified_flag: bool = True
+    verification_note: str = "Demo verification (mocked)"
+    score: ScoreResponse
+
+
+class RevokeVerifyResponse(BaseModel):
+    status: str = "revoked"
+    verified_flag: bool = False
+    score: ScoreResponse
+
+
+class ReferenceAuthRequest(BaseModel):
+    internship_id: Optional[str] = None
+    authorized_party: Optional[str] = None
+    authorized_role: Optional[str] = None
+
+
+class ReferenceAuthResponse(BaseModel):
+    id: str
+    student_id: str
+    authorized_at: datetime
+    revoked_at: Optional[datetime] = None
+    reference_check_authorized: bool = True
+    score: ScoreResponse
+
+
+class StationKind(str, Enum):
+    SCHOOL_10 = "school_10"
+    SCHOOL_12 = "school_12"
+    COLLEGE = "college"
+    INTERNSHIP = "internship"
+    JOB = "job"
+    PRE_VERIFY_PENDING = "pre_verify_pending"
+    PRE_VERIFY_DONE = "pre_verify_done"
+    REFERENCE_PENDING = "reference_pending"
+    REFERENCE_DONE = "reference_done"
+
+
+class TimelineStation(BaseModel):
+    kind: str
+    title: str
+    subtitle: Optional[str] = None
+    start_year: Optional[int] = None
+    end_year: Optional[int] = None
+    source_badge: Optional[str] = None
+    is_current: bool = False
+    is_future: bool = False
+
+
+class TimelineResponse(BaseModel):
+    stations: List[TimelineStation] = Field(default_factory=list)

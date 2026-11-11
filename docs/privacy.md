@@ -103,36 +103,56 @@ Before the document file picker is shown, the UI displays:
 
 > **"Demo only: please upload sample documents, not your real Aadhaar or PAN."**
 
-This is shown on web and mobile. It is not a legal disclaimer — it is an explicit request to use synthetic data in the demo environment.
+Shown on web and mobile. This is not a legal disclaimer — it is an explicit request to use synthetic data in the demo environment.
 
 ### What is stored from document verification
 
-The mock verification process **never reads the document file**. It sets a flag only. The following and only the following are stored:
+The mock verification process **never reads the document file**. Only the following fields are stored:
 
-| Field                           | Value                                      | Purpose                              |
-| ------------------------------- | ------------------------------------------ | ------------------------------------ |
-| `documents.verification_status` | `'pre_verified'`                           | Drives the +2 scoring flag (DB-only) |
-| `documents.verification_note`   | `'Demo verification (mocked)'`             | UI label                             |
-| `documents.doc_type_verified`   | Derived from MIME/extension (e.g. `'pdf'`) | Document type only                   |
-| `documents.masked_id_tail`      | Last 4 digits only, if stated in chat      | See masking rules below              |
+| Column                        | Value stored                                       | Notes                                          |
+| ----------------------------- | -------------------------------------------------- | ---------------------------------------------- |
+| `documents.verified_flag`     | `true` / `false`                                   | Drives the +2 scoring flag (read from DB only) |
+| `documents.verified_at`       | timestamp                                          | When mock-verify was called                    |
+| `documents.verification_note` | `'Demo verification (mocked)'`                     | UI label                                       |
+| `documents.document_type`     | From MIME/extension only (e.g. `'other'`)          | No content analysis                            |
+| `documents.masked_id_tail`    | Last 4 of Aadhaar/PAN — **only if stated in chat** | See masking rules                              |
+| `documents.storage_path`      | Private bucket path                                | Access via signed URL only                     |
 
-**NOT stored:** document text, Aadhaar number, PAN number, address, or any other content from the document file. `verified_fields`, `pgcrypto` encryption, and address text storage were explicitly removed from the design.
+**NOT stored:** full Aadhaar/PAN numbers, address text, any text extracted from the document, `verified_fields` JSONB, pgcrypto-encrypted blobs.
 
 ### Document file handling
 
-- File bytes are stored in the private `resumes` Supabase Storage bucket.
-- Access is only via short-lived signed URLs generated on demand.
+- File bytes stored in the private `resumes` Supabase Storage bucket.
+- Access only via short-lived signed URLs generated on demand.
 - File bytes are **never** loaded into application memory during the verify-mock flow.
 - Document contents **never appear in application logs** — only the storage path may be logged.
 - Nothing from the document is sent to any LLM, OCR, or external service.
 
-### Masking rules (applies only to values stated in chat — never to document contents)
+### Consent model
 
-- **Aadhaar** (12 digits, if student mentions it in chat): stored as `XXXX-XXXX-1234` (last 4 only). Full 12-digit number is never stored or logged.
-- **PAN** (10 chars, if student mentions it in chat): stored as last 4 characters only (e.g. `1234`). Full PAN is never stored or logged.
-- **Email**: not masked (no email in document flows).
-- **Address**: not stored at all.
+- **Consent is granted only by authenticated confirm endpoints** called explicitly from the UI (tapping "Confirm" or "Authorize" on a card).
+- Chat agent tools (`propose_verify`, `propose_reference_check`) display a card; they never call the consent endpoint or grant consent on the student's behalf.
+- Text inside a resume or any document can **never** grant consent.
+
+### Masking rules (applies only to values stated in chat — never to document file contents)
+
+| ID type             | Storage format                  | What is never stored |
+| ------------------- | ------------------------------- | -------------------- |
+| Aadhaar (12 digits) | `XXXX-XXXX-1234` (last 4 only)  | Full 12-digit number |
+| PAN (10 chars)      | Last 4 characters (e.g. `1234`) | Full PAN             |
+| Email               | Not masked                      | —                    |
+| Address text        | Not stored at all               | —                    |
+
+**On revoke:** `masked_id_tail` is set to `null`, `verified_flag` to `false`, and score is recomputed.
+
+### What officers and companies see
+
+Officers and companies see **only** the boolean authorization status for a student:
+
+- `reference_check_authorized: true/false` (derived from `reference_authorizations.revoked_at`)
+
+They **never** receive: documents, storage paths, `masked_id_tail`, `verified_flag`, `verification_note`, or any other verification detail.
 
 ### Scoring flags
 
-Both `documents_pre_verified` and `reference_check_authorized` scoring flags are derived from the database only. They are never set from LLM output, document text, or external API responses.
+Both `documents_pre_verified` and `reference_check_authorized` are derived from the database only. They are never set from LLM output, document text, chat text, or any external API response.

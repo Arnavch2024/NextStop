@@ -139,7 +139,21 @@ def check_database_schema(
             raise MissingMigrationError(msg) from exc
         return False
 
+    # Check 7: Day 5 consent flow (009_day5_consent.sql)
+    try:
+        client.table("reference_authorizations").select("id").limit(1).execute()
+        client.table("documents").select("id,verified_flag").limit(1).execute()
+    except Exception as exc:
+        msg = (
+            "Database schema check failed: missing migration 009_day5_consent.sql. "
+            f"Required Day 5 consent schema (reference_authorizations table, documents.verified_flag column) missing: {exc}"
+        )
+        logger.error(msg)
+        if raise_on_error:
+            raise MissingMigrationError(msg) from exc
+        return False
+
     logger.info(
-        "Startup schema check passed: Day 3 and Day 4 migrations (003_search_slice.sql, 004_day3_security.sql, 005_day4_roles.sql, 006_college_domains.sql) verified."
+        "Startup schema check passed: Day 3, Day 4, and Day 5 migrations (003_search_slice.sql, 004_day3_security.sql, 005_day4_roles.sql, 006_college_domains.sql, 009_day5_consent.sql) verified."
     )
     return True

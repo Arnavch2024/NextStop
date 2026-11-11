@@ -1,7 +1,9 @@
 import io
 import os
+import re
 import uuid
-from typing import List
+from datetime import datetime, timezone
+from typing import Any, List, Optional
 
 import docx
 import pypdf
@@ -9,17 +11,26 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from supabase import Client
 
 from app.agent.resume_parser import parse_resume
+from app.config import settings
 from app.db.supabase import get_supabase_client, write_raw_event
 from app.dependencies import get_current_user
 from app.logger import logger
 from app.models.api import (
     BreakdownItemModel,
+    ReferenceAuthRequest,
+    ReferenceAuthResponse,
     ResumeResponse,
+    RevokeVerifyResponse,
     ScoreResponse,
     StudentProfileResponse,
+    TimelineResponse,
+    TimelineStation,
+    VerifyMockRequest,
+    VerifyMockResponse,
 )
 from app.models.db import UserProfile
 from app.scoring.loader import recompute_score
+from app.verification import get_verifier
 
 router = APIRouter(prefix="/v1/students/me", tags=["students"])
 
@@ -344,3 +355,449 @@ async def get_student_profile(
         skills=skills,
         documents=documents,
     )
+
+
+@router.post("/verify-mock", response_model=VerifyMockResponse, status_code=status.HTTP_200_OK)
+def verify_mock(
+    body: Optional[VerifyMockRequest] = None,
+    user: UserProfile = Depends(get_current_user),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """Trigger demo mock pre-verify — env-gated by DEMO_VERIFY_ENABLED (returns 404 if disabled).
+
+    NEVER reads document file contents. Sets verified_flag and document_type from MIME only.
+    """
+    if not settings.DEMO_VERIFY_ENABLED:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Demo verification is disabled on this environment.",
+        )
+    if not user.role:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Role not assigned. Please complete onboarding at /onboarding.",
+        )
+
+    student_id = get_or_create_student_id(supabase, user)
+
+    # 1. Look up document for this student
+    target_doc_id = body.document_id if body and body.document_id else None
+    query = supabase.table("documents").select("*").eq("student_id", student_id)
+    if target_doc_id:
+        query = query.eq("id", target_doc_id)
+    res = query.limit(1).execute()
+
+    if not res.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No document found to verify. Please upload a document first.",
+        )
+
+    doc = res.data[0]
+    doc_id = str(doc["id"])
+    mime_type = doc.get("mime_type") or "application/pdf"
+
+    # 2. Call verifier (NEVER reads file bytes or sends content to LLM/OCR)
+    verifier = get_verifier()
+    v_res = verifier.verify(doc_id, mime_type)
+
+    doc_type = (body.document_type if body and body.document_type else None) or v_res.document_type
+    raw_tail = (body.masked_id_tail if body and body.masked_id_tail else None) or v_res.masked_id_tail
+    masked_tail = None
+    if raw_tail:
+        # Never store full Aadhaar/PAN; ensure masked format
+        digits = re.sub(r"\D", "", raw_tail)
+        if len(digits) >= 4:
+            masked_tail = f"XXXX-XXXX-{digits[-4:]}"
+        else:
+            masked_tail = raw_tail[-4:]
+    elif doc_type == "aadhaar":
+        masked_tail = "XXXX-XXXX-1234"
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    supabase.table("documents").update(
+        {
+            "verified_flag": v_res.verified_flag,
+            "verification_status": "pre_verified",
+            "verified_at": now_iso,
+            "verification_note": v_res.verification_note,
+            "document_type": doc_type,
+            "masked_id_tail": masked_tail,
+        }
+    ).eq("id", doc_id).execute()
+
+    # 3. Recompute score with trigger 'pre_verify'
+    score_res = recompute_score(supabase, student_id, trigger="pre_verify")
+
+    return VerifyMockResponse(
+        status="pre_verified",
+        document_id=doc_id,
+        verified_flag=True,
+        verification_note=v_res.verification_note,
+        score=ScoreResponse(
+            score=score_res.score,
+            breakdown=[
+                BreakdownItemModel(reason=b.reason, points=b.points, source=b.source) for b in score_res.breakdown
+            ],
+            next_best_actions=score_res.next_best_actions,
+        ),
+    )
+
+
+@router.delete("/verify-mock", response_model=RevokeVerifyResponse, status_code=status.HTTP_200_OK)
+def revoke_verify(
+    user: UserProfile = Depends(get_current_user),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """Revoke document pre-verification.
+
+    Clears verified_flag, masked_id_tail, and recomputes score.
+    """
+    if not user.role:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Role not assigned. Please complete onboarding at /onboarding.",
+        )
+
+    student_id = get_or_create_student_id(supabase, user)
+
+    # Clear flags on documents
+    supabase.table("documents").update(
+        {
+            "verified_flag": False,
+            "verification_status": "pending",
+            "masked_id_tail": None,
+            "verified_at": None,
+            "verification_note": None,
+        }
+    ).eq("student_id", student_id).execute()
+
+    # Recompute score with trigger 'pre_verify_revoked'
+    score_res = recompute_score(supabase, student_id, trigger="pre_verify_revoked")
+
+    return RevokeVerifyResponse(
+        status="revoked",
+        verified_flag=False,
+        score=ScoreResponse(
+            score=score_res.score,
+            breakdown=[
+                BreakdownItemModel(reason=b.reason, points=b.points, source=b.source) for b in score_res.breakdown
+            ],
+            next_best_actions=score_res.next_best_actions,
+        ),
+    )
+
+
+@router.post("/reference-auth", response_model=ReferenceAuthResponse, status_code=status.HTTP_200_OK)
+def authorize_reference_check(
+    body: Optional[ReferenceAuthRequest] = None,
+    user: UserProfile = Depends(get_current_user),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """Authorize reference check. Must be called explicitly from the UI.
+
+    Chat agent tools may only propose; text inside a resume or document can NEVER grant consent.
+    Awards +2 points to student score and drafts a reference-request letter (never auto-sent).
+    """
+    if not user.role:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Role not assigned. Please complete onboarding at /onboarding.",
+        )
+
+    student_id = get_or_create_student_id(supabase, user)
+    now_dt = datetime.now(timezone.utc)
+    now_iso = now_dt.isoformat()
+
+    # 1. Insert or reactivate reference authorization
+    auth_id = str(uuid.uuid4())
+    internship_id = body.internship_id if body else None
+    authorized_party = body.authorized_party if body else None
+    authorized_role = body.authorized_role if body else None
+
+    # Resolve internship company name if internship_id provided and authorized_party missing
+    if internship_id and not authorized_party:
+        try:
+            int_res = supabase.table("internships").select("company").eq("id", internship_id).limit(1).execute()
+            if int_res.data:
+                authorized_party = int_res.data[0].get("company")
+        except Exception:
+            pass
+
+    supabase.table("reference_authorizations").insert(
+        {
+            "id": auth_id,
+            "student_id": student_id,
+            "profile_id": user.id,
+            "internship_id": internship_id,
+            "authorized_party": authorized_party,
+            "authorized_role": authorized_role,
+            "authorized_at": now_iso,
+            "revoked_at": None,
+        }
+    ).execute()
+
+    # 2. Draft a reference-request letter to the internship company (never auto-sent)
+    company_name = authorized_party or "Internship Employer"
+    try:
+        supabase.table("outreach_drafts").insert(
+            {
+                "id": str(uuid.uuid4()),
+                "profile_id": user.id,
+                "channel": "email",
+                "subject": f"Reference Request — {user.display_name or 'Student'}",
+                "body": (
+                    f"Dear {company_name} Team,\n\n"
+                    f"{user.display_name or 'The student'} has authorized a reference check regarding their internship experience. "
+                    "Please confirm their tenure and performance.\n\n"
+                    "Thank you."
+                ),
+                "kind": "outreach",
+            }
+        ).execute()
+    except Exception as exc:
+        logger.warning(f"Could not save draft reference letter: {exc}")
+
+    # 3. Recompute score with trigger 'reference_auth' (+2 points)
+    score_res = recompute_score(supabase, student_id, trigger="reference_auth")
+
+    return ReferenceAuthResponse(
+        id=auth_id,
+        student_id=student_id,
+        authorized_at=now_dt,
+        revoked_at=None,
+        reference_check_authorized=True,
+        score=ScoreResponse(
+            score=score_res.score,
+            breakdown=[
+                BreakdownItemModel(reason=b.reason, points=b.points, source=b.source) for b in score_res.breakdown
+            ],
+            next_best_actions=score_res.next_best_actions,
+        ),
+    )
+
+
+@router.delete("/reference-auth", response_model=ReferenceAuthResponse, status_code=status.HTTP_200_OK)
+def revoke_reference_check(
+    user: UserProfile = Depends(get_current_user),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """Revoke reference check authorization.
+
+    Sets revoked_at and recomputes score immediately (drops +2 bonus).
+    """
+    if not user.role:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Role not assigned. Please complete onboarding at /onboarding.",
+        )
+
+    student_id = get_or_create_student_id(supabase, user)
+    now_dt = datetime.now(timezone.utc)
+    now_iso = now_dt.isoformat()
+
+    # Mark active authorizations revoked
+    supabase.table("reference_authorizations").update({"revoked_at": now_iso}).eq("student_id", student_id).is_(
+        "revoked_at", None
+    ).execute()
+
+    # Recompute score with trigger 'reference_revoked'
+    score_res = recompute_score(supabase, student_id, trigger="reference_revoked")
+
+    return ReferenceAuthResponse(
+        id=str(uuid.uuid4()),
+        student_id=student_id,
+        authorized_at=now_dt,
+        revoked_at=now_dt,
+        reference_check_authorized=False,
+        score=ScoreResponse(
+            score=score_res.score,
+            breakdown=[
+                BreakdownItemModel(reason=b.reason, points=b.points, source=b.source) for b in score_res.breakdown
+            ],
+            next_best_actions=score_res.next_best_actions,
+        ),
+    )
+
+
+def _parse_year(val: Optional[Any]) -> Optional[int]:
+    if val is None:
+        return None
+    if isinstance(val, int):
+        return val
+    s = str(val).strip()
+    if len(s) >= 4 and s[:4].isdigit():
+        return int(s[:4])
+    return None
+
+
+def _format_source_badge(source: Optional[str]) -> str:
+    s = (source or "resume").lower()
+    if s == "user_said":
+        return "User said"
+    if s == "system":
+        return "System"
+    return "Resume"
+
+
+@router.get("/timeline", response_model=TimelineResponse, status_code=status.HTTP_200_OK)
+def get_student_timeline(
+    user: UserProfile = Depends(get_current_user),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """Railway-route timeline stations ordered by start_year ascending.
+
+    Current station is highlighted according to the current-station rule:
+    last station with a start and no end year; else the latest station with data;
+    college with no end year is labeled 'in college'.
+    """
+    if not user.role:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Role not assigned. Please complete onboarding at /onboarding.",
+        )
+
+    student_id = get_or_create_student_id(supabase, user)
+
+    # 1. Fetch education, internships, jobs
+    edu_res = supabase.table("education").select("*").eq("student_id", student_id).execute()
+    int_res = supabase.table("internships").select("*").eq("student_id", student_id).execute()
+    job_res = supabase.table("jobs").select("*").eq("student_id", student_id).execute()
+
+    stations: List[TimelineStation] = []
+
+    # Education stations
+    for e in edu_res.data or []:
+        lvl = str(e.get("level", "")).lower()
+        inst = e.get("institution") or ""
+        deg = e.get("degree") or ""
+        br = e.get("branch") or ""
+        sy = _parse_year(e.get("start_year"))
+        ey = _parse_year(e.get("end_year"))
+        source = _format_source_badge(e.get("source"))
+
+        if "tenth" in lvl or "10" in lvl:
+            kind = "school_10"
+            title = inst or "Class X (10th Secondary)"
+            subtitle = e.get("board_or_university") or "Secondary School"
+        elif "twelfth" in lvl or "12" in lvl:
+            kind = "school_12"
+            title = inst or "Class XII (12th Higher Secondary)"
+            subtitle = br or e.get("board_or_university") or "Higher Secondary"
+        else:
+            kind = "college"
+            title = f"{deg} — {inst}" if deg and inst else (deg or inst or "College Degree")
+            subtitle = br or "Higher Education"
+
+        stations.append(
+            TimelineStation(
+                kind=kind,
+                title=title,
+                subtitle=subtitle,
+                start_year=sy,
+                end_year=ey,
+                source_badge=source,
+                is_current=False,
+                is_future=False,
+            )
+        )
+
+    # Internship stations
+    for i in int_res.data or []:
+        comp = i.get("company") or "Company"
+        role = i.get("role") or "Intern"
+        sy = _parse_year(i.get("start_date"))
+        ey = _parse_year(i.get("end_date"))
+        source = _format_source_badge(i.get("source"))
+        stations.append(
+            TimelineStation(
+                kind="internship",
+                title=f"{role} — {comp}",
+                subtitle="Internship",
+                start_year=sy,
+                end_year=ey,
+                source_badge=source,
+                is_current=False,
+                is_future=False,
+            )
+        )
+
+    # Job stations
+    for j in job_res.data or []:
+        comp = j.get("company") or "Company"
+        role = j.get("role") or "Full-Time Role"
+        sy = _parse_year(j.get("start_date"))
+        ey = _parse_year(j.get("end_date"))
+        source = _format_source_badge(j.get("source"))
+        stations.append(
+            TimelineStation(
+                kind="job",
+                title=f"{role} — {comp}",
+                subtitle="Full-Time Work",
+                start_year=sy,
+                end_year=ey,
+                source_badge=source,
+                is_current=False,
+                is_future=False,
+            )
+        )
+
+    # 2. Sort past/present stations by start_year ascending. Stations with no start_year placed after dated ones.
+    dated = [s for s in stations if s.start_year is not None]
+    undated = [s for s in stations if s.start_year is None]
+    dated.sort(key=lambda s: s.start_year if s.start_year is not None else 0)
+    past_present_stations = dated + undated
+
+    # 3. Apply current-station rule:
+    # "is_current = true on the last station where start_year is not null AND end_year is null (ongoing).
+    # If no such station exists, is_current = true on the station with the highest start_year that has data.
+    # A college station with a start_year and no end_year shows subtitle = 'in college' and is_current = true."
+    ongoing_stations = [s for s in past_present_stations if s.start_year is not None and s.end_year is None]
+    if ongoing_stations:
+        current_station = ongoing_stations[-1]
+    elif dated:
+        current_station = dated[-1]
+    elif past_present_stations:
+        current_station = past_present_stations[-1]
+    else:
+        current_station = None
+
+    for s in past_present_stations:
+        if s is current_station:
+            s.is_current = True
+            if s.kind == "college" and s.start_year is not None and s.end_year is None:
+                s.subtitle = "in college"
+
+    # 4. Check future stations (pre_verify and reference_check)
+    doc_res = supabase.table("documents").select("verified_flag").eq("student_id", student_id).execute()
+    has_pre_verified = any(bool(r.get("verified_flag")) for r in (doc_res.data or []))
+
+    ref_res = (
+        supabase.table("reference_authorizations")
+        .select("id")
+        .eq("student_id", student_id)
+        .is_("revoked_at", None)
+        .limit(1)
+        .execute()
+    )
+    has_ref_auth = bool(ref_res.data and len(ref_res.data) > 0)
+
+    future_stations: List[TimelineStation] = [
+        TimelineStation(
+            kind="pre_verify_done" if has_pre_verified else "pre_verify_pending",
+            title="Documents Pre-verified" if has_pre_verified else "Document Pre-verification",
+            subtitle="Verified (Mocked)" if has_pre_verified else "+2 points available",
+            is_current=False,
+            is_future=True,
+        ),
+        TimelineStation(
+            kind="reference_done" if has_ref_auth else "reference_pending",
+            title="Reference Check Authorized" if has_ref_auth else "Reference Check Authorization",
+            subtitle="Authorized ✓" if has_ref_auth else "+2 points available",
+            is_current=False,
+            is_future=True,
+        ),
+    ]
+
+    all_stations = past_present_stations + future_stations
+    return TimelineResponse(stations=all_stations)

@@ -171,8 +171,17 @@ def web_search_enrich(
        ONLY accepted contacts with lake IDs, plus counts. Raw snippets/text are never returned.
     """
     clean_query = query.strip()
-    if user and getattr(user, "is_demo", False):
-        logger.info(f"Demo user {getattr(user, 'id', 'unknown')} blocked from web_search_enrich")
+    is_demo = bool(user and getattr(user, "is_demo", False))
+    if not is_demo and actor_id and client:
+        try:
+            prof = client.table("profiles").select("is_demo").eq("id", actor_id).execute()
+            if prof.data and prof.data[0].get("is_demo"):
+                is_demo = True
+        except Exception:
+            pass
+
+    if is_demo:
+        logger.info(f"Demo user blocked from web_search_enrich (user={getattr(user, 'id', None)}, actor={actor_id})")
         return {
             "results": 0,
             "accepted": 0,

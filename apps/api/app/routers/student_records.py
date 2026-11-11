@@ -343,6 +343,21 @@ def list_student_records(
             r for r in all_records if r.get("score_value") is not None and float(r["score_value"]) >= min_score
         ]
 
+    # Fetch active reference authorizations (officers and companies see only a reference_check_authorized boolean)
+    auth_profile_ids = set()
+    auth_student_ids = set()
+    try:
+        auth_res = (
+            client.table("reference_authorizations").select("profile_id, student_id").is_("revoked_at", None).execute()
+        )
+        for a in auth_res.data or []:
+            if a.get("profile_id"):
+                auth_profile_ids.add(str(a["profile_id"]))
+            if a.get("student_id"):
+                auth_student_ids.add(str(a["student_id"]))
+    except Exception:
+        pass
+
     # Apply company/recruiter visibility rule server-side:
     # visible iff batch_sharing.shared_with_recruiters == True AND NOT opted_out
     if user.role in (ProfileRole.COMPANY, ProfileRole.RECRUITER):
@@ -380,6 +395,9 @@ def list_student_records(
                     "student_score": int(r.get("score_value") * 10)
                     if r.get("score_scale") == "cgpa10" and r.get("score_value")
                     else 75,
+                    "reference_check_authorized": bool(
+                        str(r.get("claimed_by_profile_id")) in auth_profile_ids or str(r.get("id")) in auth_student_ids
+                    ),
                     "unverified": True,
                 }
                 visible_records.append(card)
@@ -392,6 +410,9 @@ def list_student_records(
     # For Placement Officer: calculate status counts and return paged records
     status_counts = {"in_college": 0, "internship": 0, "full_time": 0, "not_placed": 0}
     for r in all_records:
+        r["reference_check_authorized"] = bool(
+            str(r.get("claimed_by_profile_id")) in auth_profile_ids or str(r.get("id")) in auth_student_ids
+        )
         st = r.get("current_status", "in_college")
         if st in status_counts:
             status_counts[st] += 1

@@ -336,32 +336,47 @@ Extends the spec. Unchanged: the stack, Day 1-3 contracts (`/health`, `/v1/chat`
 
 ## 11. Day 5 — Consent flows + Student railway-route timeline
 
-Scope: ≈1 day of build. Unchanged: all prior contracts, Day 2 student scoring rules, never-auto-send. The +2 scoring bonuses for pre-verify and reference-check were already accepted by the scoring engine (Day 2 design §10.3 — `documents_pre_verified` and `reference_check_authorized` parameters); Day 5 wires them. Open decisions in design §13.8.
+Scope: ≈1 day of build. Unchanged: all prior contracts, Day 2 student scoring rules, never-auto-send. The +2 scoring bonuses for pre-verify and reference-check were already accepted by the scoring engine (Day 2 design §10.3); Day 5 wires them. Migration is `009_day5_consent.sql`. Open decisions resolved in design §13.8.
 
 ### 11.1 Consent flows
 
 #### Pre-verify (+2 scoring points)
 
-- **FR-D5-CV-1**: Before the file picker is shown, THE SYSTEM SHALL display an upload notice: _"Demo only: please upload sample documents, not your real Aadhaar or PAN."_
-- **FR-D5-CV-2**: WHEN a student uploads a document the client SHALL automatically call `POST /v1/students/me/verify-mock` (env-gated `MOCK_VERIFY_ENABLED`, on in the demo project). The student sees a single flow — upload → consent acknowledged → verified.
-- **FR-D5-CV-3**: The mock verification SHALL set `verification_status = 'pre_verified'` and `verification_note = 'Demo verification (mocked)'`. THE SYSTEM SHALL NEVER read the document file contents, extract text, or send any document, its text, or any ID number to any LLM, OCR, or external service.
-- **FR-D5-CV-4**: Only the following SHALL be stored: `doc_type_verified` (document type from MIME/extension only), `verification_note`, and — only if the student states an Aadhaar or PAN in chat — `masked_id_tail` (Aadhaar: `XXXX-XXXX-1234`; PAN: last 4 characters). Address text is never stored.
-- **FR-D5-CV-5**: Document contents SHALL NEVER appear in application logs. The file path only may be logged.
-- **FR-D5-CV-6**: WHEN `verification_status = 'pre_verified'` the scoring engine's `documents_pre_verified` flag SHALL be set to `true` (DB-only; never derived from LLM output); `recompute_score` is triggered. Score breakdown labels the +2 points as `"Documents pre-verified (Demo)"`.
-- **FR-D5-CV-7**: THE UI SHALL show a "Demo verification (mocked)" badge on the score card and on the documents section.
+- **FR-D5-CV-1**: Before the file picker is shown, THE SYSTEM SHALL display: _"Demo only: please upload sample documents, not your real Aadhaar or PAN."_
+- **FR-D5-CV-2**: After upload, THE UI SHALL show a consent confirmation card. WHEN the student taps "Confirm", the client SHALL call `POST /v1/students/me/verify-mock` (env-gated `DEMO_VERIFY_ENABLED`, on in the demo project; returns 403 if off). Chat agent tools SHALL only propose (display the card); they SHALL NEVER call the endpoint or grant consent. Text inside a resume or document SHALL NEVER grant consent.
+- **FR-D5-CV-3**: `verify-mock` SHALL NEVER read the document file contents, extract text, or send any document, its text, or any ID number to any LLM, OCR, or external service.
+- **FR-D5-CV-4**: THE SYSTEM SHALL store only: `document_type` (from MIME/extension), `masked_id_tail` (Aadhaar: `XXXX-XXXX-1234`; PAN: last 4 characters — only if stated by the student in chat, not from the document), `verified_flag`, `verified_at`, `verification_note = 'Demo verification (mocked)'`. Address text is never stored. No full ID numbers are stored.
+- **FR-D5-CV-5**: Document contents and file bytes SHALL NEVER appear in application logs.
+- **FR-D5-CV-6**: WHEN `verified_flag = true` the scoring engine's `documents_pre_verified` flag SHALL be `true` (read from `verified_flag` only; `verification_status` no longer awards points from Day 5 onward). `recompute_score` is triggered; score breakdown labels the +2 as `"Documents pre-verified (Demo)"`.
+- **FR-D5-CV-6a**: Day 2 tests that assert `documents_pre_verified = true` via `verification_status` SHALL be updated to set `verified_flag = true`. Old production rows are not backfilled; demo/seed rows are backfilled by migration 009.
+- **FR-D5-CV-7**: THE UI SHALL show a "Demo verification (mocked)" badge on the score card and documents section.
+- **FR-D5-CV-8**: WHEN a student revokes, `masked_id_tail` SHALL be set to `null` and `verified_flag` to `false`; score SHALL be recomputed.
 
 #### Reference check authorization (+2 scoring points)
 
-- **FR-D5-RC-1**: A student SHALL authorize a reference check via chat ("I authorize a reference check") or an explicit consent button.
-- **FR-D5-RC-2**: Authorization is stored in a `reference_authorizations` table (student_id, authorized_at, revoked_at nullable).
-- **FR-D5-RC-3**: WHEN a valid (non-revoked) authorization exists the scoring engine's `reference_check_authorized` flag SHALL be set to `true`; score is recomputed.
-- **FR-D5-RC-4**: The student SHALL be able to revoke authorization via chat or the UI; `revoked_at` is set; score is recomputed.
+- **FR-D5-RC-1**: Chat agent SHALL propose authorization via a confirmation card only. The student SHALL confirm via an explicit UI button that calls `POST /v1/students/me/reference-auth`. Chat text, resume text, or document text SHALL NEVER grant authorization.
+- **FR-D5-RC-2**: Authorization is stored in `reference_authorizations` (student_id, authorized_at, revoked_at nullable).
+- **FR-D5-RC-3**: WHEN a valid (non-revoked) row exists, `reference_check_authorized = true` (DB-only); score is recomputed.
+- **FR-D5-RC-4**: The student SHALL be able to revoke via a UI "Revoke" button (calls the endpoint directly, one tap) or via chat (agent `propose_revoke_reference_check()` returns a confirmation card; endpoint called only after the student taps "Confirm Revoke" in the UI). `revoked_at` is set; score is recomputed immediately.
+- **FR-D5-RC-5**: Officers and companies SHALL see only the boolean authorization status for a student — never documents, storage paths, or masked values.
 
 ### 11.2 Student railway-route timeline
 
 - **FR-D5-TL-1**: The student home screen SHALL display a **railway-route timeline** — a vertical track with named stations and the student's current position highlighted.
-- **FR-D5-TL-2**: Stations (in chronological order): School (10th), Higher Secondary (12th), College (start → current or graduation year), each Internship (company + role + dates), first Full-Time Job, additional jobs. Future stations (grayed out): pre-verify, reference check.
-- **FR-D5-TL-3**: The current position (last station with `start_year` and no `end_year`; fallback = highest `start_year` with data) SHALL be highlighted with a distinct marker ("You are here"). A college station with no `end_year` shows "in college" as a subtitle. Stations are ordered by `start_year` ascending.
-- **FR-D5-TL-4**: Each station SHALL show its year or date range, a title, and a badge for the source (`Resume`, `User said`).
-- **FR-D5-TL-5**: Data is derived from existing `education`, `internships`, `jobs` rows — no new tables.
-- **FR-D5-TL-6**: The timeline is web-first; mobile shows a simplified list version.
+- **FR-D5-TL-2**: Stations (ordered by `start_year` ascending): School 10th, Higher Secondary 12th, College, each Internship, Full-Time Jobs. Future grayed-out stations: pre-verify, reference check.
+- **FR-D5-TL-3**: Current position = last station with `start_year not null AND end_year null`; fallback = station with the highest `start_year` that has data. A college station with no `end_year` shows "in college" as subtitle. Marked "You are here".
+- **FR-D5-TL-4**: Each station shows year/date range, title, source badge (`Resume`, `User said`).
+- **FR-D5-TL-5**: Data from existing `education`, `internships`, `jobs` rows — no new tables.
+- **FR-D5-TL-6**: Web-first; mobile shows a simplified flat list.
+
+### 11.3 DocumentVerifier interface
+
+- **FR-D5-DV-1**: THE SYSTEM SHALL implement a `DocumentVerifier` abstract interface with one production implementation: `MockVerifier` (Day 5) and one stub: `DigiLockerVerifier` (raises `NotImplementedError`, no network calls, no new dependencies).
+- **FR-D5-DV-2**: `MockVerifier.verify()` SHALL set `verified_flag = true` and `document_type` from MIME only, without reading file bytes and without calling any LLM, OCR or external service.
+- **FR-D5-DV-3**: `DigiLockerVerifier` SHALL raise `NotImplementedError` with a message pointing to `README#future-work`; it is a placeholder for future partner-registration-gated integration.
+- **FR-D5-DV-4**: The verify-mock endpoint SHALL call `get_verifier().verify()` to remain decoupled from the implementation.
+
+### 11.4 Demo user restrictions
+
+- **FR-D5-DEMO-1**: Demo users (`profiles.is_demo = true`) SHALL be blocked from triggering `web_search_enrich` and the ingestion pipeline. The agent runner SHALL omit web-search tools from the tool list for demo sessions.
+- **FR-D5-DEMO-2**: Demo users MAY read from `search_data_lake` (lake is read-only; no external quota consumed).

@@ -1576,11 +1576,12 @@ Extend `app/db/schema_check.py::check_database_schema` to also verify `005_day4_
 
 ### 12.12 Environment additions (api only unless noted)
 
-| Var                       | Where | Purpose                                           |
-| ------------------------- | ----- | ------------------------------------------------- |
-| `DEMO_LOGIN_ENABLED`      | api   | enable demo-account login (default false)         |
-| `DEMO_SHOW_SAMPLE`        | api   | already present; reused for sample visibility     |
-| `OFFICIAL_EMAIL_DENYLIST` | api   | disposable/free domains to reject at registration |
+| Var                       | Where | Purpose                                                             |
+| ------------------------- | ----- | ------------------------------------------------------------------- |
+| `DEMO_LOGIN_ENABLED`      | api   | enable demo-account login (default false)                           |
+| `DEMO_SHOW_SAMPLE`        | api   | already present; reused for sample visibility                       |
+| `OFFICIAL_EMAIL_DENYLIST` | api   | disposable/free domains to reject at registration                   |
+| `DEMO_VERIFY_ENABLED`     | api   | enable mock pre-verify endpoint (default false; on in demo project) |
 
 ### 12.13 Open decisions (recorded, not silently chosen)
 
@@ -1604,44 +1605,50 @@ Extend `app/db/schema_check.py::check_database_schema` to also verify `005_day4_
 
 ≈1 day of build. Unchanged: all prior contracts, Day 2 scoring rules, never-auto-send. Day 5 wires the `documents_pre_verified` and `reference_check_authorized` flags that the scoring engine already accepts (see `docs/scoring.md` rules 6 & 7 and `apps/api/app/scoring/` Day 2 implementation).
 
-### 13.1 Schema additions — `006_day5_consent.sql` (non-destructive, idempotent)
+**Migration number:** `009_day5_consent.sql`. Migrations 005 (day4 roles), 006 (college domains), 007 (profiles guard), and 008 (google onboarding guard) are already taken.
+
+### 13.1 Schema additions — `009_day5_consent.sql` (non-destructive, idempotent)
 
 ```sql
--- Reference-check authorizations
-create table if not exists public.reference_authorizations (
-  id uuid primary key default gen_random_uuid(),
-  student_id uuid not null references public.students(id) on delete cascade,
-  profile_id uuid not null references public.profiles(id) on delete cascade,
-  authorized_at timestamptz not null default now(),
-  revoked_at timestamptz,
-  created_at timestamptz not null default now()
-);
--- Schema additions for Day 5 consent flows
--- No encryption required: only masked last digits, document type and verified flag are stored.
--- File bytes stay in the private Supabase Storage bucket with short-lived signed URLs.
--- The mock verification process NEVER reads document contents, NEVER extracts text,
--- and NEVER sends any document, its text, or ID numbers to any LLM or OCR service.
+-- ============================================================
+-- 009_day5_consent.sql — Day 5: consent flows
+-- HARD RULES (enforced in application code, not just here):
+--   • The mock verification NEVER reads document file contents.
+--   • Nothing from a document is sent to any LLM, OCR or log.
+--   • Scoring flags are set only from DB state.
+--   • Consent is granted only via authenticated confirm endpoints;
+--     chat tools may PROPOSE consent but NEVER grant it.
+--     Text inside a resume or document can NEVER grant consent.
+-- ============================================================
 
 -- Reference-check authorizations
 create table if not exists public.reference_authorizations (
-  id uuid primary key default gen_random_uuid(),
-  student_id uuid not null references public.students(id) on delete cascade,
-  profile_id uuid not null references public.profiles(id) on delete cascade,
-  authorized_at timestamptz not null default now(),
-  revoked_at timestamptz,
-  created_at timestamptz not null default now()
+  id              uuid primary key default gen_random_uuid(),
+  student_id      uuid not null references public.students(id) on delete cascade,
+  profile_id      uuid not null references public.profiles(id) on delete cascade,
+  authorized_at   timestamptz not null default now(),
+  revoked_at      timestamptz,
+  created_at      timestamptz not null default now()
 );
-create unique index if not exists ref_auth_student_uidx on public.reference_authorizations (student_id)
+create unique index if not exists ref_auth_student_active_uidx
+  on public.reference_authorizations (student_id)
   where revoked_at is null;
-create index if not exists ref_auth_profile_idx on public.reference_authorizations (profile_id);
+create index if not exists ref_auth_profile_idx
+  on public.reference_authorizations (profile_id);
 
--- Document verification metadata (masked display values only; no raw sensitive data stored)
+-- Document verification metadata
+-- Stored: document_type, masked last digits, verified flag, verified_at, private storage path.
+-- NOT stored: full Aadhaar/PAN numbers, address text, pgcrypto-encrypted blobs,
+--             verified_fields JSONB, any text extracted from the document.
+alter table public.documents add column if not exists document_type   text;
+  -- 'aadhaar' | 'pan' | 'other' — derived from MIME/extension only
+alter table public.documents add column if not exists masked_id_tail  text;
+  -- Aadhaar: 'XXXX-XXXX-1234' (last 4); PAN: last 4 chars; null otherwise
+alter table public.documents add column if not exists verified_flag   boolean not null default false;
+alter table public.documents add column if not exists verified_at     timestamptz;
 alter table public.documents add column if not exists verification_note text;
---   e.g. 'Demo verification (mocked)' — label shown in UI
-alter table public.documents add column if not exists masked_id_tail text;
---   e.g. 'XXXX-XXXX-1234' or last 4 of PAN; NEVER the full number
-alter table public.documents add column if not exists doc_type_verified text;
---   e.g. 'aadhaar' | 'pan' | 'other'; only the type, never the number
+  -- UI label, e.g. 'Demo verification (mocked)'
+-- storage_path already exists (Day 2); private bucket, signed URLs only.
 ```
 
 RLS:
@@ -1651,53 +1658,63 @@ alter table public.reference_authorizations enable row level security;
 drop policy if exists "ref_auth self" on public.reference_authorizations;
 create policy "ref_auth self" on public.reference_authorizations
   for select using (auth.uid() = profile_id);
--- documents columns (verification_note, masked_id_tail, doc_type_verified)
--- are covered by the existing Day 2 "documents self" policy.
+-- documents columns (document_type, masked_id_tail, verified_flag, verified_at,
+-- verification_note) are covered by the existing Day 2 "documents self" policy.
 ```
 
-Migration enforcement: extend `check_database_schema` to probe `reference_authorizations`; raise `MissingMigrationError("006_day5_consent.sql")` if absent.
+Migration enforcement: extend `check_database_schema` to probe `reference_authorizations` and `documents.verified_flag`; raise `MissingMigrationError("009_day5_consent.sql")` if absent.
 
 ### 13.2 Pre-verify flow
 
-**Hard rule: the mock verification process NEVER reads the document file, NEVER extracts its text, and NEVER sends the document, its text, or any ID number to any LLM, OCR, or external service. The file stays in the private Storage bucket; access is only via short-lived signed URLs generated on demand.**
+**Hard rules:**
 
-Upload notice shown before the file picker: _"Demo only: please upload sample documents, not your real Aadhaar or PAN."_ This notice is rendered in the UI and included in the API description for `POST /v1/students/me/resume`.
+- The mock verification **NEVER reads the document file**, NEVER extracts its text, and NEVER sends the document, its text, or any ID number to any LLM, OCR, or external service.
+- The file stays in the private Storage bucket; access is only via short-lived signed URLs.
+- Document contents **NEVER appear in application logs** — only the storage path may be logged.
+- **Consent is granted only by the authenticated `POST /v1/students/me/verify-mock` endpoint** called from the UI. Chat agent tools (`propose_verify`) display a confirmation card; the student must click "Confirm" in the UI to call the endpoint. Text inside a resume or any document can never grant consent.
+
+Upload notice shown before the file picker (web + mobile):
+
+> _"Demo only: please upload sample documents, not your real Aadhaar or PAN."_
+> This notice is included in the API description for `POST /v1/students/me/resume`.
 
 Flow:
 
 1. Student uploads a document via `POST /v1/students/me/resume` (existing endpoint). The document row has `verification_status = 'pending'`. The uploaded file is **never read or parsed** during the verify-mock step.
-2. **Client auto-calls** `POST /v1/students/me/verify-mock` immediately after upload confirmation (no user action needed beyond initial consent). This endpoint is env-gated by `MOCK_VERIFY_ENABLED` (on in the demo project).
-3. `verify-mock` does the following **without reading the file**:
+2. UI presents a consent confirmation card ("Confirm demo verification of this document"). The student taps "Confirm".
+3. Client calls `POST /v1/students/me/verify-mock` (env-gated `DEMO_VERIFY_ENABLED`; on in the demo project; returns 403 if off). The endpoint, **without reading the file**:
    - Sets `verification_status = 'pre_verified'`.
-   - Sets `verification_note = 'Demo verification (mocked)'` — this label appears in every UI badge and API response.
-   - Sets `doc_type_verified` from the file extension or MIME only (e.g. `'pdf'` → `'other'`; no content analysis).
-   - Sets `masked_id_tail = null` (no number extracted; masking applies only if the student manually tells the agent their Aadhaar or PAN in chat — see below).
+   - Sets `verified_flag = true`, `verified_at = now()`.
+   - Sets `verification_note = 'Demo verification (mocked)'`.
+   - Sets `document_type` from MIME/extension only (e.g. `'application/pdf'` → `'other'`; no content analysis).
+   - Sets `masked_id_tail = null` (no number is extracted from the document; masking applies only if the student separately states an Aadhaar or PAN number in chat — see §13.2a).
    - Calls `recompute_score(supabase, student_id, trigger='pre_verify')`.
-4. **No document contents appear in logs.** The file path is logged only; the file bytes are never loaded into application memory during this flow.
-5. Score card shows the "Demo verification (mocked)" badge; breakdown entry reads `"Documents pre-verified (Demo)" | +2 | system`.
+4. Score card shows the "Demo verification (mocked)" badge; breakdown entry: `"Documents pre-verified (Demo)" | +2 | system`.
 
-**Masking — only applies if a student states an ID number in chat:**
+#### 13.2a Masking — only for values stated by the student in chat (never from document contents)
 
-- Aadhaar (12 digits): store `masked_id_tail = 'XXXX-XXXX-' + last4`; never store or log the full 12 digits.
-- PAN (10 chars): store `masked_id_tail = last4`; never store or log the full PAN.
-- Email-like values in chat: no masking required.
-- Address text: not stored — only `doc_type_verified` and `verification_note` are stored.
+- **Aadhaar** (12 digits mentioned in chat): `masked_id_tail = 'XXXX-XXXX-' + last4`. Full 12-digit number is never stored or logged.
+- **PAN** (10 chars mentioned in chat): `masked_id_tail = last4`. Full PAN never stored or logged.
+- **Revoking** (§13.3): on revoke, `masked_id_tail` is set to `null` and `verified_flag = false` for the document row; the `documents_pre_verified` scoring flag drops.
+- Address text from any source: never stored.
 
 ### 13.3 Reference-check authorization flow
 
-1. Student says "I authorize a reference check" in chat (agent calls `authorize_reference_check` tool) or clicks the consent button.
-2. `authorize_reference_check` tool: upserts `reference_authorizations` (student_id, authorized_at); calls `recompute_score`.
-3. Revoke: student says "I revoke my reference check" in chat or clicks Revoke. Sets `revoked_at = now()`; calls `recompute_score`. Score drops back.
-4. `recompute_score` loader: `reference_check_authorized = (exists a non-revoked row in reference_authorizations for student_id)`.
+1. Chat agent `propose_reference_check()` tool displays a confirmation card. The student must tap "Authorize" in the UI — this calls `POST /v1/students/me/reference-auth`. Chat text, resume text, or document text can never grant authorization.
+2. `POST /v1/students/me/reference-auth`: inserts/reactivates a `reference_authorizations` row; calls `recompute_score(trigger='reference_auth')`.
+3. Revoke: chat agent `propose_revoke_reference_check()` tool displays a confirmation card ("Revoke reference check authorization?"). The student taps "Confirm Revoke" in the UI — this calls `DELETE /v1/students/me/reference-auth`. The UI's dedicated "Revoke" button also calls the endpoint directly (one tap from the button, propose-and-confirm from chat). `DELETE /v1/students/me/reference-auth` sets `revoked_at = now()`; calls `recompute_score(trigger='reference_revoked')`. The `reference_check_authorized` flag drops immediately and the +2 points are removed.
+
+**Officers and companies** see only a boolean "has authorized" for a student — never the document, its path, or any masked value. The `GET /v1/students/me/timeline` future-station for reference-check shows "Authorized ✓" or "Pending" based on this flag only.
 
 ### 13.4 Scoring wiring
 
-The Day 2 engine `compute_score(ScoreInput)` already accepts both flags. Day 5 wires the loaders:
+**Single source of truth:** `documents_pre_verified` reads **only** `documents.verified_flag`. The Day 2 `verification_status` path (`verification_status = 'pre_verified'`) no longer awards points from Day 5 onward; it remains in the schema for backwards compatibility but is excluded from the scoring loader. Existing Day 2 tests that assert `documents_pre_verified = true` via `verification_status` must be updated to set `verified_flag = true` instead (the column exists after migration 009). Old production rows are **not** backfilled; demo/seed rows with `verification_status = 'pre_verified'` and `verified_flag = false` are backfilled by a labelled UPDATE in migration 009.
 
-- `documents_pre_verified = exists (documents where student_id = ? and verification_status = 'pre_verified')` — DB-only; scoring flags are never derived from LLM output or document text.
-- `reference_check_authorized = exists (reference_authorizations where student_id = ? and revoked_at is null)` — DB-only.
-- Trigger values: `'pre_verify'` and `'reference_revoked'`.
-- Revoking a reference authorization sets `revoked_at = now()`, immediately recomputes the score, and the `reference_check_authorized` flag drops to `false`. The +2 points are removed.
+Both flags are **DB-only**; they are never derived from LLM output, document text, or any external service response.
+
+- `documents_pre_verified = exists (documents where student_id = ? and verified_flag = true)` — `verified_flag` only; `verification_status` is ignored by the scorer from Day 5 onward.
+- `reference_check_authorized = exists (reference_authorizations where student_id = ? and revoked_at is null)`.
+- Trigger values: `'pre_verify'`, `'reference_auth'`, `'reference_revoked'`.
 
 ### 13.5 Railway-route timeline
 
@@ -1744,27 +1761,113 @@ export interface TimelineResponse {
 
 ### 13.6 Agent tools (Day 5 additions)
 
-Gemini `FunctionDeclaration`s for the `student` role:
+Gemini `FunctionDeclaration`s for the `student` role. Chat tools **propose** consent only — they display a confirmation card in the UI. The UI's "Confirm" / "Authorize" / "Confirm Revoke" button calls the actual endpoint. Chat text, resume text, or any document text can never grant or revoke consent.
 
-- `authorize_reference_check()`: creates/updates `reference_authorizations`; recomputes score; returns `{authorized, score_change}`.
-- `revoke_reference_check()`: sets `revoked_at`; recomputes; returns `{revoked, score_change}`.
+- `propose_verify()`: returns a UI confirmation card prompting the student to confirm mock verification. Does not call `verify-mock` itself.
+- `propose_reference_check()`: returns a UI confirmation card prompting authorization. Does not call `reference-auth` itself.
+- `propose_revoke_reference_check()`: returns a UI confirmation card ("Revoke reference check authorization?"). Does not call the delete endpoint itself. The UI's dedicated "Revoke" button still calls the endpoint directly (one tap from the button; propose-and-confirm only from chat).
+
+**Note:** all three are propose-only. No agent tool directly modifies consent or authorization state.
 
 ### 13.7 API additions (additive)
 
 ```yaml
 /v1/students/me/verify-mock:
   post:
-    { summary: "Trigger mock pre-verify (env-gated)", security: [bearerAuth] }
+    summary: "Trigger demo mock pre-verify — env-gated by DEMO_VERIFY_ENABLED"
+    description: "NEVER reads document contents. Sets verified_flag and document_type from MIME only."
+    security: [{ bearerAuth: [] }]
 /v1/students/me/reference-auth:
-  post: { summary: "Authorize reference check" }
-  delete: { summary: "Revoke reference check authorization" }
+  post:
+    {
+      summary: "Authorize reference check (consent endpoint; must be called from UI)",
+    }
+  delete:
+    {
+      summary: "Revoke reference check authorization; clears masked values and recomputes score",
+    }
 /v1/students/me/timeline:
   get: { summary: "Railway-route timeline stations" }
 ```
 
+Officers and companies have no endpoint to read document details, masked values, or storage paths for a student. They may read only the boolean `reference_check_authorized` field on a `StudentCard` (derived by the API from `reference_authorizations`).
+
 ### 13.8 Resolved decisions (Day 5)
 
-1. **Mock verify trigger** — **approved**: manual `POST /v1/students/me/verify-mock`, env-gated (`MOCK_VERIFY_ENABLED`; on in demo project). Client calls it automatically right after upload confirmation.
-2. **Encrypted field storage** — **removed**: no `pgcrypto`, no `verified_fields` JSONB. Only `masked_id_tail` (last 4 digits of Aadhaar/PAN if stated in chat), `doc_type_verified`, and `verification_note` are stored. Address text is never stored.
-3. **Mask format** — **approved**: Aadhaar → `XXXX-XXXX-1234`; PAN → last 4 characters only (e.g. `1234`). No email masking. Masking applies only to values the student mentions in chat, not to document contents (which are never read).
-4. **Timeline current-station** — **approved**: last station with `start_year is not null AND end_year is null`; if none, highest `start_year` with data. College with `start_year` + no `end_year` → `subtitle = 'in college'`. Stations ordered by `start_year` ascending.
+1. **Migration number** — `009_day5_consent.sql`. Migrations 005 (day4 roles), 006 (college domains), 007 (profiles guard), 008 (google onboarding guard) are taken.
+2. **Mock verify trigger** — manual `POST /v1/students/me/verify-mock`, env-gated `DEMO_VERIFY_ENABLED` (on in the demo project; off elsewhere). UI calls it automatically after the student taps "Confirm" on the consent card.
+3. **No pgcrypto / no verified_fields** — schema stores only: `document_type`, `masked_id_tail`, `verified_flag`, `verified_at`, `verification_note`. Private storage path (`storage_path`) already in Day 2 `documents` table.
+4. **Mask format** — Aadhaar: `XXXX-XXXX-1234` (last 4); PAN: last 4 characters. Masking applies only to values the student states in chat, never to document file contents (which are never read).
+5. **Revoke clears masked values** — on revoke: `masked_id_tail = null`, `verified_flag = false`, score recomputed. The `documents_pre_verified` flag drops immediately.
+6. **Consent via UI only** — chat tools propose (display a card); the authenticated confirm endpoint grants. Resume/document text can never grant consent.
+7. **Officers/companies** see only the boolean authorization status for a student; never documents, storage paths, or masked values.
+8. **Scoring flags DB-only** — `documents_pre_verified` reads `verified_flag`; `reference_check_authorized` reads `reference_authorizations`. Neither flag is ever derived from LLM output or document text.
+9. **Timeline current-station** — last station with `start_year not null AND end_year null`; fallback = highest `start_year` with data; college with no `end_year` → `subtitle = 'in college'`; ordered by `start_year` ascending.
+10. **Revoke is propose-only from chat** — `propose_revoke_reference_check()` returns a card; the UI Revoke button calls the endpoint directly (one tap). No agent tool directly modifies consent/authorization state.
+11. **`verified_flag` single source of truth** — `verification_status` no longer awards points from Day 5; Day 2 tests updated to set `verified_flag = true`; old rows not backfilled except demo/seed rows in migration 009.
+
+### 13.9 DocumentVerifier interface + demo web-search restriction
+
+#### DocumentVerifier interface
+
+`apps/api/app/verification/verifier.py`:
+
+```python
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+
+@dataclass
+class VerificationResult:
+    verified_flag: bool
+    document_type: str        # 'aadhaar' | 'pan' | 'other'
+    masked_id_tail: str | None  # 'XXXX-XXXX-1234' or last4 of PAN; null if not applicable
+    verification_note: str
+
+class DocumentVerifier(ABC):
+    """Provider-neutral interface for document verification.
+    Implementations MUST NOT read document file bytes from Storage.
+    Implementations MUST NOT send document content to any LLM, OCR or external service.
+    """
+    @abstractmethod
+    def verify(self, document_id: str, mime_type: str) -> VerificationResult:
+        ...
+
+class MockVerifier(DocumentVerifier):
+    """Day 5 implementation. Sets verified_flag=True without reading the file.
+    document_type is derived from MIME only. masked_id_tail is always None
+    (masking from chat-stated values is handled separately by the agent).
+    """
+    def verify(self, document_id: str, mime_type: str) -> VerificationResult:
+        doc_type = "other"
+        if "pdf" in mime_type:
+            doc_type = "other"   # MIME only; no content inspection
+        return VerificationResult(
+            verified_flag=True,
+            document_type=doc_type,
+            masked_id_tail=None,
+            verification_note="Demo verification (mocked)",
+        )
+
+class DigiLockerVerifier(DocumentVerifier):
+    """Future: real Aadhaar/PAN verification via DigiLocker or API Setu.
+    Raises NotImplementedError — no network calls, no new dependencies.
+    Requires UIDAI AUA/KUA certification and partner registration with
+    API Setu (https://api.setu.co) or DigiLocker sandbox credentials
+    before this stub can be implemented.
+    """
+    def verify(self, document_id: str, mime_type: str) -> VerificationResult:
+        raise NotImplementedError(
+            "DigiLockerVerifier requires partner registration. See README#future-work."
+        )
+
+def get_verifier() -> DocumentVerifier:
+    """Returns the configured verifier. Defaults to MockVerifier."""
+    # Future: read settings.DOCUMENT_VERIFIER_PROVIDER
+    return MockVerifier()
+```
+
+The `POST /v1/students/me/verify-mock` handler calls `get_verifier().verify(document_id, mime_type)` and writes the returned fields to the `documents` row. No path in production code may call `DigiLockerVerifier` directly — it must only be used via `get_verifier()`.
+
+#### Demo users cannot trigger web search or ingestion
+
+`search_data_lake` is available to demo users (read-only lake). The `web_search_enrich` tool and the ingestion pipeline (`app/search/ingest`) are **blocked** for any request where `profiles.is_demo = true`. The agent runner checks the demo flag before including web-search tools in the tool list for that session. This prevents demo users from consuming external search quota or adding data to the shared lake.
