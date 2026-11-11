@@ -303,6 +303,7 @@ class MockSupabaseClient:
             "campus_hiring": [],
             "batch_sharing": [],
             "college_domains": [],
+            "reference_authorizations": [],
         }
         self.auth = MagicMock()
         self.auth.get_user.side_effect = self._mock_get_user
