@@ -65,12 +65,20 @@ def load_student_for_scoring(supabase: Client, student_id: str) -> ScoreInput:
             )
         )
 
-    # 4. Check documents for pre_verified status (any pre-verified document)
-    doc_res = supabase.table("documents").select("verification_status").eq("student_id", student_id).execute()
-    documents_pre_verified = any(r.get("verification_status") == "pre_verified" for r in (doc_res.data or []))
+    # 4. Check documents for verified_flag (Day 5 single source of truth: documents.verified_flag)
+    doc_res = supabase.table("documents").select("verified_flag").eq("student_id", student_id).execute()
+    documents_pre_verified = any(bool(r.get("verified_flag")) for r in (doc_res.data or []))
 
-    # 5. Reference check authorized flag (defaults False until Day 5)
-    reference_check_authorized = False
+    # 5. Reference check authorized flag (Day 5: active row in reference_authorizations where revoked_at is null)
+    ref_res = (
+        supabase.table("reference_authorizations")
+        .select("id")
+        .eq("student_id", student_id)
+        .is_("revoked_at", None)
+        .limit(1)
+        .execute()
+    )
+    reference_check_authorized = bool(ref_res.data and len(ref_res.data) > 0)
 
     return ScoreInput(
         student_id=student_id,

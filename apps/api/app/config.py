@@ -77,8 +77,9 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = Field(default="development")
     CORS_ORIGINS: List[str] = Field(default=["*"])
 
-    # Day 4 Role & Demo Settings
+    # Day 4 & Day 5 Role & Demo Settings
     DEMO_LOGIN_ENABLED: bool = Field(default=False)
+    DEMO_VERIFY_ENABLED: bool = Field(default=False)
     DEMO_USER_PASSWORD: Optional[str] = Field(default=None)
     OFFICIAL_EMAIL_DENYLIST: List[str] = Field(
         default=[

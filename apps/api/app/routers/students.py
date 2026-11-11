@@ -1,7 +1,8 @@
 import io
 import os
 import uuid
-from typing import List
+from datetime import datetime, timezone
+from typing import List, Optional
 
 import docx
 import pypdf
@@ -9,17 +10,22 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from supabase import Client
 
 from app.agent.resume_parser import parse_resume
+from app.config import settings
 from app.db.supabase import get_supabase_client, write_raw_event
 from app.dependencies import get_current_user
 from app.logger import logger
 from app.models.api import (
     BreakdownItemModel,
     ResumeResponse,
+    RevokeVerifyResponse,
     ScoreResponse,
     StudentProfileResponse,
+    VerifyMockRequest,
+    VerifyMockResponse,
 )
 from app.models.db import UserProfile
 from app.scoring.loader import recompute_score
+from app.verification import get_verifier
 
 router = APIRouter(prefix="/v1/students/me", tags=["students"])
 
@@ -343,4 +349,122 @@ async def get_student_profile(
         jobs=jobs,
         skills=skills,
         documents=documents,
+    )
+
+
+@router.post("/verify-mock", response_model=VerifyMockResponse, status_code=status.HTTP_200_OK)
+def verify_mock(
+    body: Optional[VerifyMockRequest] = None,
+    user: UserProfile = Depends(get_current_user),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """Trigger demo mock pre-verify — env-gated by DEMO_VERIFY_ENABLED (returns 404 if disabled).
+
+    NEVER reads document file contents. Sets verified_flag and document_type from MIME only.
+    """
+    if not settings.DEMO_VERIFY_ENABLED:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Demo verification is disabled on this environment.",
+        )
+    if not user.role:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Role not assigned. Please complete onboarding at /onboarding.",
+        )
+
+    student_id = get_or_create_student_id(supabase, user)
+
+    # 1. Look up document for this student
+    target_doc_id = body.document_id if body and body.document_id else None
+    query = supabase.table("documents").select("*").eq("student_id", student_id)
+    if target_doc_id:
+        query = query.eq("id", target_doc_id)
+    res = query.limit(1).execute()
+
+    if not res.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No document found to verify. Please upload a document first.",
+        )
+
+    doc = res.data[0]
+    doc_id = str(doc["id"])
+    mime_type = doc.get("mime_type") or "application/pdf"
+
+    # 2. Call verifier (NEVER reads file bytes or sends content to LLM/OCR)
+    verifier = get_verifier()
+    v_res = verifier.verify(doc_id, mime_type)
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    supabase.table("documents").update(
+        {
+            "verified_flag": v_res.verified_flag,
+            "verification_status": "pre_verified",
+            "verified_at": now_iso,
+            "verification_note": v_res.verification_note,
+            "document_type": v_res.document_type,
+            "masked_id_tail": v_res.masked_id_tail,
+        }
+    ).eq("id", doc_id).execute()
+
+    # 3. Recompute score with trigger 'pre_verify'
+    score_res = recompute_score(supabase, student_id, trigger="pre_verify")
+
+    return VerifyMockResponse(
+        status="pre_verified",
+        document_id=doc_id,
+        verified_flag=True,
+        verification_note=v_res.verification_note,
+        score=ScoreResponse(
+            score=score_res.score,
+            breakdown=[
+                BreakdownItemModel(reason=b.reason, points=b.points, source=b.source) for b in score_res.breakdown
+            ],
+            next_best_actions=score_res.next_best_actions,
+        ),
+    )
+
+
+@router.delete("/verify-mock", response_model=RevokeVerifyResponse, status_code=status.HTTP_200_OK)
+def revoke_verify(
+    user: UserProfile = Depends(get_current_user),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """Revoke document pre-verification.
+
+    Clears verified_flag, masked_id_tail, and recomputes score.
+    """
+    if not user.role:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Role not assigned. Please complete onboarding at /onboarding.",
+        )
+
+    student_id = get_or_create_student_id(supabase, user)
+
+    # Clear flags on documents
+    supabase.table("documents").update(
+        {
+            "verified_flag": False,
+            "verification_status": "pending",
+            "masked_id_tail": None,
+            "verified_at": None,
+            "verification_note": None,
+        }
+    ).eq("student_id", student_id).execute()
+
+    # Recompute score with trigger 'pre_verify_revoked'
+    score_res = recompute_score(supabase, student_id, trigger="pre_verify_revoked")
+
+    return RevokeVerifyResponse(
+        status="revoked",
+        verified_flag=False,
+        score=ScoreResponse(
+            score=score_res.score,
+            breakdown=[
+                BreakdownItemModel(reason=b.reason, points=b.points, source=b.source) for b in score_res.breakdown
+            ],
+            next_best_actions=score_res.next_best_actions,
+        ),
     )
