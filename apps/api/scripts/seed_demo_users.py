@@ -14,7 +14,7 @@ import os
 import sys
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 # Add apps/api to path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -32,11 +32,7 @@ def seed_demo_users(
 ) -> Dict[str, Any]:
     """Idempotently seeds real demo users in Supabase Auth and matching profiles."""
     cli = client or get_supabase_client()
-    default_password = (
-        demo_password
-        or os.environ.get("DEMO_USER_PASSWORD")
-        or settings.DEMO_USER_PASSWORD
-    )
+    default_password = demo_password or os.environ.get("DEMO_USER_PASSWORD") or settings.DEMO_USER_PASSWORD
 
     if not default_password:
         raise ValueError(
@@ -45,12 +41,7 @@ def seed_demo_users(
         )
 
     # 1. Resolve or create a real demo college (real UUID)
-    coll_res = (
-        cli.table("colleges")
-        .select("id, name")
-        .ilike("name", "%St. Xavier%Demo%")
-        .execute()
-    )
+    coll_res = cli.table("colleges").select("id, name").ilike("name", "%St. Xavier%Demo%").execute()
     if coll_res.data and len(coll_res.data) > 0:
         demo_college_id = str(coll_res.data[0]["id"])
     else:
@@ -70,12 +61,7 @@ def seed_demo_users(
             ).execute()
 
     # 2. Resolve or create a real demo company (real UUID)
-    comp_res = (
-        cli.table("companies")
-        .select("id, name")
-        .ilike("name", "%Tata Consultancy%Demo%")
-        .execute()
-    )
+    comp_res = cli.table("companies").select("id, name").ilike("name", "%Tata Consultancy%Demo%").execute()
     if comp_res.data and len(comp_res.data) > 0:
         demo_company_id = str(comp_res.data[0]["id"])
     else:
@@ -137,10 +123,7 @@ def seed_demo_users(
         email = spec["email"]
         role = spec["role"]
         display_name = spec["display_name"]
-        pwd = (
-            os.environ.get(f"DEMO_PASSWORD_{role.upper()}")
-            or default_password
-        )
+        pwd = os.environ.get(f"DEMO_PASSWORD_{role.upper()}") or default_password
 
         matched_user = next(
             (u for u in existing_users if getattr(u, "email", None) == email),
@@ -181,9 +164,7 @@ def seed_demo_users(
                         },
                     }
                 )
-                user_id = str(
-                    getattr(created, "user", created).id
-                )
+                user_id = str(getattr(created, "user", created).id)
             except Exception as exc:
                 logger.error(f"Failed to create demo auth user {email}: {exc}")
                 raise
@@ -201,12 +182,7 @@ def seed_demo_users(
 
         # For student role, ensure students table row exists
         if role == "student":
-            stu_check = (
-                cli.table("students")
-                .select("id")
-                .eq("profile_id", user_id)
-                .execute()
-            )
+            stu_check = cli.table("students").select("id").eq("profile_id", user_id).execute()
             if not stu_check.data:
                 cli.table("students").insert(
                     {
@@ -237,4 +213,3 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"Seed failed: {e}", file=sys.stderr)
         sys.exit(1)
-

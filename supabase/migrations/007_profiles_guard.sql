@@ -17,8 +17,8 @@ security definer
 set search_path = public, pg_temp
 as $$
 begin
-  -- Service role bypasses all client guards
-  if auth.role() = 'service_role' then
+    -- Only browser clients (authenticated/anon) are restricted; the server and the SQL editor are not
+  if coalesce(auth.role(), '') not in ('authenticated', 'anon') then
     return new;
   end if;
 

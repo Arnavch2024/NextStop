@@ -172,7 +172,7 @@ def _simulate_profiles_guard_trigger(
     Exact Python mirror of public.guard_profile_privileged_columns() PL/pgSQL trigger
     defined in migrations 007 and 008.
     """
-    if auth_role == "service_role":
+    if auth_role not in ("authenticated", "anon"):
         return new
 
     if op == "INSERT":
