@@ -12,6 +12,7 @@ import {
 } from "@recruiting/shared";
 import { ContactCardItem } from "@/app/components/ContactCardItem";
 import { DraftMessageModal } from "@/app/components/DraftMessageModal";
+import { SwitchDemoRoleButton } from "@/app/components/SwitchDemoRoleButton";
 import {
   Bookmark,
   MessageSquare,
@@ -33,6 +34,7 @@ export default function MyListPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
+  const [isDemo, setIsDemo] = useState(false);
 
   const [contacts, setContacts] = useState<ContactCard[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -101,6 +103,9 @@ export default function MyListPage() {
       }
 
       setRole(profile.role);
+      if (profile.is_demo) {
+        setIsDemo(true);
+      }
       setDisplayName(
         profile.display_name || session.user.email?.split("@")[0] || "User"
       );
@@ -207,6 +212,7 @@ export default function MyListPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          {isDemo && <SwitchDemoRoleButton />}
           <button
             type="button"
             onClick={() => sessionToken && fetchSavedList(sessionToken)}

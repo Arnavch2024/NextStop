@@ -70,6 +70,7 @@ Fill in the values:
 | api        | `DEMO_SHOW_SAMPLE`                                                | Show sample/seed data in lake by default (default: `false`)           |
 | api        | `DEMO_LOGIN_ENABLED`                                              | Enable instant demo-account logins on auth screens (default: `false`) |
 | api        | `DEMO_USER_PASSWORD`                                              | Password for pre-seeded demo accounts (optional in dev, env-gated)    |
+| web        | `NEXT_PUBLIC_DEMO_ENABLED`                                        | Enable /demo persona picker & 'Try the demo' button (default: `true`) |
 | web/mobile | `NEXT_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_URL`           | Same Supabase URL                                                     |
 | web/mobile | `NEXT_PUBLIC_SUPABASE_ANON_KEY` / `EXPO_PUBLIC_SUPABASE_ANON_KEY` | Same anon key                                                         |
 | web/mobile | `NEXT_PUBLIC_API_BASE_URL` / `EXPO_PUBLIC_API_BASE_URL`           | URL of `apps/api` (e.g. `http://localhost:8000`)                      |
@@ -260,6 +261,28 @@ Browser / Mobile App
 | **Placement Officer** | Manage college contacts & students     |
 | **Company**           | Update company profile, contacts       |
 | **Recruiter**         | Query across companies and students    |
+
+---
+
+## Demo Personas & Isolated Sandbox (/demo)
+
+Web demo logins are isolated on their own dedicated page at `/demo`, keeping the primary `/login` screen clean and credential-focused with an optional secondary "Try the demo" button.
+
+### Demo Roles Available
+
+1. **Student (`student`)**: Aarav Sharma (SPIT Mumbai, Batch 2027) — view readiness scores, explore the Mumbai railway milestone timeline, and test mocked pre-verification.
+2. **Placement Officer (`placement_officer`)**: Prof. Sunita Patil (VJTI Mumbai) — manage campus batches, toggle batch-sharing permissions, and view student scores.
+3. **Company (`company`)**: Pooja Sharma (University Relations Lead) — upload hiring history CSVs, calculate company scores, and search opted-in candidates.
+4. **Recruiter (`recruiter`)**: Karan Mehta (Early Careers Specialist) — search candidate profiles via AI assistant, filter by scores, and save to My List.
+
+### Key Controls & Protections
+
+- **Notice Banner**: _"Demo accounts use sample data. Verification is mocked. Nothing is ever sent."_
+- **Role Switching**: An active demo session (`profiles.is_demo = true`) surfaces a "Switch demo role" button in all dashboard headers to sign out and return to `/demo`. Real users never see this button.
+- **Environment Gating**:
+  - Web: `NEXT_PUBLIC_DEMO_ENABLED` (when `false`, `/demo` renders a 404 not-found page and the login button is hidden).
+  - API: `DEMO_LOGIN_ENABLED` (when `false`, returns `404 Not Found`).
+- **Data Isolation**: Demo accounts search and interact exclusively with demo-flagged records (`is_demo_data = true`). Live external web searches and data ingestion are disabled for demo users.
 
 ---
 

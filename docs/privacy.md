@@ -72,6 +72,9 @@ approach, not legal compliance**.
 - **Demo users** (`profiles.is_demo = true`): see **only** `student_records` rows flagged
   `is_demo_data = true` (synthetic seeded data). Real student data is never returned to demo
   profiles. Enforced at the service layer, not just via RLS.
+- **Demo persona picker (`/demo`)**: Demo accounts are accessed via the dedicated `/demo` page with prominent warning banner:
+  > _"Demo accounts use sample data. Verification is mocked. Nothing is ever sent."_
+  > Active demo sessions (`profiles.is_demo = true`) display a "Switch demo role" button in headers to sign out and return to `/demo`. Real users never see this button.
 
 ### Minimal visible fields to companies/recruiters
 
