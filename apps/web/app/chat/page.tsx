@@ -23,6 +23,7 @@ import {
 import { ContactCardItem } from "@/app/components/ContactCardItem";
 import { DraftMessageModal } from "@/app/components/DraftMessageModal";
 import { ChatConfirmationCard } from "@/app/components/ChatConfirmationCard";
+import { SwitchDemoRoleButton } from "@/app/components/SwitchDemoRoleButton";
 import {
   Send,
   Mic,
@@ -784,6 +785,8 @@ export default function ChatPage() {
               <ArrowRight className="h-3.5 w-3.5" />
             </Link>
           )}
+
+          {isDemo && <SwitchDemoRoleButton />}
 
           <button
             onClick={handleSignOut}

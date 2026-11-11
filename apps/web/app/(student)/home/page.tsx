@@ -31,6 +31,7 @@ import {
 import { RailwayTimeline } from "@/app/components/RailwayTimeline";
 import { PreVerifySheet } from "@/app/components/PreVerifySheet";
 import { ReferenceAuthSheet } from "@/app/components/ReferenceAuthSheet";
+import { SwitchDemoRoleButton } from "@/app/components/SwitchDemoRoleButton";
 
 export default function StudentHomePage() {
   const router = useRouter();
@@ -45,6 +46,7 @@ export default function StudentHomePage() {
     []
   );
   const [syncToast, setSyncToast] = useState<string | null>(null);
+  const [isDemo, setIsDemo] = useState(false);
 
   // Modals state
   const [isPreVerifyOpen, setIsPreVerifyOpen] = useState(false);
@@ -87,9 +89,13 @@ export default function StudentHomePage() {
 
       const { data: profile } = await supabase
         .from("profiles")
-        .select("role")
+        .select("role, is_demo")
         .eq("id", session.user.id)
         .single();
+
+      if (profile?.is_demo) {
+        setIsDemo(true);
+      }
 
       if (!profile?.role) {
         router.replace("/onboarding");
@@ -292,13 +298,16 @@ export default function StudentHomePage() {
                 : "Campus Recruiting"}
             </p>
           </div>
-          <Link
-            href="/chat"
-            className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition"
-          >
-            <MessageSquare className="w-4 h-4" />
-            <span>Chat Assistant</span>
-          </Link>
+          <div className="flex items-center gap-2.5">
+            {isDemo && <SwitchDemoRoleButton />}
+            <Link
+              href="/chat"
+              className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition"
+            >
+              <MessageSquare className="w-4 h-4" />
+              <span>Chat Assistant</span>
+            </Link>
+          </div>
         </div>
       </header>
 

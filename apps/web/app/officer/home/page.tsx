@@ -24,6 +24,7 @@ import {
 import { ScoreBreakdownCard } from "@/components/ScoreBreakdownCard";
 import { ConsentModal } from "@/components/ConsentModal";
 import { DraftLetterModal } from "@/components/DraftLetterModal";
+import { SwitchDemoRoleButton } from "@/app/components/SwitchDemoRoleButton";
 import {
   GraduationCap,
   MessageSquare,
@@ -331,6 +332,8 @@ export default function PlacementOfficerHomePage() {
               <MessageSquare className="h-4 w-4" />
               <span>Campus Assistant</span>
             </Link>
+
+            {session?.user.isDemo && <SwitchDemoRoleButton />}
 
             <button
               type="button"
