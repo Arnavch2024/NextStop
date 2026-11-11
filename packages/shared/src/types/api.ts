@@ -30,11 +30,31 @@ export interface RecordRef {
   op: "created" | "updated" | "merged";
 }
 
+export interface ConfirmationCard {
+  type:
+    | "verify_mock_confirmation"
+    | "reference_check_confirmation"
+    | "revoke_reference_check_confirmation"
+    | string;
+  action:
+    | "verify_mock"
+    | "authorize_reference_check"
+    | "revoke_reference_check"
+    | string;
+  title: string;
+  description: string;
+  button_text: string;
+  document_type?: string | null;
+  company?: string | null;
+  reason?: string | null;
+}
+
 export interface ChatResponse {
   reply: string;
   steps: AgentStep[];
   records_created: RecordRef[];
   contacts?: ContactCard[];
+  cards?: ConfirmationCard[];
 }
 
 export interface TranscribeResponse {
@@ -130,14 +150,19 @@ export interface SkillRecord {
 export interface DocumentRecord {
   id: string;
   student_id: string;
-  profile_id: string;
-  kind: "resume" | "id_proof" | "certificate" | "other";
-  storage_path: string;
+  profile_id?: string;
+  kind?: "resume" | "id_proof" | "certificate" | "other" | string;
+  storage_path?: string;
   file_name?: string | null;
   mime_type?: string | null;
   size_bytes?: number | null;
-  verification_status: "pending" | "pre_verified" | "rejected";
-  uploaded_at: string;
+  verification_status?: "pending" | "pre_verified" | "rejected" | string;
+  uploaded_at?: string;
+  document_type?: string | null;
+  masked_id_tail?: string | null;
+  verified_flag?: boolean;
+  verified_at?: string | null;
+  verification_note?: string | null;
 }
 
 export interface StudentProfile {
@@ -254,6 +279,7 @@ export interface StudentCard {
   current_status: string;
   student_score?: number | null;
   unverified: boolean;
+  reference_check_authorized?: boolean;
 }
 
 export interface StudentListResponse {
@@ -338,4 +364,70 @@ export interface OnboardingResponse {
   company_name?: string | null;
   is_demo: boolean;
   message: string;
+}
+
+// --- Day 5 Models: Consent Flows & Railway Timeline ---
+
+export interface VerifyMockRequest {
+  document_id?: string | null;
+  document_type?: string | null;
+  masked_id_tail?: string | null;
+}
+
+export interface VerifyMockResponse {
+  status: string;
+  document_id: string;
+  verified_flag: boolean;
+  verification_note: string;
+  score: ScoreResponse;
+}
+
+export interface RevokeVerifyResponse {
+  status: string;
+  verified_flag: boolean;
+  score: ScoreResponse;
+}
+
+export interface ReferenceAuthRequest {
+  internship_id?: string | null;
+  authorized_party?: string | null;
+  authorized_role?: string | null;
+}
+
+export interface ReferenceAuthResponse {
+  id: string;
+  student_id: string;
+  internship_id?: string | null;
+  authorized_party?: string | null;
+  authorized_role?: string | null;
+  authorized_at: string;
+  revoked_at?: string | null;
+  reference_check_authorized: boolean;
+  score: ScoreResponse;
+}
+
+export interface TimelineStation {
+  id: string;
+  title: string;
+  subtitle?: string | null;
+  start_year?: number | null;
+  end_year?: number | null;
+  kind:
+    | "school_10"
+    | "school_12"
+    | "college"
+    | "internship"
+    | "job"
+    | "pre_verify_pending"
+    | "pre_verify_done"
+    | "reference_pending"
+    | "reference_done"
+    | string;
+  is_current: boolean;
+  is_future: boolean;
+}
+
+export interface TimelineResponse {
+  stations: TimelineStation[];
+  student_id: string;
 }

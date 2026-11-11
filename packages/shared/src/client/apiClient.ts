@@ -8,12 +8,18 @@ import type {
   OnboardingResponse,
   OutreachDraftRequest,
   OutreachDraftResponse,
+  ReferenceAuthRequest,
+  ReferenceAuthResponse,
   ResumeResponse,
+  RevokeVerifyResponse,
   SaveContactRequest,
   SaveResponse,
   ScoreResponse,
   StudentProfile,
+  TimelineResponse,
   TranscribeResponse,
+  VerifyMockRequest,
+  VerifyMockResponse,
 } from "../types/api";
 
 export class ApiError extends Error {
@@ -683,4 +689,142 @@ export async function completeOnboarding(
   }
 
   return (await res.json()) as OnboardingResponse;
+}
+
+/**
+ * Pre-verification mock endpoint: POST /v1/students/me/verify-mock
+ */
+export async function verifyMock(
+  baseUrl: string,
+  token: string,
+  body?: VerifyMockRequest
+): Promise<VerifyMockResponse> {
+  const url = `${cleanBaseUrl(baseUrl)}/v1/students/me/verify-mock`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(body || {}),
+  });
+
+  if (!res.ok) {
+    const errorBody = await res.json().catch(() => ({}));
+    const message =
+      res.status === 404
+        ? "Verification is not enabled in this environment."
+        : errorBody?.detail || `API request failed with status ${res.status}`;
+    throw new ApiError(res.status, message, errorBody);
+  }
+
+  return (await res.json()) as VerifyMockResponse;
+}
+
+/**
+ * Revoke pre-verification: DELETE /v1/students/me/verify-mock
+ */
+export async function revokeVerifyMock(
+  baseUrl: string,
+  token: string
+): Promise<RevokeVerifyResponse> {
+  const url = `${cleanBaseUrl(baseUrl)}/v1/students/me/verify-mock`;
+  const res = await fetch(url, {
+    method: "DELETE",
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!res.ok) {
+    const errorBody = await res.json().catch(() => ({}));
+    const message =
+      errorBody?.detail || `API request failed with status ${res.status}`;
+    throw new ApiError(res.status, message, errorBody);
+  }
+
+  return (await res.json()) as RevokeVerifyResponse;
+}
+
+/**
+ * Reference check authorization: POST /v1/students/me/reference-auth
+ */
+export async function authorizeReferenceCheck(
+  baseUrl: string,
+  token: string,
+  body?: ReferenceAuthRequest
+): Promise<ReferenceAuthResponse> {
+  const url = `${cleanBaseUrl(baseUrl)}/v1/students/me/reference-auth`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(body || {}),
+  });
+
+  if (!res.ok) {
+    const errorBody = await res.json().catch(() => ({}));
+    const message =
+      errorBody?.detail || `API request failed with status ${res.status}`;
+    throw new ApiError(res.status, message, errorBody);
+  }
+
+  return (await res.json()) as ReferenceAuthResponse;
+}
+
+/**
+ * Revoke reference check: DELETE /v1/students/me/reference-auth
+ */
+export async function revokeReferenceCheck(
+  baseUrl: string,
+  token: string
+): Promise<ReferenceAuthResponse> {
+  const url = `${cleanBaseUrl(baseUrl)}/v1/students/me/reference-auth`;
+  const res = await fetch(url, {
+    method: "DELETE",
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!res.ok) {
+    const errorBody = await res.json().catch(() => ({}));
+    const message =
+      errorBody?.detail || `API request failed with status ${res.status}`;
+    throw new ApiError(res.status, message, errorBody);
+  }
+
+  return (await res.json()) as ReferenceAuthResponse;
+}
+
+/**
+ * Railway-route student timeline: GET /v1/students/me/timeline
+ */
+export async function getTimeline(
+  baseUrl: string,
+  token: string
+): Promise<TimelineResponse> {
+  const url = `${cleanBaseUrl(baseUrl)}/v1/students/me/timeline`;
+  const res = await fetch(url, {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!res.ok) {
+    const errorBody = await res.json().catch(() => ({}));
+    const message =
+      errorBody?.detail || `API request failed with status ${res.status}`;
+    throw new ApiError(res.status, message, errorBody);
+  }
+
+  return (await res.json()) as TimelineResponse;
 }

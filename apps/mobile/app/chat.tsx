@@ -30,10 +30,12 @@ import {
   RawEvent,
   ResumeResponse,
   ContactCard,
+  ConfirmationCard,
   ApiError,
 } from "@recruiting/shared";
 import { MobileContactCard } from "./components/MobileContactCard";
 import { DraftMessageSheet } from "./components/DraftMessageSheet";
+import { MobileChatConfirmationCard } from "./components/MobileChatConfirmationCard";
 
 interface ChatMessage {
   id: string;
@@ -42,6 +44,7 @@ interface ChatMessage {
   steps?: AgentStep[];
   records?: RecordRef[];
   contacts?: ContactCard[];
+  cards?: ConfirmationCard[];
   resumeSummary?: ResumeResponse;
   timestamp: string;
 }
@@ -374,6 +377,23 @@ export default function ChatScreen() {
     try {
       const response = await chat(API_BASE_URL, text, sessionToken);
 
+      // Extract confirmation cards from response.cards or step outputs
+      const responseCards: ConfirmationCard[] = [...(response.cards || [])];
+      if (response.steps) {
+        for (const step of response.steps) {
+          if (step.output && (step.output as any).card) {
+            const cardObj = (step.output as any).card;
+            if (
+              !responseCards.some(
+                (c) => c.title === cardObj.title && c.type === cardObj.type
+              )
+            ) {
+              responseCards.push(cardObj);
+            }
+          }
+        }
+      }
+
       const agentId = `agent-${Date.now()}`;
       setMessages((prev) => [
         ...prev,
@@ -384,6 +404,7 @@ export default function ChatScreen() {
           steps: response.steps,
           records: response.records_created,
           contacts: response.contacts,
+          cards: responseCards.length > 0 ? responseCards : undefined,
           timestamp: new Date().toISOString(),
         },
       ]);
@@ -825,6 +846,26 @@ export default function ChatScreen() {
                           contact from My list at any time.
                         </Text>
                       </View>
+                    </View>
+                  )}
+
+                  {/* Day 5 Action Confirmation Cards */}
+                  {item.cards && item.cards.length > 0 && (
+                    <View style={{ marginTop: 8 }}>
+                      {item.cards.map(
+                        (card: ConfirmationCard, cardIdx: number) => (
+                          <MobileChatConfirmationCard
+                            key={`${item.id}-card-${cardIdx}`}
+                            card={card}
+                            token={sessionToken || ""}
+                            baseUrl={API_BASE_URL}
+                            onSuccess={(sc, msg) => {
+                              if (msg) showToast(msg);
+                            }}
+                            onOpenUpload={handleOpenResumePicker}
+                          />
+                        )
+                      )}
                     </View>
                   )}
 
