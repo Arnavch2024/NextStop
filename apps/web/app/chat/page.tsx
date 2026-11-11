@@ -17,10 +17,12 @@ import {
   RawEvent,
   ResumeResponse,
   ContactCard,
+  ConfirmationCard,
   ApiError,
 } from "@recruiting/shared";
 import { ContactCardItem } from "@/app/components/ContactCardItem";
 import { DraftMessageModal } from "@/app/components/DraftMessageModal";
+import { ChatConfirmationCard } from "@/app/components/ChatConfirmationCard";
 import {
   Send,
   Mic,
@@ -54,6 +56,7 @@ interface ChatItem {
   steps?: AgentStep[];
   records?: RecordRef[];
   contacts?: ContactCard[];
+  cards?: ConfirmationCard[];
   resumeSummary?: ResumeResponse;
   timestamp: string;
 }
@@ -397,6 +400,23 @@ export default function ChatPage() {
     try {
       const response = await chat(API_BASE_URL, text, sessionToken);
 
+      // Extract confirmation cards from response.cards or step outputs
+      const responseCards: ConfirmationCard[] = [...(response.cards || [])];
+      if (response.steps) {
+        for (const step of response.steps) {
+          if (step.output && (step.output as any).card) {
+            const cardObj = (step.output as any).card;
+            if (
+              !responseCards.some(
+                (c) => c.title === cardObj.title && c.type === cardObj.type
+              )
+            ) {
+              responseCards.push(cardObj);
+            }
+          }
+        }
+      }
+
       const agentId = `agent-${Date.now()}`;
       setMessages((prev) => [
         ...prev,
@@ -407,6 +427,7 @@ export default function ChatPage() {
           steps: response.steps,
           records: response.records_created,
           contacts: response.contacts,
+          cards: responseCards.length > 0 ? responseCards : undefined,
           timestamp: new Date().toISOString(),
         },
       ]);
@@ -990,6 +1011,24 @@ export default function ChatPage() {
                           contact from My list at any time.
                         </span>
                       </div>
+                    </div>
+                  )}
+
+                  {/* Day 5 Action Confirmation Cards */}
+                  {item.cards && item.cards.length > 0 && (
+                    <div className="mt-3 space-y-2.5">
+                      {item.cards.map((card, cardIdx) => (
+                        <ChatConfirmationCard
+                          key={`${item.id}-card-${cardIdx}`}
+                          card={card}
+                          token={sessionToken || ""}
+                          baseUrl={API_BASE_URL}
+                          onSuccess={(sc, msg) => {
+                            if (msg) showToast(msg);
+                          }}
+                          onOpenUpload={() => setIsConsentOpen(true)}
+                        />
+                      ))}
                     </div>
                   )}
 

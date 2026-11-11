@@ -14,9 +14,14 @@ import { getMobileSupabaseClient, API_BASE_URL } from "../../lib/supabase";
 import {
   getStudentScore,
   getStudentProfile,
+  getTimeline,
   ScoreResponse,
   StudentProfile,
+  TimelineStation,
 } from "@recruiting/shared";
+import { MobileRailwayTimeline } from "../components/MobileRailwayTimeline";
+import { MobilePreVerifyModal } from "../components/MobilePreVerifyModal";
+import { MobileReferenceAuthModal } from "../components/MobileReferenceAuthModal";
 
 export default function MobileHomeScreen() {
   const router = useRouter();
@@ -24,9 +29,17 @@ export default function MobileHomeScreen() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [scoreData, setScoreData] = useState<ScoreResponse | null>(null);
   const [profileData, setProfileData] = useState<StudentProfile | null>(null);
+  const [timelineStations, setTimelineStations] = useState<TimelineStation[]>(
+    []
+  );
   const [syncToast, setSyncToast] = useState<string | null>(null);
+
+  // Modals state
+  const [isPreVerifyVisible, setIsPreVerifyVisible] = useState(false);
+  const [isRefAuthVisible, setIsRefAuthVisible] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -34,14 +47,16 @@ export default function MobileHomeScreen() {
 
     async function loadData(token: string) {
       try {
-        const [scoreRes, profRes] = await Promise.all([
+        const [scoreRes, profRes, timelineRes] = await Promise.all([
           getStudentScore(API_BASE_URL, token),
           getStudentProfile(API_BASE_URL, token),
+          getTimeline(API_BASE_URL, token).catch(() => ({ stations: [] })),
         ]);
 
         if (isMounted) {
           setScoreData(scoreRes);
           setProfileData(profRes);
+          setTimelineStations(timelineRes.stations || []);
           setLoading(false);
         }
       } catch (err: any) {
@@ -62,6 +77,7 @@ export default function MobileHomeScreen() {
 
       const token = session.access_token;
       const userId = session.user.id;
+      setSessionToken(token);
       loadData(token);
 
       const triggerToastAndReload = (msg = "Updated from your laptop") => {
@@ -127,6 +143,16 @@ export default function MobileHomeScreen() {
           },
           () => triggerToastAndReload("Profile updated from your laptop")
         )
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "reference_authorizations",
+            filter: `profile_id=eq.${userId}`,
+          },
+          () => triggerToastAndReload("Reference check authorization updated")
+        )
         .subscribe();
 
       channels = [scoreChan, profChan];
@@ -167,9 +193,26 @@ export default function MobileHomeScreen() {
   const nextActions = scoreData?.next_best_actions ?? [];
 
   const student = profileData?.student;
-  const education = profileData?.education ?? [];
   const internships = profileData?.internships ?? [];
-  const jobs = profileData?.jobs ?? [];
+  const documents = profileData?.documents ?? [];
+
+  // Day 5 status flags
+  const verifiedDoc = documents.find((d) => d.verified_flag);
+  const isPreVerified =
+    !!verifiedDoc ||
+    breakdown.some(
+      (b) =>
+        b.reason.toLowerCase().includes("pre-verified") ||
+        b.reason.toLowerCase().includes("identity document")
+    );
+  const hasUploadedDocs = documents.length > 0;
+  const maskedTail = verifiedDoc?.masked_id_tail;
+
+  const isRefAuthorized = breakdown.some(
+    (b) =>
+      b.reason.toLowerCase().includes("reference check") ||
+      b.reason.toLowerCase().includes("reference-check")
+  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -186,6 +229,7 @@ export default function MobileHomeScreen() {
           </TouchableOpacity>
         </View>
       )}
+
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Header */}
         <View style={styles.header}>
@@ -233,90 +277,194 @@ export default function MobileHomeScreen() {
           </View>
         )}
 
+        {/* Day 5 Pre-Verification Action Card */}
+        <View style={styles.sectionCard}>
+          <View style={styles.day5HeaderRow}>
+            <View style={styles.day5TitleGroup}>
+              <Text style={styles.day5Icon}>🛡️</Text>
+              <View>
+                <Text style={styles.sectionTitle}>
+                  Document Pre-Verification
+                </Text>
+                <Text style={styles.day5Sub}>Demo verification (mocked)</Text>
+              </View>
+            </View>
+            {isPreVerified ? (
+              <View style={[styles.statusChip, styles.chipGreen]}>
+                <Text style={styles.chipTextGreen}>✓ Verified (mocked)</Text>
+              </View>
+            ) : hasUploadedDocs ? (
+              <View style={[styles.statusChip, styles.chipBlue]}>
+                <Text style={styles.chipTextBlue}>Uploaded</Text>
+              </View>
+            ) : (
+              <View style={[styles.statusChip, styles.chipGray]}>
+                <Text style={styles.chipTextGray}>Not verified</Text>
+              </View>
+            )}
+          </View>
+
+          {maskedTail && (
+            <View style={styles.maskedContainer}>
+              <Text style={styles.maskedLabelText}>Masked ID Identifier:</Text>
+              <Text style={styles.maskedValueText}>{maskedTail}</Text>
+            </View>
+          )}
+
+          <Text style={styles.day5Explainer}>
+            Pre-verify your sample credentials to claim +2 readiness points. The
+            app never reads file contents or authentic ID numbers.
+          </Text>
+
+          <View style={styles.day5ActionFooter}>
+            <Text style={styles.pointsNoticeIndigo}>
+              {isPreVerified ? "+2 points awarded" : "+2 points available"}
+            </Text>
+            <TouchableOpacity
+              style={styles.day5ButtonIndigo}
+              onPress={() => setIsPreVerifyVisible(true)}
+            >
+              <Text style={styles.day5ButtonText}>
+                {isPreVerified ? "Manage Documents" : "Pre-Verify Document"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Day 5 Reference Check Action Card */}
+        <View style={styles.sectionCard}>
+          <View style={styles.day5HeaderRow}>
+            <View style={styles.day5TitleGroup}>
+              <Text style={styles.day5Icon}>🎖️</Text>
+              <View>
+                <Text style={styles.sectionTitle}>Reference Check</Text>
+                <Text style={styles.day5Sub}>Internship employer outreach</Text>
+              </View>
+            </View>
+            {isRefAuthorized ? (
+              <View style={[styles.statusChip, styles.chipGreen]}>
+                <Text style={styles.chipTextGreen}>✓ Authorized</Text>
+              </View>
+            ) : (
+              <View style={[styles.statusChip, styles.chipGray]}>
+                <Text style={styles.chipTextGray}>Not authorized</Text>
+              </View>
+            )}
+          </View>
+
+          <Text style={styles.day5Explainer}>
+            Authorizing lets verified recruiters and placement officers contact
+            your internship company to confirm your experience.
+          </Text>
+
+          <View style={styles.day5ActionFooter}>
+            <Text style={styles.pointsNoticeAmber}>
+              {isRefAuthorized ? "+2 points awarded" : "+2 points available"}
+            </Text>
+            <TouchableOpacity
+              style={styles.day5ButtonAmber}
+              onPress={() => setIsRefAuthVisible(true)}
+            >
+              <Text style={styles.day5ButtonText}>
+                {isRefAuthorized
+                  ? "Manage Authorization"
+                  : "Authorize Outreach"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
         {/* Why is my score N? */}
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Why is my score {score}?</Text>
-          {breakdown.map((item, idx) => (
-            <View key={idx} style={styles.breakdownRow}>
-              <View style={styles.breakdownLeft}>
-                <Text style={styles.breakdownReason}>{item.reason}</Text>
-                <Text style={styles.breakdownSource}>
-                  source: {item.source}
-                </Text>
+          {breakdown.map((item, idx) => {
+            const isPreVerify =
+              item.reason.toLowerCase().includes("pre-verified") ||
+              item.reason.toLowerCase().includes("identity document");
+
+            return (
+              <View key={idx} style={styles.breakdownRow}>
+                <View style={styles.breakdownLeft}>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      flexWrap: "wrap",
+                      gap: 4,
+                    }}
+                  >
+                    <Text style={styles.breakdownReason}>{item.reason}</Text>
+                    {isPreVerify && (
+                      <View style={styles.mockBadge}>
+                        <Text style={styles.mockBadgeText}>
+                          Demo verification (mocked)
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={styles.breakdownSource}>
+                    source: {item.source}
+                  </Text>
+                </View>
+                <Text style={styles.breakdownPoints}>+{item.points}</Text>
               </View>
-              <Text style={styles.breakdownPoints}>+{item.points}</Text>
-            </View>
-          ))}
+            );
+          })}
         </View>
 
-        {/* Timeline */}
+        {/* Railway Timeline from GET /v1/students/me/timeline */}
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Profile Timeline</Text>
-          <View style={styles.timeline}>
-            {education.map((edu, idx) => (
-              <View key={`edu-${idx}`} style={styles.timelineItem}>
-                <View
-                  style={[styles.timelineDot, { backgroundColor: "#2563EB" }]}
-                />
-                <View style={styles.timelineBody}>
-                  <Text style={styles.timelineHeading}>
-                    {edu.degree || edu.level.toUpperCase()}
-                    {edu.score_value
-                      ? ` (${edu.score_value} ${edu.score_scale || ""})`
-                      : ""}
-                  </Text>
-                  <Text style={styles.timelineSub}>
-                    {edu.institution || edu.board_or_university || "Education"}
-                  </Text>
-                </View>
-              </View>
-            ))}
-
-            {internships.map((intn, idx) => (
-              <View key={`int-${idx}`} style={styles.timelineItem}>
-                <View
-                  style={[styles.timelineDot, { backgroundColor: "#7C3AED" }]}
-                />
-                <View style={styles.timelineBody}>
-                  <Text style={styles.timelineHeading}>
-                    {intn.role || "Intern"} at {intn.company || "Company"}
-                  </Text>
-                  <Text style={styles.timelineSub}>
-                    {intn.start_date || ""}{" "}
-                    {intn.end_date ? `— ${intn.end_date}` : "— Ongoing"}
-                  </Text>
-                </View>
-              </View>
-            ))}
-
-            {jobs.map((job, idx) => (
-              <View key={`job-${idx}`} style={styles.timelineItem}>
-                <View
-                  style={[styles.timelineDot, { backgroundColor: "#059669" }]}
-                />
-                <View style={styles.timelineBody}>
-                  <Text style={styles.timelineHeading}>
-                    {job.role || "Role"} at {job.company || "Company"}
-                  </Text>
-                  <Text style={styles.timelineSub}>
-                    {job.start_date || ""}{" "}
-                    {job.end_date ? `— ${job.end_date}` : "— Present"}
-                  </Text>
-                </View>
-              </View>
-            ))}
-
-            {education.length === 0 &&
-              internships.length === 0 &&
-              jobs.length === 0 && (
-                <Text style={styles.emptyTimelineText}>
-                  No timeline records yet. Upload your resume or talk with the
-                  chat assistant!
-                </Text>
-              )}
+          <View style={{ marginBottom: 12 }}>
+            <Text style={styles.sectionTitle}>Railway Career Journey</Text>
+            <Text style={styles.day5Sub}>
+              Stations chronologically ordered along your professional route
+            </Text>
           </View>
+
+          <MobileRailwayTimeline
+            stations={timelineStations}
+            isLoading={loading}
+          />
         </View>
       </ScrollView>
+
+      {/* Pre-Verify Modal */}
+      <MobilePreVerifyModal
+        visible={isPreVerifyVisible}
+        onClose={() => setIsPreVerifyVisible(false)}
+        token={sessionToken || ""}
+        baseUrl={API_BASE_URL}
+        documents={documents}
+        onSuccess={(sc) => {
+          if (sc) setScoreData(sc);
+          if (sessionToken) {
+            getStudentProfile(API_BASE_URL, sessionToken)
+              .then(setProfileData)
+              .catch(() => {});
+            getTimeline(API_BASE_URL, sessionToken)
+              .then((t) => setTimelineStations(t.stations || []))
+              .catch(() => {});
+          }
+        }}
+      />
+
+      {/* Reference Check Modal */}
+      <MobileReferenceAuthModal
+        visible={isRefAuthVisible}
+        onClose={() => setIsRefAuthVisible(false)}
+        token={sessionToken || ""}
+        baseUrl={API_BASE_URL}
+        internships={internships}
+        isAuthorized={isRefAuthorized}
+        onSuccess={(sc) => {
+          if (sc) setScoreData(sc);
+          if (sessionToken) {
+            getTimeline(API_BASE_URL, sessionToken)
+              .then((t) => setTimelineStations(t.stations || []))
+              .catch(() => {});
+          }
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -348,6 +496,17 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 16,
   },
+  actionButton: {
+    backgroundColor: "#2563EB",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  actionButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "600",
+  },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -356,7 +515,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 20,
-    fontWeight: "bold",
+    fontWeight: "700",
     color: "#0F172A",
   },
   headerSubtitle: {
@@ -372,90 +531,204 @@ const styles = StyleSheet.create({
   },
   chatHeaderButtonText: {
     color: "#FFFFFF",
-    fontWeight: "600",
     fontSize: 13,
+    fontWeight: "600",
   },
   scoreCard: {
     backgroundColor: "#FFFFFF",
-    padding: 18,
     borderRadius: 16,
+    padding: 18,
+    marginBottom: 12,
     borderWidth: 1,
     borderColor: "#E2E8F0",
-    marginBottom: 14,
   },
   scoreCardLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "700",
     color: "#64748B",
-    letterSpacing: 0.5,
+    letterSpacing: 0.8,
   },
   scoreRow: {
     flexDirection: "row",
     alignItems: "baseline",
-    marginVertical: 8,
+    marginTop: 8,
+    gap: 4,
   },
   scoreNumber: {
-    fontSize: 48,
+    fontSize: 44,
     fontWeight: "800",
     color: "#2563EB",
   },
   scoreMax: {
-    fontSize: 16,
-    color: "#94A3B8",
-    marginLeft: 6,
+    fontSize: 14,
     fontWeight: "600",
+    color: "#94A3B8",
   },
   progressBarBg: {
     height: 8,
     backgroundColor: "#F1F5F9",
     borderRadius: 4,
+    marginTop: 12,
     overflow: "hidden",
-    marginTop: 4,
   },
   progressBarFill: {
-    height: 8,
+    height: "100%",
     backgroundColor: "#2563EB",
     borderRadius: 4,
   },
   nextActionCard: {
     backgroundColor: "#EFF6FF",
+    borderRadius: 16,
     padding: 16,
-    borderRadius: 14,
+    marginBottom: 12,
     borderWidth: 1,
-    borderColor: "#DBEAFE",
-    marginBottom: 14,
+    borderColor: "#BFDBFE",
   },
   nextActionLabel: {
     fontSize: 10,
     fontWeight: "700",
-    color: "#1E40AF",
-    letterSpacing: 0.5,
+    color: "#1D4ED8",
+    letterSpacing: 0.8,
   },
   nextActionText: {
-    fontSize: 14,
+    fontSize: 13,
+    fontWeight: "600",
     color: "#1E293B",
-    fontWeight: "500",
-    marginTop: 4,
+    marginTop: 6,
+    lineHeight: 18,
   },
   nextActionLink: {
-    color: "#2563EB",
     fontSize: 12,
-    fontWeight: "600",
-    marginTop: 8,
+    fontWeight: "700",
+    color: "#2563EB",
+    marginTop: 10,
   },
   sectionCard: {
     backgroundColor: "#FFFFFF",
-    padding: 18,
     borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
     borderWidth: 1,
     borderColor: "#E2E8F0",
-    marginBottom: 14,
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "700",
     color: "#0F172A",
-    marginBottom: 12,
+  },
+  day5HeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  day5TitleGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  day5Icon: {
+    fontSize: 20,
+  },
+  day5Sub: {
+    fontSize: 10,
+    color: "#64748B",
+    marginTop: 1,
+  },
+  statusChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  chipGreen: {
+    backgroundColor: "#ECFDF5",
+    borderWidth: 1,
+    borderColor: "#A7F3D0",
+  },
+  chipTextGreen: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#065F46",
+  },
+  chipBlue: {
+    backgroundColor: "#EFF6FF",
+    borderWidth: 1,
+    borderColor: "#BFDBFE",
+  },
+  chipTextBlue: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#1D4ED8",
+  },
+  chipGray: {
+    backgroundColor: "#F1F5F9",
+  },
+  chipTextGray: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#64748B",
+  },
+  maskedContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "#F8FAFC",
+    borderRadius: 8,
+    padding: 8,
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  maskedLabelText: {
+    fontSize: 10,
+    color: "#64748B",
+  },
+  maskedValueText: {
+    fontSize: 11,
+    fontWeight: "700",
+    fontFamily: "monospace",
+    color: "#0F172A",
+  },
+  day5Explainer: {
+    fontSize: 11,
+    color: "#475569",
+    marginTop: 8,
+    lineHeight: 15,
+  },
+  day5ActionFooter: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 12,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#F1F5F9",
+  },
+  pointsNoticeIndigo: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#4F46E5",
+  },
+  pointsNoticeAmber: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#D97706",
+  },
+  day5ButtonIndigo: {
+    backgroundColor: "#4F46E5",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  day5ButtonAmber: {
+    backgroundColor: "#D97706",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  day5ButtonText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "700",
   },
   breakdownRow: {
     flexDirection: "row",
@@ -467,107 +740,68 @@ const styles = StyleSheet.create({
   },
   breakdownLeft: {
     flex: 1,
-    paddingRight: 10,
+    paddingRight: 8,
   },
   breakdownReason: {
-    fontSize: 14,
+    fontSize: 12,
+    fontWeight: "600",
     color: "#1E293B",
-    fontWeight: "500",
+  },
+  mockBadge: {
+    backgroundColor: "#EEF2FF",
+    borderWidth: 1,
+    borderColor: "#C7D2FE",
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  mockBadgeText: {
+    fontSize: 9,
+    color: "#4338CA",
+    fontWeight: "700",
   },
   breakdownSource: {
-    fontSize: 11,
+    fontSize: 10,
     color: "#94A3B8",
     marginTop: 2,
-    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
   },
   breakdownPoints: {
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: "700",
     color: "#059669",
   },
-  timeline: {
-    paddingLeft: 12,
-    borderLeftWidth: 2,
-    borderLeftColor: "#E2E8F0",
-    marginLeft: 6,
-  },
-  timelineItem: {
-    marginBottom: 16,
-    position: "relative",
-  },
-  timelineDot: {
-    position: "absolute",
-    left: -19,
-    top: 3,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: "#FFFFFF",
-  },
-  timelineBody: {
-    paddingLeft: 4,
-  },
-  timelineHeading: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#0F172A",
-  },
-  timelineSub: {
-    fontSize: 12,
-    color: "#64748B",
-    marginTop: 2,
-  },
-  emptyTimelineText: {
-    fontSize: 13,
-    color: "#94A3B8",
-    fontStyle: "italic",
-  },
-  actionButton: {
-    backgroundColor: "#2563EB",
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  actionButtonText: {
-    color: "#FFFFFF",
-    fontWeight: "600",
-    fontSize: 14,
-  },
   toastContainer: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#BFDBFE",
+    padding: 12,
     marginHorizontal: 16,
     marginTop: 8,
-    marginBottom: 4,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    backgroundColor: "#ffffff",
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#bfdbfe",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
   },
   toastIcon: {
-    fontSize: 20,
+    fontSize: 18,
   },
   toastTitle: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "700",
-    color: "#1e3a8a",
+    color: "#0F172A",
   },
   toastSubtitle: {
-    fontSize: 11,
-    color: "#3b82f6",
+    fontSize: 10,
+    color: "#64748B",
   },
   toastClose: {
     fontSize: 14,
-    color: "#94a3b8",
+    color: "#94A3B8",
     padding: 4,
   },
 });

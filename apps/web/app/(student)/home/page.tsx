@@ -7,24 +7,30 @@ import { getSupabaseBrowserClient, API_BASE_URL } from "@/lib/supabase";
 import {
   getStudentScore,
   getStudentProfile,
+  getTimeline,
   ScoreResponse,
   StudentProfile,
+  TimelineStation,
 } from "@recruiting/shared";
 import {
   Award,
-  BookOpen,
-  Briefcase,
   Calendar,
   CheckCircle2,
   ChevronRight,
-  GraduationCap,
   Loader2,
   MessageSquare,
   Sparkles,
   TrendingUp,
   Smartphone,
   X,
+  ShieldCheck,
+  Building2,
+  AlertTriangle,
+  RotateCcw,
 } from "lucide-react";
+import { RailwayTimeline } from "@/app/components/RailwayTimeline";
+import { PreVerifySheet } from "@/app/components/PreVerifySheet";
+import { ReferenceAuthSheet } from "@/app/components/ReferenceAuthSheet";
 
 export default function StudentHomePage() {
   const router = useRouter();
@@ -32,9 +38,17 @@ export default function StudentHomePage() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [scoreData, setScoreData] = useState<ScoreResponse | null>(null);
   const [profileData, setProfileData] = useState<StudentProfile | null>(null);
+  const [timelineStations, setTimelineStations] = useState<TimelineStation[]>(
+    []
+  );
   const [syncToast, setSyncToast] = useState<string | null>(null);
+
+  // Modals state
+  const [isPreVerifyOpen, setIsPreVerifyOpen] = useState(false);
+  const [isRefAuthOpen, setIsRefAuthOpen] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -42,14 +56,16 @@ export default function StudentHomePage() {
 
     async function loadData(token: string) {
       try {
-        const [scoreRes, profileRes] = await Promise.all([
+        const [scoreRes, profileRes, timelineRes] = await Promise.all([
           getStudentScore(API_BASE_URL, token),
           getStudentProfile(API_BASE_URL, token),
+          getTimeline(API_BASE_URL, token).catch(() => ({ stations: [] })),
         ]);
 
         if (isMounted) {
           setScoreData(scoreRes);
           setProfileData(profileRes);
+          setTimelineStations(timelineRes.stations || []);
           setLoading(false);
         }
       } catch (err: any) {
@@ -92,6 +108,7 @@ export default function StudentHomePage() {
 
       const token = session.access_token;
       const userId = session.user.id;
+      setSessionToken(token);
       loadData(token);
 
       const triggerToastAndReload = (msg = "Updated from your phone") => {
@@ -159,6 +176,16 @@ export default function StudentHomePage() {
           },
           () => triggerToastAndReload("Profile updated from your phone")
         )
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "reference_authorizations",
+            filter: `profile_id=eq.${userId}`,
+          },
+          () => triggerToastAndReload("Reference check authorization updated")
+        )
         .subscribe();
 
       if (!isMounted) {
@@ -210,9 +237,26 @@ export default function StudentHomePage() {
   const nextActions = scoreData?.next_best_actions ?? [];
 
   const student = profileData?.student;
-  const education = profileData?.education ?? [];
   const internships = profileData?.internships ?? [];
-  const jobs = profileData?.jobs ?? [];
+  const documents = profileData?.documents ?? [];
+
+  // Day 5 status flags
+  const verifiedDoc = documents.find((d) => d.verified_flag);
+  const isPreVerified =
+    !!verifiedDoc ||
+    breakdown.some(
+      (b) =>
+        b.reason.toLowerCase().includes("pre-verified") ||
+        b.reason.toLowerCase().includes("identity document")
+    );
+  const hasUploadedDocs = documents.length > 0;
+  const maskedTail = verifiedDoc?.masked_id_tail;
+
+  const isRefAuthorized = breakdown.some(
+    (b) =>
+      b.reason.toLowerCase().includes("reference check") ||
+      b.reason.toLowerCase().includes("reference-check")
+  );
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-16 relative">
@@ -234,6 +278,7 @@ export default function StudentHomePage() {
           </button>
         </div>
       )}
+
       {/* Header */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
@@ -311,6 +356,127 @@ export default function StudentHomePage() {
           </div>
         </div>
 
+        {/* Day 5 Cards: Pre-Verification & Reference Check */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Pre-Verify Card */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                    <ShieldCheck className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900">
+                      Document Pre-Verification
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      Demo verification (mocked)
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  {isPreVerified ? (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Verified (mocked)</span>
+                    </span>
+                  ) : hasUploadedDocs ? (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                      <span>Uploaded</span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600">
+                      <span>Not verified</span>
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {maskedTail && (
+                <div className="mt-3 bg-slate-50 border border-slate-200/80 rounded-xl p-2.5 text-xs text-slate-700 flex items-center justify-between">
+                  <span className="text-slate-500">Masked ID Identifier:</span>
+                  <span className="font-mono font-semibold text-slate-900">
+                    {maskedTail}
+                  </span>
+                </div>
+              )}
+
+              <p className="mt-2 text-xs text-slate-500 leading-relaxed">
+                Pre-verify your sample credentials to claim +2 readiness points.
+                The application never reads file contents or authentic ID
+                numbers.
+              </p>
+            </div>
+
+            <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
+              <span className="text-xs font-semibold text-indigo-600">
+                {isPreVerified ? "+2 points awarded" : "+2 points available"}
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsPreVerifyOpen(true)}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 text-white hover:bg-indigo-700 transition"
+              >
+                {isPreVerified ? "Manage Documents" : "Pre-Verify Document"}
+              </button>
+            </div>
+          </div>
+
+          {/* Reference Check Card */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                    <Award className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900">
+                      Reference Check
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      Internship employer outreach
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  {isRefAuthorized ? (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Authorized</span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600">
+                      <span>Not authorized</span>
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <p className="mt-3 text-xs text-slate-600 leading-relaxed">
+                Authorizing lets verified recruiters and placement officers
+                contact your internship company to confirm your experience.
+              </p>
+            </div>
+
+            <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
+              <span className="text-xs font-semibold text-amber-700">
+                {isRefAuthorized ? "+2 points awarded" : "+2 points available"}
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsRefAuthOpen(true)}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-600 text-white hover:bg-amber-700 transition"
+              >
+                {isRefAuthorized
+                  ? "Manage Authorization"
+                  : "Authorize Outreach"}
+              </button>
+            </div>
+          </div>
+        </div>
+
         {/* Why is my score N? (Breakdown) */}
         <section className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
           <div className="flex items-center gap-2 mb-4">
@@ -321,25 +487,38 @@ export default function StudentHomePage() {
           </div>
 
           <div className="divide-y divide-slate-100">
-            {breakdown.map((item, idx) => (
-              <div
-                key={idx}
-                className="py-3 flex items-center justify-between text-sm"
-              >
-                <div className="flex items-center gap-3">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-                  <span className="font-medium text-slate-800">
-                    {item.reason}
-                  </span>
-                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 font-mono">
-                    {item.source}
+            {breakdown.map((item, idx) => {
+              const isPreVerifyItem =
+                item.reason.toLowerCase().includes("pre-verified") ||
+                item.reason.toLowerCase().includes("identity document");
+
+              return (
+                <div
+                  key={idx}
+                  className="py-3 flex items-center justify-between text-sm"
+                >
+                  <div className="flex items-center gap-3">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                    <div>
+                      <span className="font-medium text-slate-800">
+                        {item.reason}
+                      </span>
+                      {isPreVerifyItem && (
+                        <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                          Demo verification (mocked)
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 font-mono">
+                      {item.source}
+                    </span>
+                  </div>
+                  <span className="font-bold text-emerald-600">
+                    +{item.points}
                   </span>
                 </div>
-                <span className="font-bold text-emerald-600">
-                  +{item.points}
-                </span>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {nextActions.length > 1 && (
@@ -356,90 +535,63 @@ export default function StudentHomePage() {
           )}
         </section>
 
-        {/* Vertical Timeline: Education -> Internships -> Jobs */}
+        {/* Railway Timeline from GET /v1/students/me/timeline */}
         <section className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
-          <div className="flex items-center gap-2 mb-6">
-            <Calendar className="w-5 h-5 text-indigo-600" />
-            <h2 className="text-base font-bold text-slate-900">
-              Profile Timeline
-            </h2>
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-indigo-600" />
+              <div>
+                <h2 className="text-base font-bold text-slate-900">
+                  Railway Career Journey
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Stations chronologically ordered along your professional route
+                </p>
+              </div>
+            </div>
           </div>
 
-          <div className="relative pl-6 border-l-2 border-indigo-200 space-y-6">
-            {/* Education items */}
-            {education.map((edu, idx) => (
-              <div key={`edu-${idx}`} className="relative group">
-                <div className="absolute -left-[31px] top-1 w-4 h-4 rounded-full bg-blue-500 border-2 border-white shadow-sm" />
-                <div className="flex items-baseline gap-2">
-                  <GraduationCap className="w-4 h-4 text-blue-600 inline" />
-                  <span className="font-semibold text-slate-900 text-sm">
-                    {edu.degree || edu.level.toUpperCase()}
-                  </span>
-                  {edu.score_value && (
-                    <span className="text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                      {edu.score_value} {edu.score_scale || ""}
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  {edu.institution ||
-                    edu.board_or_university ||
-                    "Institution not specified"}
-                </p>
-              </div>
-            ))}
-
-            {/* Internship items */}
-            {internships.map((intn, idx) => (
-              <div key={`int-${idx}`} className="relative group">
-                <div className="absolute -left-[31px] top-1 w-4 h-4 rounded-full bg-indigo-500 border-2 border-white shadow-sm" />
-                <div className="flex items-baseline gap-2">
-                  <Briefcase className="w-4 h-4 text-indigo-600 inline" />
-                  <span className="font-semibold text-slate-900 text-sm">
-                    {intn.role || "Intern"} at {intn.company || "Company"}
-                  </span>
-                  <span className="text-[11px] text-slate-400 font-mono">
-                    Internship
-                  </span>
-                </div>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  {intn.start_date || ""}{" "}
-                  {intn.end_date ? `— ${intn.end_date}` : "— Ongoing"}
-                </p>
-              </div>
-            ))}
-
-            {/* Job items */}
-            {jobs.map((job, idx) => (
-              <div key={`job-${idx}`} className="relative group">
-                <div className="absolute -left-[31px] top-1 w-4 h-4 rounded-full bg-emerald-500 border-2 border-white shadow-sm" />
-                <div className="flex items-baseline gap-2">
-                  <Briefcase className="w-4 h-4 text-emerald-600 inline" />
-                  <span className="font-semibold text-slate-900 text-sm">
-                    {job.role || "Role"} at {job.company || "Company"}
-                  </span>
-                  <span className="text-[11px] text-slate-400 font-mono">
-                    Full-time
-                  </span>
-                </div>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  {job.start_date || ""}{" "}
-                  {job.end_date ? `— ${job.end_date}` : "— Present"}
-                </p>
-              </div>
-            ))}
-
-            {education.length === 0 &&
-              internships.length === 0 &&
-              jobs.length === 0 && (
-                <div className="text-sm text-slate-400 italic">
-                  No timeline records yet. Share your education and internship
-                  details in chat!
-                </div>
-              )}
-          </div>
+          <RailwayTimeline stations={timelineStations} isLoading={loading} />
         </section>
       </main>
+
+      {/* Day 5 Pre-Verify Sheet */}
+      <PreVerifySheet
+        isOpen={isPreVerifyOpen}
+        onClose={() => setIsPreVerifyOpen(false)}
+        token={sessionToken || ""}
+        baseUrl={API_BASE_URL}
+        documents={documents}
+        onSuccess={(sc) => {
+          if (sc) setScoreData(sc);
+          if (sessionToken) {
+            getStudentProfile(API_BASE_URL, sessionToken)
+              .then(setProfileData)
+              .catch(() => {});
+            getTimeline(API_BASE_URL, sessionToken)
+              .then((t) => setTimelineStations(t.stations || []))
+              .catch(() => {});
+          }
+        }}
+      />
+
+      {/* Day 5 Reference Check Authorization Sheet */}
+      <ReferenceAuthSheet
+        isOpen={isRefAuthOpen}
+        onClose={() => setIsRefAuthOpen(false)}
+        token={sessionToken || ""}
+        baseUrl={API_BASE_URL}
+        internships={internships}
+        isAuthorized={isRefAuthorized}
+        onSuccess={(sc) => {
+          if (sc) setScoreData(sc);
+          if (sessionToken) {
+            getTimeline(API_BASE_URL, sessionToken)
+              .then((t) => setTimelineStations(t.stations || []))
+              .catch(() => {});
+          }
+        }}
+      />
     </div>
   );
 }
