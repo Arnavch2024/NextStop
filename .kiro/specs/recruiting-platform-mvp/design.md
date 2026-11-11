@@ -1605,13 +1605,13 @@ Extend `app/db/schema_check.py::check_database_schema` to also verify `005_day4_
 
 ≈1 day of build. Unchanged: all prior contracts, Day 2 scoring rules, never-auto-send. Day 5 wires the `documents_pre_verified` and `reference_check_authorized` flags that the scoring engine already accepts (see `docs/scoring.md` rules 6 & 7 and `apps/api/app/scoring/` Day 2 implementation).
 
-**Migration number:** `008_day5_consent.sql`. Migrations 005 (day4 roles), 006 (college domains), and 007 (profiles guard) are already taken.
+**Migration number:** `009_day5_consent.sql`. Migrations 005 (day4 roles), 006 (college domains), 007 (profiles guard), and 008 (google onboarding guard) are already taken.
 
-### 13.1 Schema additions — `008_day5_consent.sql` (non-destructive, idempotent)
+### 13.1 Schema additions — `009_day5_consent.sql` (non-destructive, idempotent)
 
 ```sql
 -- ============================================================
--- 008_day5_consent.sql — Day 5: consent flows
+-- 009_day5_consent.sql — Day 5: consent flows
 -- HARD RULES (enforced in application code, not just here):
 --   • The mock verification NEVER reads document file contents.
 --   • Nothing from a document is sent to any LLM, OCR or log.
@@ -1662,7 +1662,7 @@ create policy "ref_auth self" on public.reference_authorizations
 -- verification_note) are covered by the existing Day 2 "documents self" policy.
 ```
 
-Migration enforcement: extend `check_database_schema` to probe `reference_authorizations` and `documents.verified_flag`; raise `MissingMigrationError("008_day5_consent.sql")` if absent.
+Migration enforcement: extend `check_database_schema` to probe `reference_authorizations` and `documents.verified_flag`; raise `MissingMigrationError("009_day5_consent.sql")` if absent.
 
 ### 13.2 Pre-verify flow
 
@@ -1708,7 +1708,7 @@ Flow:
 
 ### 13.4 Scoring wiring
 
-**Single source of truth:** `documents_pre_verified` reads **only** `documents.verified_flag`. The Day 2 `verification_status` path (`verification_status = 'pre_verified'`) no longer awards points from Day 5 onward; it remains in the schema for backwards compatibility but is excluded from the scoring loader. Existing Day 2 tests that assert `documents_pre_verified = true` via `verification_status` must be updated to set `verified_flag = true` instead (the column exists after migration 008). Old production rows are **not** backfilled; demo/seed rows with `verification_status = 'pre_verified'` and `verified_flag = false` are backfilled by a labelled UPDATE in migration 008.
+**Single source of truth:** `documents_pre_verified` reads **only** `documents.verified_flag`. The Day 2 `verification_status` path (`verification_status = 'pre_verified'`) no longer awards points from Day 5 onward; it remains in the schema for backwards compatibility but is excluded from the scoring loader. Existing Day 2 tests that assert `documents_pre_verified = true` via `verification_status` must be updated to set `verified_flag = true` instead (the column exists after migration 009). Old production rows are **not** backfilled; demo/seed rows with `verification_status = 'pre_verified'` and `verified_flag = false` are backfilled by a labelled UPDATE in migration 009.
 
 Both flags are **DB-only**; they are never derived from LLM output, document text, or any external service response.
 
@@ -1794,7 +1794,7 @@ Officers and companies have no endpoint to read document details, masked values,
 
 ### 13.8 Resolved decisions (Day 5)
 
-1. **Migration number** — `008_day5_consent.sql`. Migrations 005 (day4 roles), 006 (college domains), 007 (profiles guard) are taken.
+1. **Migration number** — `009_day5_consent.sql`. Migrations 005 (day4 roles), 006 (college domains), 007 (profiles guard), 008 (google onboarding guard) are taken.
 2. **Mock verify trigger** — manual `POST /v1/students/me/verify-mock`, env-gated `DEMO_VERIFY_ENABLED` (on in the demo project; off elsewhere). UI calls it automatically after the student taps "Confirm" on the consent card.
 3. **No pgcrypto / no verified_fields** — schema stores only: `document_type`, `masked_id_tail`, `verified_flag`, `verified_at`, `verification_note`. Private storage path (`storage_path`) already in Day 2 `documents` table.
 4. **Mask format** — Aadhaar: `XXXX-XXXX-1234` (last 4); PAN: last 4 characters. Masking applies only to values the student states in chat, never to document file contents (which are never read).
@@ -1804,7 +1804,7 @@ Officers and companies have no endpoint to read document details, masked values,
 8. **Scoring flags DB-only** — `documents_pre_verified` reads `verified_flag`; `reference_check_authorized` reads `reference_authorizations`. Neither flag is ever derived from LLM output or document text.
 9. **Timeline current-station** — last station with `start_year not null AND end_year null`; fallback = highest `start_year` with data; college with no `end_year` → `subtitle = 'in college'`; ordered by `start_year` ascending.
 10. **Revoke is propose-only from chat** — `propose_revoke_reference_check()` returns a card; the UI Revoke button calls the endpoint directly (one tap). No agent tool directly modifies consent/authorization state.
-11. **`verified_flag` single source of truth** — `verification_status` no longer awards points from Day 5; Day 2 tests updated to set `verified_flag = true`; old rows not backfilled except demo/seed rows in migration 008.
+11. **`verified_flag` single source of truth** — `verification_status` no longer awards points from Day 5; Day 2 tests updated to set `verified_flag = true`; old rows not backfilled except demo/seed rows in migration 009.
 
 ### 13.9 DocumentVerifier interface + demo web-search restriction
 

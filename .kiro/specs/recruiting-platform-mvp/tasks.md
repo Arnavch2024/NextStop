@@ -352,23 +352,23 @@ The following tasks from the original Day 4 scope are moved to Future Work:
 
 ## Phase 8 — Day 5: Consent flows + Railway-route timeline
 
-> ≈1 day of build. Migration: `008_day5_consent.sql`. Unchanged: all prior contracts, Day 2 scoring rules, never-auto-send. Scoring flags are DB-only. Chat tools propose consent; UI confirm endpoints grant it. All decisions resolved in design §13.8.
+> ≈1 day of build. Migration: `009_day5_consent.sql`. Unchanged: all prior contracts, Day 2 scoring rules, never-auto-send. Scoring flags are DB-only. Chat tools propose consent; UI confirm endpoints grant it. All decisions resolved in design §13.8.
 
 ---
 
-### Task 8.1 — Schema migration `008_day5_consent.sql` + startup check + verifier interface
+### Task 8.1 — Schema migration `009_day5_consent.sql` + startup check + verifier interface
 
 **Estimate: 0.25 day**
 
-- [ ] Write `supabase/migrations/008_day5_consent.sql` (non-destructive, idempotent; migrations 005/006/007 are taken):
+- [ ] Write `supabase/migrations/009_day5_consent.sql` (non-destructive, idempotent; migrations 005/006/007/008 are taken):
   - `reference_authorizations` table + `ref_auth_student_active_uidx` (partial, `revoked_at is null`) + profile index + RLS (`auth.uid() = profile_id`).
   - `documents` additions (`add column if not exists`): `document_type text`, `masked_id_tail text`, `verified_flag boolean not null default false`, `verified_at timestamptz`, `verification_note text`. No `verified_fields`, no `pgcrypto`.
   - Demo/seed backfill: `UPDATE documents SET verified_flag = true WHERE verification_status = 'pre_verified' AND id IN (SELECT d.id FROM documents d JOIN students s ON s.id = d.student_id JOIN profiles p ON p.id = s.profile_id WHERE p.is_demo = true)` — clearly labelled comment; production rows not touched.
   - Hard-rule and rollback comment blocks at top of file.
-- [ ] Extend `check_database_schema` to probe `reference_authorizations` and `documents.verified_flag`; raise `MissingMigrationError("008_day5_consent.sql")` if absent.
+- [ ] Extend `check_database_schema` to probe `reference_authorizations` and `documents.verified_flag`; raise `MissingMigrationError("009_day5_consent.sql")` if absent.
 - [ ] `apps/api/app/verification/verifier.py`: `DocumentVerifier` ABC, `MockVerifier`, `DigiLockerVerifier` stub (raises `NotImplementedError`), `get_verifier()` factory (returns `MockVerifier` by default).
 - [ ] Demo web-search block: agent runner checks `user.is_demo` before including `web_search_enrich` / ingestion tools; demo users get only `search_data_lake` for search.
-- **DoD:** Migration runs twice cleanly against a DB with 001–007 applied; app raises `MissingMigrationError("008_day5_consent.sql")` without it; Day 2 scoring tests updated to use `verified_flag = true` (not `verification_status`); demo/seed rows backfilled; production rows untouched; `DigiLockerVerifier().verify(...)` raises `NotImplementedError`; demo user session has no web-search tool in the tool list.
+- **DoD:** Migration runs twice cleanly against a DB with 001–008 applied; app raises `MissingMigrationError("009_day5_consent.sql")` without it; Day 2 scoring tests updated to use `verified_flag = true` (not `verification_status`); demo/seed rows backfilled; production rows untouched; `DigiLockerVerifier().verify(...)` raises `NotImplementedError`; demo user session has no web-search tool in the tool list.
 
 ---
 

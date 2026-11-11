@@ -336,7 +336,7 @@ Extends the spec. Unchanged: the stack, Day 1-3 contracts (`/health`, `/v1/chat`
 
 ## 11. Day 5 — Consent flows + Student railway-route timeline
 
-Scope: ≈1 day of build. Unchanged: all prior contracts, Day 2 student scoring rules, never-auto-send. The +2 scoring bonuses for pre-verify and reference-check were already accepted by the scoring engine (Day 2 design §10.3); Day 5 wires them. Migration is `008_day5_consent.sql`. Open decisions resolved in design §13.8.
+Scope: ≈1 day of build. Unchanged: all prior contracts, Day 2 student scoring rules, never-auto-send. The +2 scoring bonuses for pre-verify and reference-check were already accepted by the scoring engine (Day 2 design §10.3); Day 5 wires them. Migration is `009_day5_consent.sql`. Open decisions resolved in design §13.8.
 
 ### 11.1 Consent flows
 
@@ -348,7 +348,7 @@ Scope: ≈1 day of build. Unchanged: all prior contracts, Day 2 student scoring 
 - **FR-D5-CV-4**: THE SYSTEM SHALL store only: `document_type` (from MIME/extension), `masked_id_tail` (Aadhaar: `XXXX-XXXX-1234`; PAN: last 4 characters — only if stated by the student in chat, not from the document), `verified_flag`, `verified_at`, `verification_note = 'Demo verification (mocked)'`. Address text is never stored. No full ID numbers are stored.
 - **FR-D5-CV-5**: Document contents and file bytes SHALL NEVER appear in application logs.
 - **FR-D5-CV-6**: WHEN `verified_flag = true` the scoring engine's `documents_pre_verified` flag SHALL be `true` (read from `verified_flag` only; `verification_status` no longer awards points from Day 5 onward). `recompute_score` is triggered; score breakdown labels the +2 as `"Documents pre-verified (Demo)"`.
-- **FR-D5-CV-6a**: Day 2 tests that assert `documents_pre_verified = true` via `verification_status` SHALL be updated to set `verified_flag = true`. Old production rows are not backfilled; demo/seed rows are backfilled by migration 008.
+- **FR-D5-CV-6a**: Day 2 tests that assert `documents_pre_verified = true` via `verification_status` SHALL be updated to set `verified_flag = true`. Old production rows are not backfilled; demo/seed rows are backfilled by migration 009.
 - **FR-D5-CV-7**: THE UI SHALL show a "Demo verification (mocked)" badge on the score card and documents section.
 - **FR-D5-CV-8**: WHEN a student revokes, `masked_id_tail` SHALL be set to `null` and `verified_flag` to `false`; score SHALL be recomputed.
 
