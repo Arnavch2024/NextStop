@@ -356,10 +356,16 @@ def load_colleges_list(
         # Try loading from database without modifying it
         try:
             cli = get_supabase_client()
-            res = cli.table("colleges").select("name, placement_url").execute()
+            res = cli.table("colleges").select("id, name, placement_url").execute()
             if res.data and len(res.data) > 0:
                 for row in res.data:
-                    colleges.append({"name": row["name"], "placement_url": row.get("placement_url")})
+                    colleges.append(
+                        {
+                            "id": row.get("id"),
+                            "name": row["name"],
+                            "placement_url": row.get("placement_url"),
+                        }
+                    )
         except Exception as exc:
             logger.debug(f"Could not load colleges from DB: {exc}")
 
@@ -395,6 +401,8 @@ def build_college_domains(
 
         record = resolve_college_domain(name, known_placement_url=p_url)
         if record:
+            if c.get("id"):
+                record["college_id"] = c["id"]
             print(
                 f"  -> Resolved: {record['domain']} (evidence: {record['evidence']}, kind: {record['kind']})",
                 flush=True,
@@ -414,7 +422,7 @@ def build_college_domains(
     # Write CSV if not dry run
     if not dry_run:
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        fieldnames = ["college_name", "domain", "kind", "source_url", "evidence", "confidence"]
+        fieldnames = ["college_id", "college_name", "domain", "kind", "source_url", "evidence", "confidence"]
         with open(output_path, "w", encoding="utf-8", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()

@@ -86,21 +86,23 @@ def seed_college_domains(
                 continue
 
             # Find or create college
-            coll_key = college_name.lower()
-            college_id = colleges_map.get(coll_key)
+            college_id = (row.get("college_id") or "").strip()
             if not college_id:
-                # Attempt to match by partial or create college row
-                try:
-                    new_coll = (
-                        cli.table("colleges")
-                        .insert({"name": college_name, "city": "Mumbai", "placement_url": source_url})
-                        .execute()
-                    )
-                    if new_coll.data and len(new_coll.data) > 0:
-                        college_id = str(new_coll.data[0]["id"])
-                        colleges_map[coll_key] = college_id
-                except Exception as exc:
-                    logger.warning(f"Could not auto-create college {college_name}: {exc}")
+                coll_key = college_name.lower()
+                college_id = colleges_map.get(coll_key)
+                if not college_id:
+                    # Attempt to match by partial or create college row
+                    try:
+                        new_coll = (
+                            cli.table("colleges")
+                            .insert({"name": college_name, "city": "Mumbai", "placement_url": source_url})
+                            .execute()
+                        )
+                        if new_coll.data and len(new_coll.data) > 0:
+                            college_id = str(new_coll.data[0]["id"])
+                            colleges_map[coll_key] = college_id
+                    except Exception as exc:
+                        logger.warning(f"Could not auto-create college {college_name}: {exc}")
 
             if not college_id:
                 skipped += 1
