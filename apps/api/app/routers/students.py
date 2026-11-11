@@ -2,7 +2,7 @@ import io
 import os
 import uuid
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import docx
 import pypdf
@@ -22,6 +22,8 @@ from app.models.api import (
     RevokeVerifyResponse,
     ScoreResponse,
     StudentProfileResponse,
+    TimelineResponse,
+    TimelineStation,
     VerifyMockRequest,
     VerifyMockResponse,
 )
@@ -602,3 +604,186 @@ def revoke_reference_check(
             next_best_actions=score_res.next_best_actions,
         ),
     )
+
+
+def _parse_year(val: Optional[Any]) -> Optional[int]:
+    if val is None:
+        return None
+    if isinstance(val, int):
+        return val
+    s = str(val).strip()
+    if len(s) >= 4 and s[:4].isdigit():
+        return int(s[:4])
+    return None
+
+
+def _format_source_badge(source: Optional[str]) -> str:
+    s = (source or "resume").lower()
+    if s == "user_said":
+        return "User said"
+    if s == "system":
+        return "System"
+    return "Resume"
+
+
+@router.get("/timeline", response_model=TimelineResponse, status_code=status.HTTP_200_OK)
+def get_student_timeline(
+    user: UserProfile = Depends(get_current_user),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """Railway-route timeline stations ordered by start_year ascending.
+
+    Current station is highlighted according to the current-station rule:
+    last station with a start and no end year; else the latest station with data;
+    college with no end year is labeled 'in college'.
+    """
+    if not user.role:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Role not assigned. Please complete onboarding at /onboarding.",
+        )
+
+    student_id = get_or_create_student_id(supabase, user)
+
+    # 1. Fetch education, internships, jobs
+    edu_res = supabase.table("education").select("*").eq("student_id", student_id).execute()
+    int_res = supabase.table("internships").select("*").eq("student_id", student_id).execute()
+    job_res = supabase.table("jobs").select("*").eq("student_id", student_id).execute()
+
+    stations: List[TimelineStation] = []
+
+    # Education stations
+    for e in edu_res.data or []:
+        lvl = str(e.get("level", "")).lower()
+        inst = e.get("institution") or ""
+        deg = e.get("degree") or ""
+        br = e.get("branch") or ""
+        sy = _parse_year(e.get("start_year"))
+        ey = _parse_year(e.get("end_year"))
+        source = _format_source_badge(e.get("source"))
+
+        if "tenth" in lvl or "10" in lvl:
+            kind = "school_10"
+            title = inst or "Class X (10th Secondary)"
+            subtitle = e.get("board_or_university") or "Secondary School"
+        elif "twelfth" in lvl or "12" in lvl:
+            kind = "school_12"
+            title = inst or "Class XII (12th Higher Secondary)"
+            subtitle = br or e.get("board_or_university") or "Higher Secondary"
+        else:
+            kind = "college"
+            title = f"{deg} — {inst}" if deg and inst else (deg or inst or "College Degree")
+            subtitle = br or "Higher Education"
+
+        stations.append(
+            TimelineStation(
+                kind=kind,
+                title=title,
+                subtitle=subtitle,
+                start_year=sy,
+                end_year=ey,
+                source_badge=source,
+                is_current=False,
+                is_future=False,
+            )
+        )
+
+    # Internship stations
+    for i in int_res.data or []:
+        comp = i.get("company") or "Company"
+        role = i.get("role") or "Intern"
+        sy = _parse_year(i.get("start_date"))
+        ey = _parse_year(i.get("end_date"))
+        source = _format_source_badge(i.get("source"))
+        stations.append(
+            TimelineStation(
+                kind="internship",
+                title=f"{role} — {comp}",
+                subtitle="Internship",
+                start_year=sy,
+                end_year=ey,
+                source_badge=source,
+                is_current=False,
+                is_future=False,
+            )
+        )
+
+    # Job stations
+    for j in job_res.data or []:
+        comp = j.get("company") or "Company"
+        role = j.get("role") or "Full-Time Role"
+        sy = _parse_year(j.get("start_date"))
+        ey = _parse_year(j.get("end_date"))
+        source = _format_source_badge(j.get("source"))
+        stations.append(
+            TimelineStation(
+                kind="job",
+                title=f"{role} — {comp}",
+                subtitle="Full-Time Work",
+                start_year=sy,
+                end_year=ey,
+                source_badge=source,
+                is_current=False,
+                is_future=False,
+            )
+        )
+
+    # 2. Sort past/present stations by start_year ascending. Stations with no start_year placed after dated ones.
+    dated = [s for s in stations if s.start_year is not None]
+    undated = [s for s in stations if s.start_year is None]
+    dated.sort(key=lambda s: s.start_year if s.start_year is not None else 0)
+    past_present_stations = dated + undated
+
+    # 3. Apply current-station rule:
+    # "is_current = true on the last station where start_year is not null AND end_year is null (ongoing).
+    # If no such station exists, is_current = true on the station with the highest start_year that has data.
+    # A college station with a start_year and no end_year shows subtitle = 'in college' and is_current = true."
+    ongoing_stations = [s for s in past_present_stations if s.start_year is not None and s.end_year is None]
+    if ongoing_stations:
+        current_station = ongoing_stations[-1]
+    elif dated:
+        current_station = dated[-1]
+    elif past_present_stations:
+        current_station = past_present_stations[-1]
+    else:
+        current_station = None
+
+    for s in past_present_stations:
+        if s is current_station:
+            s.is_current = True
+            if s.kind == "college" and s.start_year is not None and s.end_year is None:
+                s.subtitle = "in college"
+
+    # 4. Check future stations (pre_verify and reference_check)
+    doc_res = supabase.table("documents").select("verified_flag").eq("student_id", student_id).execute()
+    has_pre_verified = any(bool(r.get("verified_flag")) for r in (doc_res.data or []))
+
+    ref_res = (
+        supabase.table("reference_authorizations")
+        .select("id")
+        .eq("student_id", student_id)
+        .is_("revoked_at", None)
+        .limit(1)
+        .execute()
+    )
+    has_ref_auth = bool(ref_res.data and len(ref_res.data) > 0)
+
+    future_stations: List[TimelineStation] = [
+        TimelineStation(
+            kind="pre_verify_done" if has_pre_verified else "pre_verify_pending",
+            title="Documents Pre-verified" if has_pre_verified else "Document Pre-verification",
+            subtitle="Verified (Mocked)" if has_pre_verified else "+2 points available",
+            is_current=False,
+            is_future=True,
+        ),
+        TimelineStation(
+            kind="reference_done" if has_ref_auth else "reference_pending",
+            title="Reference Check Authorized" if has_ref_auth else "Reference Check Authorization",
+            subtitle="Authorized ✓" if has_ref_auth else "+2 points available",
+            is_current=False,
+            is_future=True,
+        ),
+    ]
+
+    all_stations = past_present_stations + future_stations
+    return TimelineResponse(stations=all_stations)

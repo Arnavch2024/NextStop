@@ -249,3 +249,136 @@ def test_officers_and_companies_see_only_reference_check_authorized_boolean(clie
     assert "storage_path" not in card
     assert "masked_id_tail" not in card
     assert "documents" not in card
+
+
+def test_student_timeline_ordering_and_current_station(client, mock_supabase):
+    """
+    GET /v1/students/me/timeline returns stations ordered by start_year ascending.
+    Current station: last station with start_year and no end_year (college has subtitle='in college').
+    """
+    student_id = "stu-riya-1"
+    mock_supabase.store["students"].append({"id": student_id, "profile_id": "user-123", "full_name": "Riya Sharma"})
+    # 1. 10th (2018-2020)
+    mock_supabase.store["education"].append(
+        {
+            "id": "edu-1",
+            "student_id": student_id,
+            "level": "tenth",
+            "institution": "St. Mary High School",
+            "start_year": 2018,
+            "end_year": 2020,
+            "source": "resume",
+        }
+    )
+    # 2. 12th (2020-2022)
+    mock_supabase.store["education"].append(
+        {
+            "id": "edu-2",
+            "student_id": student_id,
+            "level": "twelfth",
+            "institution": "Mithibai Junior College",
+            "start_year": 2020,
+            "end_year": 2022,
+            "source": "resume",
+        }
+    )
+    # 3. College (2022 - Ongoing)
+    mock_supabase.store["education"].append(
+        {
+            "id": "edu-3",
+            "student_id": student_id,
+            "level": "bachelors",
+            "degree": "BTech Computer Engineering",
+            "institution": "VJTI Mumbai",
+            "start_year": 2022,
+            "end_year": None,
+            "source": "resume",
+        }
+    )
+    # 4. Completed Internship (2023)
+    mock_supabase.store["internships"].append(
+        {
+            "id": "int-1",
+            "student_id": student_id,
+            "company": "TCS",
+            "role": "Software Engineering Intern",
+            "start_date": "2023-06-01",
+            "end_date": "2023-08-31",
+            "source": "resume",
+        }
+    )
+
+    res = client.get(
+        "/v1/students/me/timeline",
+        headers={"Authorization": "Bearer valid-token-student"},
+    )
+    assert res.status_code == 200
+    stations = res.json()["stations"]
+    assert len(stations) >= 4
+
+    # Check station ordering
+    past_stations = [s for s in stations if not s["is_future"]]
+    assert len(past_stations) == 4
+    assert past_stations[0]["kind"] == "school_10"
+    assert past_stations[0]["start_year"] == 2018
+    assert past_stations[1]["kind"] == "school_12"
+    assert past_stations[1]["start_year"] == 2020
+    assert past_stations[2]["kind"] == "college"
+    assert past_stations[2]["start_year"] == 2022
+    assert past_stations[3]["kind"] == "internship"
+    assert past_stations[3]["start_year"] == 2023
+
+    # College is the ongoing station (start_year=2022, end_year=None) -> is_current=True and subtitle='in college'
+    college_st = past_stations[2]
+    assert college_st["is_current"] is True
+    assert college_st["subtitle"] == "in college"
+
+    # Future stations at the end
+    future_stations = [s for s in stations if s["is_future"]]
+    assert len(future_stations) == 2
+    assert future_stations[0]["kind"] in ("pre_verify_pending", "pre_verify_done")
+    assert future_stations[1]["kind"] in ("reference_pending", "reference_done")
+
+
+def test_student_timeline_fallback_highest_start_year(client, mock_supabase):
+    """
+    When no ongoing station exists (all have end_year), current station falls back
+    to the station with the highest start_year that has data.
+    """
+    student_id = "stu-riya-1"
+    mock_supabase.store["students"].append({"id": student_id, "profile_id": "user-123", "full_name": "Riya Sharma"})
+    mock_supabase.store["education"].append(
+        {
+            "id": "edu-1",
+            "student_id": student_id,
+            "level": "bachelors",
+            "institution": "VJTI",
+            "start_year": 2020,
+            "end_year": 2024,
+            "source": "resume",
+        }
+    )
+    mock_supabase.store["jobs"].append(
+        {
+            "id": "job-1",
+            "student_id": student_id,
+            "company": "Infosys",
+            "role": "Systems Engineer",
+            "start_date": "2024-07-01",
+            "end_date": "2025-06-30",
+            "source": "resume",
+        }
+    )
+
+    res = client.get(
+        "/v1/students/me/timeline",
+        headers={"Authorization": "Bearer valid-token-student"},
+    )
+    assert res.status_code == 200
+    stations = res.json()["stations"]
+    past = [s for s in stations if not s["is_future"]]
+    assert len(past) == 2
+    # The job station (2024) has the highest start_year and becomes current station
+    assert past[1]["kind"] == "job"
+    assert past[1]["is_current"] is True
+    assert past[0]["is_current"] is False
