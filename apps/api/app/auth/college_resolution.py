@@ -207,3 +207,46 @@ def fuzzy_match_college(
         return best_match
 
     return None
+
+
+def resolve_company_from_email(
+    email: Optional[str],
+    is_email_verified: bool = True,
+    client: Optional[Client] = None,
+) -> Optional[Dict[str, Any]]:
+    """
+    Resolves the company record for a given email address.
+
+    Rules:
+    - Returns None if email is unverified.
+    - Returns None if email is empty or invalid.
+    - Free-mail domains (gmail.com, yahoo.com, outlook.com, etc.) NEVER match.
+    - Matches candidate company domains/names against companies table.
+    """
+    if not is_email_verified:
+        logger.debug(f"Company resolution skipped: unverified email '{email}'")
+        return None
+
+    if not email or "@" not in email:
+        return None
+
+    domain = email.strip().split("@")[-1].lower()
+
+    if not domain or is_freemail_domain(domain):
+        logger.debug(f"Company resolution rejected: free-mail or empty domain '{domain}'")
+        return None
+
+    cli = client or get_supabase_client()
+    base_name = domain.split(".")[0].strip().lower()
+
+    try:
+        res = cli.table("companies").select("*").ilike("name", f"%{base_name}%").limit(5).execute()
+        if res.data:
+            for comp in res.data:
+                cname = (comp.get("name") or "").lower()
+                if base_name in cname:
+                    return comp
+            return res.data[0]
+    except Exception as exc:
+        logger.warning(f"Error resolving company from email {email}: {exc}")
+    return None

@@ -254,6 +254,34 @@ class MockSupabaseClient:
                     "college_id": "col-mumbai-1",
                     "is_demo": True,
                 },
+                {
+                    "id": "user-null-role",
+                    "role": None,
+                    "display_name": "New User",
+                    "email": "newuser@example.com",
+                    "is_demo": False,
+                },
+                {
+                    "id": "user-vjti-student",
+                    "role": None,
+                    "display_name": "Rahul VJTI",
+                    "email": "rahul@vjti.ac.in",
+                    "is_demo": False,
+                },
+                {
+                    "id": "user-gmail-student",
+                    "role": None,
+                    "display_name": "Rahul Gmail",
+                    "email": "rahul@gmail.com",
+                    "is_demo": False,
+                },
+                {
+                    "id": "user-company-domain",
+                    "role": None,
+                    "display_name": "TCS HR",
+                    "email": "hr@tcs.com",
+                    "is_demo": False,
+                },
             ],
             "students": [],
             "colleges": [],
@@ -396,6 +424,38 @@ class MockSupabaseClient:
             user_obj.id = "demo-student-id"
             user_obj.email = "demo-student@example.com"
             user_obj.user_metadata = {"full_name": "Riya Sharma", "is_demo": True}
+            resp = MagicMock()
+            resp.user = user_obj
+            return resp
+        elif token == "valid-token-null-role":
+            user_obj = MagicMock()
+            user_obj.id = "user-null-role"
+            user_obj.email = "newuser@example.com"
+            user_obj.user_metadata = {"full_name": "New User"}
+            resp = MagicMock()
+            resp.user = user_obj
+            return resp
+        elif token == "valid-token-college-student":
+            user_obj = MagicMock()
+            user_obj.id = "user-vjti-student"
+            user_obj.email = "rahul@vjti.ac.in"
+            user_obj.user_metadata = {"full_name": "Rahul VJTI"}
+            resp = MagicMock()
+            resp.user = user_obj
+            return resp
+        elif token == "valid-token-gmail-student":
+            user_obj = MagicMock()
+            user_obj.id = "user-gmail-student"
+            user_obj.email = "rahul@gmail.com"
+            user_obj.user_metadata = {"full_name": "Rahul Gmail"}
+            resp = MagicMock()
+            resp.user = user_obj
+            return resp
+        elif token == "valid-token-company-user":
+            user_obj = MagicMock()
+            user_obj.id = "user-company-domain"
+            user_obj.email = "hr@tcs.com"
+            user_obj.user_metadata = {"full_name": "TCS HR"}
             resp = MagicMock()
             resp.user = user_obj
             return resp

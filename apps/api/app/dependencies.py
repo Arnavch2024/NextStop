@@ -90,7 +90,9 @@ def get_current_user(
                     except Exception as exc:
                         logger.warning(f"Could not auto-link student_records: {exc}")
 
-        logger.info(f"Authenticated user: id={user_id}, role={profile.role}, college_id={profile.college_id}, is_demo={profile.is_demo}")
+        logger.info(
+            f"Authenticated user: id={user_id}, role={profile.role}, college_id={profile.college_id}, is_demo={profile.is_demo}"
+        )
         return profile
 
     except HTTPException:

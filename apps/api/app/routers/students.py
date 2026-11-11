@@ -133,6 +133,11 @@ async def upload_resume(
     """
     content_type = file.content_type or ""
     filename = file.filename or "resume"
+    if not user.role:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Role not assigned. Please complete onboarding at /onboarding.",
+        )
     ext = os.path.splitext(filename)[1].lower()
 
     # 1. Validate MIME
@@ -259,6 +264,11 @@ async def get_student_score(
     Returns the student's score, breakdown, and next best actions from the latest score_events row.
     If no score_events row exists, computes one.
     """
+    if not user.role:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Role not assigned. Please complete onboarding at /onboarding.",
+        )
     student_id = get_or_create_student_id(supabase, user)
 
     evt_res = (
@@ -301,6 +311,11 @@ async def get_student_profile(
     supabase: Client = Depends(get_supabase_client),
 ):
     """Returns student profile and child arrays (education, internships, jobs, skills, documents)."""
+    if not user.role:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Role not assigned. Please complete onboarding at /onboarding.",
+        )
     stu_res = supabase.table("students").select("*").eq("profile_id", user.id).execute()
     student_rec = stu_res.data[0] if (stu_res.data and len(stu_res.data) > 0) else None
 
