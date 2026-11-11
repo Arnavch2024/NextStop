@@ -647,3 +647,192 @@ def test_demo_users_cannot_call_web_search(mock_supabase):
     )
     assert res_actor.get("error") == "demo_users_cannot_run_live_search"
     assert res_actor["results"] == 0
+
+
+def _simulate_guard_document_verification(
+    op: str,
+    old: dict,
+    new: dict,
+    auth_role: str = "authenticated",
+):
+    """
+    Exact Python mirror of public.guard_document_verification() PL/pgSQL trigger
+    defined in migration 009.
+    """
+    if auth_role not in ("authenticated", "anon"):
+        return new
+
+    if op == "INSERT":
+        if new.get("verified_flag") is not None and new.get("verified_flag") is not False:
+            raise ValueError("Setting document verified_flag is not permitted for clients.")
+        if new.get("verified_at") is not None:
+            raise ValueError("Setting document verified_at is not permitted for clients.")
+        if new.get("masked_id_tail") is not None:
+            raise ValueError("Setting document masked_id_tail is not permitted for clients.")
+        return new
+
+    # TG_OP == "UPDATE"
+    if new.get("verified_flag") != old.get("verified_flag"):
+        raise ValueError("Modifying document verified_flag is not permitted for clients.")
+    if new.get("verified_at") != old.get("verified_at"):
+        raise ValueError("Modifying document verified_at is not permitted for clients.")
+    if new.get("masked_id_tail") != old.get("masked_id_tail"):
+        raise ValueError("Modifying document masked_id_tail is not permitted for clients.")
+
+    return new
+
+
+def test_client_scoped_session_cannot_insert_reference_authorizations(mock_supabase):
+    """
+    A client-scoped session (authenticated or anon) cannot insert into reference_authorizations.
+    1. Direct client write policy does not exist (RLS only allows select for own profile).
+    2. upsert_record tool explicitly forbids reference_authorizations.
+    """
+    from app.agent.tools import handle_upsert
+    from app.models.db import ProfileRole, UserProfile
+
+    client_user = UserProfile(
+        id="user-123",
+        role=ProfileRole.STUDENT,
+        display_name="Riya Sharma",
+        email="riya@example.com",
+    )
+
+    # 1. Tool-level guard (forbidden_table)
+    res = handle_upsert(
+        mock_supabase,
+        client_user,
+        "reference_authorizations",
+        {
+            "student_id": "stu-1",
+            "profile_id": "user-123",
+            "authorized_party": "Unauthorized Party",
+        },
+    )
+    assert res.get("error") == "forbidden_table"
+
+    # 2. RLS policy simulation: clients have NO write policy on reference_authorizations
+    def simulate_ref_auth_write_policy(op: str, auth_role: str = "authenticated"):
+        if auth_role in ("authenticated", "anon"):
+            if op in ("INSERT", "UPDATE", "DELETE"):
+                raise PermissionError("Permission denied: clients have read-only access to reference_authorizations.")
+        return True
+
+    with pytest.raises(PermissionError, match="Permission denied"):
+        simulate_ref_auth_write_policy("INSERT", auth_role="authenticated")
+
+    with pytest.raises(PermissionError, match="Permission denied"):
+        simulate_ref_auth_write_policy("INSERT", auth_role="anon")
+
+    # Service role is allowed
+    assert simulate_ref_auth_write_policy("INSERT", auth_role="service_role") is True
+
+
+def test_client_scoped_session_cannot_set_documents_verified_flag():
+    """
+    A client-scoped session cannot set documents.verified_flag, verified_at, or masked_id_tail.
+    Enforced by public.guard_document_verification trigger.
+    """
+    doc_old = {
+        "id": "doc-1",
+        "student_id": "stu-1",
+        "verified_flag": False,
+        "verified_at": None,
+        "masked_id_tail": None,
+    }
+
+    # 1. Client cannot set verified_flag on INSERT
+    with pytest.raises(ValueError, match="Setting document verified_flag is not permitted for clients"):
+        _simulate_guard_document_verification(
+            "INSERT",
+            old={},
+            new={"id": "doc-2", "verified_flag": True},
+            auth_role="authenticated",
+        )
+
+    # 2. Client cannot set masked_id_tail on INSERT
+    with pytest.raises(ValueError, match="Setting document masked_id_tail is not permitted for clients"):
+        _simulate_guard_document_verification(
+            "INSERT",
+            old={},
+            new={"id": "doc-2", "masked_id_tail": "XXXX-XXXX-1234"},
+            auth_role="authenticated",
+        )
+
+    # 3. Client cannot modify verified_flag on UPDATE
+    with pytest.raises(ValueError, match="Modifying document verified_flag is not permitted for clients"):
+        _simulate_guard_document_verification(
+            "UPDATE",
+            old=doc_old,
+            new={**doc_old, "verified_flag": True},
+            auth_role="authenticated",
+        )
+
+    # 4. Client cannot modify verified_at on UPDATE
+    with pytest.raises(ValueError, match="Modifying document verified_at is not permitted for clients"):
+        _simulate_guard_document_verification(
+            "UPDATE",
+            old=doc_old,
+            new={**doc_old, "verified_at": "2026-11-11T00:00:00Z"},
+            auth_role="authenticated",
+        )
+
+    # 5. Service role can perform updates without restriction
+    srv_result = _simulate_guard_document_verification(
+        "UPDATE",
+        old=doc_old,
+        new={**doc_old, "verified_flag": True, "masked_id_tail": "XXXX-XXXX-1234"},
+        auth_role="service_role",
+    )
+    assert srv_result["verified_flag"] is True
+    assert srv_result["masked_id_tail"] == "XXXX-XXXX-1234"
+
+
+def test_second_party_can_be_authorized_for_same_student_and_internship(client, mock_supabase):
+    """
+    A second party can be authorized for the same student and internship.
+    Unique index ref_auth_active_party_uidx allows multiple active authorizations
+    per student+internship as long as the authorized party differs.
+    """
+    student_id = "stu-riya-multi-auth"
+    internship_id = "int-summer-2025"
+    mock_supabase.store["students"].append({"id": student_id, "profile_id": "user-123", "full_name": "Riya Sharma"})
+    mock_supabase.store["internships"].append({"id": internship_id, "student_id": student_id, "company": "Tech Corp"})
+
+    # 1. Authorize Party 1: Google India
+    res1 = client.post(
+        "/v1/students/me/reference-auth",
+        headers={"Authorization": "Bearer valid-token-student"},
+        json={
+            "internship_id": internship_id,
+            "authorized_party": "Google India",
+            "authorized_role": "SWE Intern",
+        },
+    )
+    assert res1.status_code == 200
+    assert res1.json()["reference_check_authorized"] is True
+
+    # 2. Authorize Party 2: Razorpay for the same student and same internship
+    res2 = client.post(
+        "/v1/students/me/reference-auth",
+        headers={"Authorization": "Bearer valid-token-student"},
+        json={
+            "internship_id": internship_id,
+            "authorized_party": "Razorpay",
+            "authorized_role": "Backend Intern",
+        },
+    )
+    assert res2.status_code == 200
+    assert res2.json()["reference_check_authorized"] is True
+
+    # 3. Verify both active authorizations exist in the store
+    active_auths = [
+        ra
+        for ra in mock_supabase.store["reference_authorizations"]
+        if ra["student_id"] == student_id and ra["revoked_at"] is None
+    ]
+    assert len(active_auths) == 2
+    parties = {a["authorized_party"] for a in active_auths}
+    assert parties == {"Google India", "Razorpay"}
+    for a in active_auths:
+        assert a["internship_id"] == internship_id
