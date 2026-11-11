@@ -133,3 +133,119 @@ def test_digilocker_verifier_raises_not_implemented():
     with pytest.raises(NotImplementedError) as exc_info:
         verifier.verify("doc-1", "application/pdf")
     assert "DigiLockerVerifier requires partner registration" in str(exc_info.value)
+
+
+def test_reference_auth_endpoint_and_draft_letter(client, mock_supabase):
+    """
+    POST /v1/students/me/reference-auth authorizes reference check,
+    awards +2 points, writes a draft reference letter (never auto-sent).
+    """
+    student_id = "stu-riya-1"
+    mock_supabase.store["students"].append({"id": student_id, "profile_id": "user-123", "full_name": "Riya Sharma"})
+
+    res = client.post(
+        "/v1/students/me/reference-auth",
+        headers={"Authorization": "Bearer valid-token-student"},
+        json={"authorized_party": "Google India", "authorized_role": "Software Engineering Intern"},
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["reference_check_authorized"] is True
+    assert any(b["reason"] == "Reference check authorized" and b["points"] == 2 for b in data["score"]["breakdown"])
+
+    # Verify authorization row in DB
+    auth_rows = mock_supabase.store["reference_authorizations"]
+    assert len(auth_rows) > 0
+    active_auth = next(a for a in auth_rows if a["student_id"] == student_id)
+    assert active_auth["revoked_at"] is None
+    assert active_auth["authorized_party"] == "Google India"
+
+    # Verify draft letter created (never sent)
+    drafts = mock_supabase.store["outreach_drafts"]
+    assert any("Reference Request" in d.get("subject", "") for d in drafts)
+
+
+def test_reference_auth_revoke_drops_score(client, mock_supabase):
+    """
+    DELETE /v1/students/me/reference-auth marks authorization revoked,
+    score drops 2 points immediately.
+    """
+    student_id = "stu-riya-1"
+    mock_supabase.store["students"].append({"id": student_id, "profile_id": "user-123", "full_name": "Riya Sharma"})
+    mock_supabase.store["reference_authorizations"].append(
+        {
+            "id": "ra-1",
+            "student_id": student_id,
+            "profile_id": "user-123",
+            "authorized_at": "2026-11-10T00:00:00Z",
+            "revoked_at": None,
+        }
+    )
+
+    res = client.delete(
+        "/v1/students/me/reference-auth",
+        headers={"Authorization": "Bearer valid-token-student"},
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["reference_check_authorized"] is False
+    assert not any(b["reason"] == "Reference check authorized" for b in data["score"]["breakdown"])
+
+    # DB store revoked_at is now set
+    ra = mock_supabase.store["reference_authorizations"][0]
+    assert ra["revoked_at"] is not None
+
+
+def test_officers_and_companies_see_only_reference_check_authorized_boolean(client, mock_supabase):
+    """
+    Officers and companies querying student cards see only the reference_check_authorized boolean,
+    never documents, storage paths, or masked values.
+    """
+    student_id = "stu-riya-1"
+    college_id = "col-mumbai-1"
+    mock_supabase.store["students"].append({"id": student_id, "profile_id": "user-123", "full_name": "Riya Sharma"})
+    mock_supabase.store["student_records"].append(
+        {
+            "id": "sr-1",
+            "college_id": college_id,
+            "full_name": "Riya Sharma",
+            "email": "riya@example.com",
+            "batch_year": 2027,
+            "branch": "Computer Engineering",
+            "degree": "BTech",
+            "score_value": 9.0,
+            "score_scale": "cgpa10",
+            "current_status": "in_college",
+            "claimed_by_profile_id": "user-123",
+            "is_demo_data": False,
+        }
+    )
+    # Batch sharing enabled
+    mock_supabase.store["batch_sharing"].append(
+        {"id": "bs-1", "college_id": college_id, "batch_year": 2027, "shared_with_recruiters": True}
+    )
+    # Active authorization exists
+    mock_supabase.store["reference_authorizations"].append(
+        {
+            "id": "ra-1",
+            "student_id": student_id,
+            "profile_id": "user-123",
+            "authorized_at": "2026-11-10T00:00:00Z",
+            "revoked_at": None,
+        }
+    )
+
+    # 1. Company reads student records
+    comp_res = client.get(
+        "/v1/student-records",
+        headers={"Authorization": "Bearer valid-token-company"},
+    )
+    assert comp_res.status_code == 200
+    items = comp_res.json()["items"]
+    assert len(items) == 1
+    card = items[0]
+    assert card["reference_check_authorized"] is True
+    # Verify no private document or masked values leaked
+    assert "storage_path" not in card
+    assert "masked_id_tail" not in card
+    assert "documents" not in card

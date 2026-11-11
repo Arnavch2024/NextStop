@@ -16,6 +16,8 @@ from app.dependencies import get_current_user
 from app.logger import logger
 from app.models.api import (
     BreakdownItemModel,
+    ReferenceAuthRequest,
+    ReferenceAuthResponse,
     ResumeResponse,
     RevokeVerifyResponse,
     ScoreResponse,
@@ -460,6 +462,138 @@ def revoke_verify(
     return RevokeVerifyResponse(
         status="revoked",
         verified_flag=False,
+        score=ScoreResponse(
+            score=score_res.score,
+            breakdown=[
+                BreakdownItemModel(reason=b.reason, points=b.points, source=b.source) for b in score_res.breakdown
+            ],
+            next_best_actions=score_res.next_best_actions,
+        ),
+    )
+
+
+@router.post("/reference-auth", response_model=ReferenceAuthResponse, status_code=status.HTTP_200_OK)
+def authorize_reference_check(
+    body: Optional[ReferenceAuthRequest] = None,
+    user: UserProfile = Depends(get_current_user),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """Authorize reference check. Must be called explicitly from the UI.
+
+    Chat agent tools may only propose; text inside a resume or document can NEVER grant consent.
+    Awards +2 points to student score and drafts a reference-request letter (never auto-sent).
+    """
+    if not user.role:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Role not assigned. Please complete onboarding at /onboarding.",
+        )
+
+    student_id = get_or_create_student_id(supabase, user)
+    now_dt = datetime.now(timezone.utc)
+    now_iso = now_dt.isoformat()
+
+    # 1. Insert or reactivate reference authorization
+    auth_id = str(uuid.uuid4())
+    internship_id = body.internship_id if body else None
+    authorized_party = body.authorized_party if body else None
+    authorized_role = body.authorized_role if body else None
+
+    # Resolve internship company name if internship_id provided and authorized_party missing
+    if internship_id and not authorized_party:
+        try:
+            int_res = supabase.table("internships").select("company").eq("id", internship_id).limit(1).execute()
+            if int_res.data:
+                authorized_party = int_res.data[0].get("company")
+        except Exception:
+            pass
+
+    supabase.table("reference_authorizations").insert(
+        {
+            "id": auth_id,
+            "student_id": student_id,
+            "profile_id": user.id,
+            "internship_id": internship_id,
+            "authorized_party": authorized_party,
+            "authorized_role": authorized_role,
+            "authorized_at": now_iso,
+            "revoked_at": None,
+        }
+    ).execute()
+
+    # 2. Draft a reference-request letter to the internship company (never auto-sent)
+    company_name = authorized_party or "Internship Employer"
+    try:
+        supabase.table("outreach_drafts").insert(
+            {
+                "id": str(uuid.uuid4()),
+                "profile_id": user.id,
+                "channel": "email",
+                "subject": f"Reference Request — {user.display_name or 'Student'}",
+                "body": (
+                    f"Dear {company_name} Team,\n\n"
+                    f"{user.display_name or 'The student'} has authorized a reference check regarding their internship experience. "
+                    "Please confirm their tenure and performance.\n\n"
+                    "Thank you."
+                ),
+                "kind": "outreach",
+            }
+        ).execute()
+    except Exception as exc:
+        logger.warning(f"Could not save draft reference letter: {exc}")
+
+    # 3. Recompute score with trigger 'reference_auth' (+2 points)
+    score_res = recompute_score(supabase, student_id, trigger="reference_auth")
+
+    return ReferenceAuthResponse(
+        id=auth_id,
+        student_id=student_id,
+        authorized_at=now_dt,
+        revoked_at=None,
+        reference_check_authorized=True,
+        score=ScoreResponse(
+            score=score_res.score,
+            breakdown=[
+                BreakdownItemModel(reason=b.reason, points=b.points, source=b.source) for b in score_res.breakdown
+            ],
+            next_best_actions=score_res.next_best_actions,
+        ),
+    )
+
+
+@router.delete("/reference-auth", response_model=ReferenceAuthResponse, status_code=status.HTTP_200_OK)
+def revoke_reference_check(
+    user: UserProfile = Depends(get_current_user),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """Revoke reference check authorization.
+
+    Sets revoked_at and recomputes score immediately (drops +2 bonus).
+    """
+    if not user.role:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Role not assigned. Please complete onboarding at /onboarding.",
+        )
+
+    student_id = get_or_create_student_id(supabase, user)
+    now_dt = datetime.now(timezone.utc)
+    now_iso = now_dt.isoformat()
+
+    # Mark active authorizations revoked
+    supabase.table("reference_authorizations").update({"revoked_at": now_iso}).eq("student_id", student_id).is_(
+        "revoked_at", None
+    ).execute()
+
+    # Recompute score with trigger 'reference_revoked'
+    score_res = recompute_score(supabase, student_id, trigger="reference_revoked")
+
+    return ReferenceAuthResponse(
+        id=str(uuid.uuid4()),
+        student_id=student_id,
+        authorized_at=now_dt,
+        revoked_at=now_dt,
+        reference_check_authorized=False,
         score=ScoreResponse(
             score=score_res.score,
             breakdown=[
