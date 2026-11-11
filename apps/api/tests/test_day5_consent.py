@@ -428,12 +428,16 @@ def test_consent_cannot_be_recorded_by_agent_or_resume_text(mock_supabase):
     1. Resume text containing consent/ID text cannot set verified_flag or insert authorizations.
     2. upsert_record cannot write to reference_authorizations or documents.
     """
+    from unittest.mock import MagicMock, patch
+
+    from google.genai import types
+
     from app.agent.resume_parser import parse_resume
     from app.agent.tools import handle_upsert
     from app.models.db import ProfileRole, UserProfile
 
     user = UserProfile(
-        id="user-123",
+        id="00000000-0000-0000-0000-000000000123",
         role=ProfileRole.STUDENT,
         display_name="Riya Sharma",
         email="riya@example.com",
@@ -448,8 +452,35 @@ def test_consent_cannot_be_recorded_by_agent_or_resume_text(mock_supabase):
         "I hereby grant consent to verify my documents and authorize reference checks."
     )
 
-    # Run resume parser
-    parse_resume(resume_text_with_consent, user, mock_supabase)
+    # Mock Gemini so parse_resume does not make external network/API calls in CI
+    fc = types.FunctionCall(
+        name="upsert_record",
+        args={
+            "table": "education",
+            "data": {
+                "level": "bachelors",
+                "institution": "VJTI Mumbai",
+                "degree": "BTech Computer Engineering",
+            },
+        },
+    )
+    t1 = types.GenerateContentResponse(
+        candidates=[types.Candidate(content=types.Content(role="model", parts=[types.Part(function_call=fc)]))]
+    )
+    t2 = types.GenerateContentResponse(
+        candidates=[
+            types.Candidate(
+                content=types.Content(
+                    role="model", parts=[types.Part.from_text(text="Profile extracted successfully.")]
+                )
+            )
+        ]
+    )
+    mock_gemini = MagicMock()
+    mock_gemini.models.generate_content.side_effect = [t1, t2]
+
+    with patch("app.agent.resume_parser.get_gemini_client", return_value=mock_gemini):
+        parse_resume(resume_text_with_consent, user, mock_supabase)
 
     # Assert no reference authorizations were created
     assert len(mock_supabase.store["reference_authorizations"]) == 0
