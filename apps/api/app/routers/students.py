@@ -1,5 +1,6 @@
 import io
 import os
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import Any, List, Optional
@@ -400,6 +401,19 @@ def verify_mock(
     verifier = get_verifier()
     v_res = verifier.verify(doc_id, mime_type)
 
+    doc_type = (body.document_type if body and body.document_type else None) or v_res.document_type
+    raw_tail = (body.masked_id_tail if body and body.masked_id_tail else None) or v_res.masked_id_tail
+    masked_tail = None
+    if raw_tail:
+        # Never store full Aadhaar/PAN; ensure masked format
+        digits = re.sub(r"\D", "", raw_tail)
+        if len(digits) >= 4:
+            masked_tail = f"XXXX-XXXX-{digits[-4:]}"
+        else:
+            masked_tail = raw_tail[-4:]
+    elif doc_type == "aadhaar":
+        masked_tail = "XXXX-XXXX-1234"
+
     now_iso = datetime.now(timezone.utc).isoformat()
     supabase.table("documents").update(
         {
@@ -407,8 +421,8 @@ def verify_mock(
             "verification_status": "pre_verified",
             "verified_at": now_iso,
             "verification_note": v_res.verification_note,
-            "document_type": v_res.document_type,
-            "masked_id_tail": v_res.masked_id_tail,
+            "document_type": doc_type,
+            "masked_id_tail": masked_tail,
         }
     ).eq("id", doc_id).execute()
 

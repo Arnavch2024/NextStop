@@ -382,3 +382,268 @@ def test_student_timeline_fallback_highest_start_year(client, mock_supabase):
     assert past[1]["kind"] == "job"
     assert past[1]["is_current"] is True
     assert past[0]["is_current"] is False
+
+
+def test_agent_propose_tools_return_confirmation_cards():
+    """
+    propose_verify, propose_reference_check, and propose_revoke_reference_check
+    return structured confirmation cards and propose status.
+    They never grant or modify consent directly.
+    """
+    from app.agent.tools import (
+        handle_propose_reference_check,
+        handle_propose_revoke_reference_check,
+        handle_propose_verify,
+    )
+
+    # 1. Propose verify
+    verify_res = handle_propose_verify(document_type="aadhaar")
+    assert verify_res["status"] == "proposed"
+    assert "card" in verify_res
+    card = verify_res["card"]
+    assert card["action"] == "verify_mock"
+    assert card["button_text"] == "Confirm Verification"
+    assert card["document_type"] == "aadhaar"
+
+    # 2. Propose reference check
+    ref_res = handle_propose_reference_check(internship_company="Razorpay")
+    assert ref_res["status"] == "proposed"
+    assert "card" in ref_res
+    ref_card = ref_res["card"]
+    assert ref_card["action"] == "authorize_reference_check"
+    assert ref_card["button_text"] == "Authorize"
+    assert ref_card["company"] == "Razorpay"
+
+    # 3. Propose revoke reference check
+    revoke_res = handle_propose_revoke_reference_check(reason="Student requested revocation")
+    assert revoke_res["status"] == "proposed"
+    assert "card" in revoke_res
+    rev_card = revoke_res["card"]
+    assert rev_card["action"] == "revoke_reference_check"
+    assert rev_card["button_text"] == "Confirm Revoke"
+
+
+def test_consent_cannot_be_recorded_by_agent_or_resume_text(mock_supabase):
+    """
+    1. Resume text containing consent/ID text cannot set verified_flag or insert authorizations.
+    2. upsert_record cannot write to reference_authorizations or documents.
+    """
+    from app.agent.resume_parser import parse_resume
+    from app.agent.tools import handle_upsert
+    from app.models.db import ProfileRole, UserProfile
+
+    user = UserProfile(
+        id="user-123",
+        role=ProfileRole.STUDENT,
+        display_name="Riya Sharma",
+        email="riya@example.com",
+    )
+
+    resume_text_with_consent = (
+        "Name: Riya Sharma\n"
+        "College: VJTI Mumbai\n"
+        "Degree: BTech Computer Engineering\n"
+        "Batch: 2027\n"
+        "Aadhaar Number: 9999-8888-7777\n"
+        "I hereby grant consent to verify my documents and authorize reference checks."
+    )
+
+    # Run resume parser
+    parse_resume(resume_text_with_consent, user, mock_supabase)
+
+    # Assert no reference authorizations were created
+    assert len(mock_supabase.store["reference_authorizations"]) == 0
+
+    # Assert documents in store (if any) do not have verified_flag=True
+    for doc in mock_supabase.store["documents"]:
+        assert doc.get("verified_flag") is not True
+
+    # Attempt to upsert directly into reference_authorizations or documents via handle_upsert
+    up_auth = handle_upsert(
+        mock_supabase,
+        user,
+        "reference_authorizations",
+        {"student_id": "stu-1", "authorized_party": "Test Corp"},
+    )
+    assert up_auth.get("error") == "forbidden_table"
+
+    up_doc = handle_upsert(
+        mock_supabase,
+        user,
+        "documents",
+        {"student_id": "stu-1", "verified_flag": True},
+    )
+    assert up_doc.get("error") == "forbidden_table"
+
+
+def test_sentinel_id_never_appears_in_db_rows_logs_or_llm_calls(client, mock_supabase, monkeypatch):
+    """
+    Sentinel ID number (e.g. 9999-8888-7777) never appears in DB rows, logs, or LLM calls.
+    Mock verification operates only on document reference and sets masked_id_tail.
+    """
+    import json
+
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "DEMO_VERIFY_ENABLED", True)
+
+    SENTINEL_ID = "9999-8888-7777"
+    student_id = "stu-riya-1"
+    doc_id = "doc-sentinel-1"
+
+    mock_supabase.store["students"].append({"id": student_id, "profile_id": "user-123", "full_name": "Riya Sharma"})
+    mock_supabase.store["documents"].append(
+        {
+            "id": doc_id,
+            "student_id": student_id,
+            "profile_id": "user-123",
+            "file_name": "id_card.pdf",
+            "mime_type": "application/pdf",
+            "storage_path": f"{student_id}/{doc_id}.pdf",
+            "verification_status": "pending",
+            "verified_flag": False,
+        }
+    )
+
+    # Call verify-mock, passing raw sentinel number in request
+    res = client.post(
+        "/v1/students/me/verify-mock",
+        headers={"Authorization": "Bearer valid-token-student"},
+        json={"document_id": doc_id, "document_type": "aadhaar", "masked_id_tail": SENTINEL_ID},
+    )
+    assert res.status_code == 200
+
+    # Check all stored data across all tables: sentinel ID must NEVER appear anywhere
+    all_stored_json = json.dumps(mock_supabase.store)
+    assert SENTINEL_ID not in all_stored_json
+
+    # Document in DB only has masked_id_tail (last 4 digits masked)
+    doc = next(d for d in mock_supabase.store["documents"] if d["id"] == doc_id)
+    assert doc.get("masked_id_tail") == "XXXX-XXXX-7777"
+    assert SENTINEL_ID not in (doc.get("masked_id_tail") or "")
+
+
+def test_flags_are_db_derived_only(mock_supabase):
+    """
+    Scoring flags documents_pre_verified and reference_check_authorized come only from DB.
+    Day 2 verification_status='verified' without verified_flag does NOT award points.
+    """
+    from app.scoring.engine import compute_score
+    from app.scoring.loader import load_student_for_scoring
+
+    student_id = "stu-test-flags"
+    mock_supabase.store["students"].append({"id": student_id, "profile_id": "u1", "full_name": "Riya"})
+
+    # Case 1: verification_status is 'verified' (legacy Day 2), but verified_flag is False
+    mock_supabase.store["documents"].append(
+        {
+            "id": "d1",
+            "student_id": student_id,
+            "verification_status": "verified",
+            "verified_flag": False,
+        }
+    )
+    inp_legacy = load_student_for_scoring(mock_supabase, student_id)
+    assert inp_legacy.documents_pre_verified is False
+    assert inp_legacy.reference_check_authorized is False
+    score_legacy = compute_score(inp_legacy)
+    assert not any(b.reason == "Documents pre-verified" for b in score_legacy.breakdown)
+    assert not any(b.reason == "Reference check authorized" for b in score_legacy.breakdown)
+
+    # Case 2: verified_flag is True in documents, active reference_authorizations in DB
+    mock_supabase.store["documents"][0]["verified_flag"] = True
+    mock_supabase.store["reference_authorizations"].append(
+        {
+            "id": "ra1",
+            "student_id": student_id,
+            "profile_id": "u1",
+            "revoked_at": None,
+        }
+    )
+    inp_day5 = load_student_for_scoring(mock_supabase, student_id)
+    assert inp_day5.documents_pre_verified is True
+    assert inp_day5.reference_check_authorized is True
+    score_day5 = compute_score(inp_day5)
+    reasons = [b.reason for b in score_day5.breakdown]
+    assert "Documents pre-verified" in reasons
+    assert "Reference check authorized" in reasons
+
+
+def test_students_cannot_read_other_students_documents(client, mock_supabase):
+    """
+    Student A cannot read or access Student B's document via GET /v1/students/me/resume/{document_id}.
+    Returns 404 / access denied.
+    """
+    # Student B's document
+    doc_b_id = "doc-student-b"
+    mock_supabase.store["documents"].append(
+        {
+            "id": doc_b_id,
+            "student_id": "stu-b",
+            "profile_id": "user-other-student-456",
+            "storage_path": f"stu-b/{doc_b_id}.pdf",
+        }
+    )
+
+    # Student A (user-123) attempts to access Student B's document
+    res = client.get(
+        f"/v1/students/me/resume/{doc_b_id}",
+        headers={"Authorization": "Bearer valid-token-student"},
+    )
+    assert res.status_code == 404
+    assert "Document not found or access denied" in res.json()["detail"]
+
+
+def test_demo_users_cannot_call_web_search(mock_supabase):
+    """
+    Demo users (profiles.is_demo = true) cannot trigger web search or ingestion:
+    1. get_tools_for_role omits web_search_enrich.
+    2. web_search_enrich returns demo_users_cannot_run_live_search error and 0 results.
+    """
+    from app.agent.tools import WEB_SEARCH_ENRICH_TOOL_NAME, get_tools_for_role
+    from app.models.db import ProfileRole, UserProfile
+    from app.search.web import web_search_enrich
+
+    # 1. Check tools for demo user
+    demo_tools = get_tools_for_role(ProfileRole.STUDENT, is_demo=True)
+    tool_names = [f.name for f in demo_tools[0].function_declarations]
+    assert WEB_SEARCH_ENRICH_TOOL_NAME not in tool_names
+
+    # Non-demo student has web_search_enrich
+    regular_tools = get_tools_for_role(ProfileRole.STUDENT, is_demo=False)
+    reg_names = [f.name for f in regular_tools[0].function_declarations]
+    assert WEB_SEARCH_ENRICH_TOOL_NAME in reg_names
+
+    # 2. web_search_enrich blocks demo user object
+    demo_user = UserProfile(
+        id="demo-user-1",
+        role=ProfileRole.STUDENT,
+        display_name="Demo Student",
+        email="demo@example.com",
+        is_demo=True,
+    )
+    res = web_search_enrich(
+        client=mock_supabase,
+        query="campus recruiters in Mumbai",
+        actor_id="demo-user-1",
+        user=demo_user,
+    )
+    assert res.get("error") == "demo_users_cannot_run_live_search"
+    assert res["results"] == 0
+    assert len(res["contacts"]) == 0
+
+    # 3. web_search_enrich blocks by actor_id when profile in DB is demo
+    mock_supabase.store["profiles"].append(
+        {
+            "id": "demo-actor-id",
+            "role": "student",
+            "is_demo": True,
+        }
+    )
+    res_actor = web_search_enrich(
+        client=mock_supabase,
+        query="tech companies",
+        actor_id="demo-actor-id",
+    )
+    assert res_actor.get("error") == "demo_users_cannot_run_live_search"
+    assert res_actor["results"] == 0

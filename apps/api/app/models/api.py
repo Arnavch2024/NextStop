@@ -90,6 +90,7 @@ class ChatResponse(BaseModel):
     steps: List[AgentStep] = Field(default_factory=list)
     records_created: List[RecordRef] = Field(default_factory=list)
     contacts: List[ContactCard] = Field(default_factory=list)
+    cards: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 # --- Day 2 Models for Student Slice ---
@@ -173,6 +174,8 @@ class AgentRunResponse(BaseModel):
 
 class VerifyMockRequest(BaseModel):
     document_id: Optional[str] = None
+    document_type: Optional[str] = None
+    masked_id_tail: Optional[str] = None
 
 
 class VerifyMockResponse(BaseModel):

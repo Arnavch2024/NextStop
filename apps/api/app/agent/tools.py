@@ -1,5 +1,5 @@
 import uuid
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 
 from google.genai import types
 from pydantic import ValidationError
@@ -42,6 +42,9 @@ SEARCH_DATA_LAKE_TOOL_NAME = "search_data_lake"
 WEB_SEARCH_ENRICH_TOOL_NAME = "web_search_enrich"
 UPSERT_CONTACT_TOOL_NAME = "upsert_contact"
 DRAFT_OUTREACH_TOOL_NAME = "draft_outreach"
+PROPOSE_VERIFY_TOOL_NAME = "propose_verify"
+PROPOSE_REFERENCE_CHECK_TOOL_NAME = "propose_reference_check"
+PROPOSE_REVOKE_REFERENCE_CHECK_TOOL_NAME = "propose_revoke_reference_check"
 
 SEARCH_DATA_LAKE_DECLARATION = types.FunctionDeclaration(
     name=SEARCH_DATA_LAKE_TOOL_NAME,
@@ -168,24 +171,136 @@ DRAFT_OUTREACH_DECLARATION = types.FunctionDeclaration(
     ),
 )
 
+PROPOSE_VERIFY_DECLARATION = types.FunctionDeclaration(
+    name=PROPOSE_VERIFY_TOOL_NAME,
+    description=(
+        "Propose document pre-verification to the student. Displays a confirmation card in the UI. "
+        "Does NOT perform verification or modify database records directly. The student must confirm via the UI."
+    ),
+    parameters=types.Schema(
+        type=types.Type.OBJECT,
+        properties={
+            "document_type": types.Schema(
+                type=types.Type.STRING,
+                description="Optional type of document to verify (e.g. 'aadhaar', 'pan', 'marksheet')",
+            ),
+        },
+    ),
+)
 
-def get_tools_for_role(role: ProfileRole) -> list[types.Tool]:
+PROPOSE_REFERENCE_CHECK_DECLARATION = types.FunctionDeclaration(
+    name=PROPOSE_REFERENCE_CHECK_TOOL_NAME,
+    description=(
+        "Propose reference check authorization to the student. Displays a confirmation card in the UI. "
+        "Does NOT grant authorization or modify database records directly. The student must authorize via the UI."
+    ),
+    parameters=types.Schema(
+        type=types.Type.OBJECT,
+        properties={
+            "internship_company": types.Schema(
+                type=types.Type.STRING,
+                description="Optional company name associated with the reference or internship",
+            ),
+        },
+    ),
+)
+
+PROPOSE_REVOKE_REFERENCE_CHECK_DECLARATION = types.FunctionDeclaration(
+    name=PROPOSE_REVOKE_REFERENCE_CHECK_TOOL_NAME,
+    description=(
+        "Propose revoking reference check authorization to the student. Displays a confirmation card in the UI. "
+        "Does NOT revoke authorization or modify database records directly. The student must confirm revoke via the UI."
+    ),
+    parameters=types.Schema(
+        type=types.Type.OBJECT,
+        properties={
+            "reason": types.Schema(
+                type=types.Type.STRING,
+                description="Optional reason for proposing revocation",
+            ),
+        },
+    ),
+)
+
+
+def handle_propose_verify(document_type: Optional[str] = None) -> Dict[str, Any]:
+    doc_t = (document_type or "identity").lower()
+    return {
+        "card": {
+            "type": "verify_mock_confirmation",
+            "action": "verify_mock",
+            "title": "Confirm Document Verification (Demo)",
+            "description": f"Pre-verify your {doc_t} document (mock) to add +2 points to your profile readiness.",
+            "button_text": "Confirm Verification",
+            "document_type": doc_t,
+        },
+        "status": "proposed",
+        "message": "Verification confirmation card displayed to user. Awaiting explicit user confirmation in UI.",
+    }
+
+
+def handle_propose_reference_check(internship_company: Optional[str] = None) -> Dict[str, Any]:
+    desc = (
+        f"Authorize recruiters and placement officers to conduct reference checks for {internship_company} (+2 points)."
+        if internship_company
+        else "Authorize recruiters and placement officers to conduct reference checks (+2 points)."
+    )
+    return {
+        "card": {
+            "type": "reference_check_confirmation",
+            "action": "authorize_reference_check",
+            "title": "Authorize Reference Check",
+            "description": desc,
+            "button_text": "Authorize",
+            "company": internship_company,
+        },
+        "status": "proposed",
+        "message": "Reference check authorization card displayed to user. Awaiting explicit user authorization in UI.",
+    }
+
+
+def handle_propose_revoke_reference_check(reason: Optional[str] = None) -> Dict[str, Any]:
+    return {
+        "card": {
+            "type": "revoke_reference_check_confirmation",
+            "action": "revoke_reference_check",
+            "title": "Revoke Reference Check Authorization",
+            "description": "Revoke reference check authorization. This will remove reference outreach authorization and drop your readiness score by 2 points.",
+            "button_text": "Confirm Revoke",
+            "reason": reason,
+        },
+        "status": "proposed",
+        "message": "Revoke authorization card displayed to user. Awaiting explicit user confirmation in UI.",
+    }
+
+
+def get_tools_for_role(role: ProfileRole, is_demo: bool = False) -> List[types.Tool]:
     """
     Returns role-aware Gemini tool declarations.
     Students, Placement Officers, Companies, and Recruiters now have access to search & outreach tools
     alongside structured upserts (e.g. students discovering GCC recruiters in Mumbai).
+    - If is_demo is True, WEB_SEARCH_ENRICH_DECLARATION is omitted.
+    - If role == ProfileRole.STUDENT, propose verification and reference check tools are included.
     """
-    return [
-        types.Tool(
-            function_declarations=[
-                UPSERT_RECORD_DECLARATION,
-                SEARCH_DATA_LAKE_DECLARATION,
-                WEB_SEARCH_ENRICH_DECLARATION,
-                UPSERT_CONTACT_DECLARATION,
-                DRAFT_OUTREACH_DECLARATION,
+    declarations = [
+        UPSERT_RECORD_DECLARATION,
+        SEARCH_DATA_LAKE_DECLARATION,
+        UPSERT_CONTACT_DECLARATION,
+        DRAFT_OUTREACH_DECLARATION,
+    ]
+    if not is_demo:
+        declarations.append(WEB_SEARCH_ENRICH_DECLARATION)
+
+    if role == ProfileRole.STUDENT:
+        declarations.extend(
+            [
+                PROPOSE_VERIFY_DECLARATION,
+                PROPOSE_REFERENCE_CHECK_DECLARATION,
+                PROPOSE_REVOKE_REFERENCE_CHECK_DECLARATION,
             ]
         )
-    ]
+
+    return [types.Tool(function_declarations=declarations)]
 
 
 def handle_upsert(

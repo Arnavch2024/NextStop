@@ -10,11 +10,17 @@ from supabase import Client
 from app.agent.prompts import get_system_prompt_for_role
 from app.agent.tools import (
     DRAFT_OUTREACH_TOOL_NAME,
+    PROPOSE_REFERENCE_CHECK_TOOL_NAME,
+    PROPOSE_REVOKE_REFERENCE_CHECK_TOOL_NAME,
+    PROPOSE_VERIFY_TOOL_NAME,
     SEARCH_DATA_LAKE_TOOL_NAME,
     UPSERT_CONTACT_TOOL_NAME,
     UPSERT_RECORD_TOOL_NAME,
     WEB_SEARCH_ENRICH_TOOL_NAME,
     get_tools_for_role,
+    handle_propose_reference_check,
+    handle_propose_revoke_reference_check,
+    handle_propose_verify,
     handle_upsert,
 )
 from app.config import settings
@@ -209,8 +215,9 @@ def run_agent_loop(
         history = load_recent_events(user.id, limit=50, client=sb)
         contents = build_gemini_contents_from_history(history, message)
 
-        tools = get_tools_for_role(user.role)
+        tools = get_tools_for_role(user.role, is_demo=getattr(user, "is_demo", False))
 
+        cards: List[Dict[str, Any]] = []
         reply_text = ""
         iteration = 0
         lake_found = 0
@@ -297,26 +304,35 @@ def run_agent_loop(
                             lake_contacts_found.append(c)
                         lake_found += tool_result.get("found", 0)
                     elif fc_name == WEB_SEARCH_ENRICH_TOOL_NAME:
-                        used_search = True
-                        q = fc_args.get("query", "")
-                        tool_result = web_search_enrich(
-                            client=sb,
-                            query=q,
-                            actor_id=user.id,
-                            extract_and_ingest=True,
-                            user=user,
-                        )
-                        for c in tool_result.get("contacts", []):
-                            lake_contacts_found.append(c)
-                            records_created.append(
-                                RecordRef(
-                                    table="contacts",
-                                    id=c["id"],
-                                    op=c.get("op", "created"),
-                                )
+                        if getattr(user, "is_demo", False):
+                            tool_result = {
+                                "error": "demo_users_cannot_search_web",
+                                "message": "Demo users search existing data lake only; live web search and ingestion are disabled for demo accounts.",
+                                "results": 0,
+                                "accepted": 0,
+                                "contacts": [],
+                            }
+                        else:
+                            used_search = True
+                            q = fc_args.get("query", "")
+                            tool_result = web_search_enrich(
+                                client=sb,
+                                query=q,
+                                actor_id=user.id,
+                                extract_and_ingest=True,
+                                user=user,
                             )
-                        web_found += tool_result.get("results", tool_result.get("accepted", 0))
-                        added_new += tool_result.get("accepted", 0)
+                            for c in tool_result.get("contacts", []):
+                                lake_contacts_found.append(c)
+                                records_created.append(
+                                    RecordRef(
+                                        table="contacts",
+                                        id=c["id"],
+                                        op=c.get("op", "created"),
+                                    )
+                                )
+                            web_found += tool_result.get("results", tool_result.get("accepted", 0))
+                            added_new += tool_result.get("accepted", 0)
                     elif fc_name == UPSERT_CONTACT_TOOL_NAME:
                         used_search = True
                         source = fc_args.get("source", "user_said")
@@ -444,6 +460,21 @@ def run_agent_loop(
                             channel=channel,
                             sender_context=s_ctx,
                         )
+                    elif fc_name == PROPOSE_VERIFY_TOOL_NAME:
+                        doc_type = fc_args.get("document_type")
+                        tool_result = handle_propose_verify(document_type=doc_type)
+                        if "card" in tool_result:
+                            cards.append(tool_result["card"])
+                    elif fc_name == PROPOSE_REFERENCE_CHECK_TOOL_NAME:
+                        comp = fc_args.get("internship_company")
+                        tool_result = handle_propose_reference_check(internship_company=comp)
+                        if "card" in tool_result:
+                            cards.append(tool_result["card"])
+                    elif fc_name == PROPOSE_REVOKE_REFERENCE_CHECK_TOOL_NAME:
+                        reason = fc_args.get("reason")
+                        tool_result = handle_propose_revoke_reference_check(reason=reason)
+                        if "card" in tool_result:
+                            cards.append(tool_result["card"])
                     else:
                         tool_result = {"error": f"Unknown tool: {fc_name}"}
 
@@ -654,6 +685,7 @@ def run_agent_loop(
             steps=steps,
             records_created=records_created,
             contacts=response_contacts,
+            cards=cards,
         )
 
     except Exception as exc:
