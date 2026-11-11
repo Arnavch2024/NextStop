@@ -4,6 +4,8 @@ import type {
   ChatResponse,
   ContactListResponse,
   HealthResponse,
+  OnboardingRequest,
+  OnboardingResponse,
   OutreachDraftRequest,
   OutreachDraftResponse,
   ResumeResponse,
@@ -649,4 +651,36 @@ export async function getAgentRun(
   }
 
   return (await res.json()) as AgentRunResponse;
+}
+
+/**
+ * Onboarding endpoint: POST /v1/auth/onboarding
+ * Completes onboarding using the service role on backend.
+ */
+export async function completeOnboarding(
+  baseUrl: string,
+  token: string,
+  body: OnboardingRequest
+): Promise<OnboardingResponse> {
+  const url = `${cleanBaseUrl(baseUrl)}/v1/auth/onboarding`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const errorBody = await res.json().catch(() => ({}));
+    throw new ApiError(
+      res.status,
+      errorBody?.detail || "Failed to complete onboarding",
+      errorBody
+    );
+  }
+
+  return (await res.json()) as OnboardingResponse;
 }

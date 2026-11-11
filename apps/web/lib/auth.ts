@@ -6,7 +6,7 @@ export interface UserSession {
   user: {
     id: string;
     email?: string;
-    role: string;
+    role: string | null;
     displayName: string;
     collegeId?: string | null;
     companyId?: string | null;
@@ -32,7 +32,7 @@ export async function getCurrentSession(): Promise<UserSession | null> {
     user: {
       id: session.user.id,
       email: session.user.email,
-      role: profile?.role || "student",
+      role: profile?.role || null,
       displayName:
         profile?.display_name || session.user.email?.split("@")[0] || "User",
       collegeId: profile?.college_id,
@@ -75,6 +75,7 @@ export async function loginWithDemoRole(role: string): Promise<UserSession> {
 export function getRoleDashboardPath(role?: string | null): string {
   switch (role) {
     case "placement_officer":
+    case "officer":
       return "/officer/home";
     case "company":
       return "/company/home";

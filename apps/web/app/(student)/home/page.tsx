@@ -60,11 +60,33 @@ export default function StudentHomePage() {
       }
     }
 
-    let channels: any[] = [];
+    const activeChannels: any[] = [];
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!isMounted) return;
       if (!session) {
         router.replace("/login");
+        return;
+      }
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", session.user.id)
+        .single();
+
+      if (!profile?.role) {
+        router.replace("/onboarding");
+        return;
+      }
+      if (profile.role !== "student") {
+        router.replace(
+          profile.role === "placement_officer"
+            ? "/officer/home"
+            : profile.role === "company"
+              ? "/company/home"
+              : "/chat"
+        );
         return;
       }
 
@@ -82,8 +104,10 @@ export default function StudentHomePage() {
         loadData(token);
       };
 
+      const chanId = Math.random().toString(36).slice(2, 7);
+
       const scoreChan = supabase
-        .channel(`home_score_${userId}`)
+        .channel(`home_score_${userId}_${chanId}`)
         .on(
           "postgres_changes",
           {
@@ -104,7 +128,7 @@ export default function StudentHomePage() {
         .subscribe();
 
       const profileChan = supabase
-        .channel(`home_profile_${userId}`)
+        .channel(`home_profile_${userId}_${chanId}`)
         .on(
           "postgres_changes",
           {
@@ -137,13 +161,18 @@ export default function StudentHomePage() {
         )
         .subscribe();
 
-      channels = [scoreChan, profileChan];
+      if (!isMounted) {
+        supabase.removeChannel(scoreChan);
+        supabase.removeChannel(profileChan);
+      } else {
+        activeChannels.push(scoreChan, profileChan);
+      }
     });
 
     return () => {
       isMounted = false;
       if (toastTimeout) clearTimeout(toastTimeout);
-      channels.forEach((c) => supabase.removeChannel(c));
+      activeChannels.forEach((c) => supabase.removeChannel(c));
     };
   }, [router, supabase]);
 

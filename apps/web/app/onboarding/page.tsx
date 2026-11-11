@@ -2,14 +2,16 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { getSupabaseBrowserClient } from "@/lib/supabase";
-import { ProfileRole } from "@recruiting/shared";
+import { getSupabaseBrowserClient, API_BASE_URL } from "@/lib/supabase";
+import { getRoleDashboardPath } from "@/lib/auth";
+import { ProfileRole, completeOnboarding } from "@recruiting/shared";
 import {
   GraduationCap,
   Building2,
   Briefcase,
   UserCheck,
   Loader2,
+  CheckCircle2,
 } from "lucide-react";
 
 interface RoleOption {
@@ -61,33 +63,43 @@ export default function OnboardingPage() {
 
   const [loadingRole, setLoadingRole] = useState<ProfileRole | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [userId, setUserId] = useState<string | null>(null);
+  const [statusMsg, setStatusMsg] = useState<string | null>(null);
+  const [sessionToken, setSessionToken] = useState<string | null>(null);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!session) {
         router.replace("/login");
         return;
       }
-      setUserId(session.user.id);
+      setSessionToken(session.access_token);
+
+      // If user already has a configured role (not student or null), route to dashboard
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", session.user.id)
+        .single();
+      if (profile?.role && profile.role !== "student") {
+        router.replace(getRoleDashboardPath(profile.role));
+      }
     });
   }, [router, supabase]);
 
   async function selectRole(role: ProfileRole) {
-    if (!userId) return;
+    if (!sessionToken) return;
     setLoadingRole(role);
     setErrorMsg(null);
+    setStatusMsg(null);
 
     try {
-      // Upsert profiles with selected role
-      const { error } = await supabase.from("profiles").upsert({
-        id: userId,
+      const res = await completeOnboarding(API_BASE_URL, sessionToken, {
         role,
-        updated_at: new Date().toISOString(),
       });
-
-      if (error) throw error;
-      router.replace("/chat");
+      setStatusMsg(res.message);
+      setTimeout(() => {
+        router.replace(getRoleDashboardPath(res.role));
+      }, 1000);
     } catch (err: any) {
       setErrorMsg(
         err?.message || "Failed to set profile role. Please try again."
@@ -115,6 +127,13 @@ export default function OnboardingPage() {
         {errorMsg && (
           <div className="mb-6 rounded-xl bg-red-50 p-4 text-sm text-red-600">
             {errorMsg}
+          </div>
+        )}
+
+        {statusMsg && (
+          <div className="mb-6 flex items-center gap-2 rounded-xl bg-emerald-50 p-4 text-sm font-medium text-emerald-700">
+            <CheckCircle2 className="h-5 w-5 shrink-0" />
+            <span>{statusMsg}</span>
           </div>
         )}
 

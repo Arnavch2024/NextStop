@@ -87,6 +87,10 @@ export default function CompanyHomePage() {
         router.replace("/login");
         return;
       }
+      if (!userSession.user.role) {
+        router.replace("/onboarding");
+        return;
+      }
       if (
         userSession.user.role !== "company" &&
         userSession.user.role !== "admin"

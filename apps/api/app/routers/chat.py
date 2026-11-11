@@ -32,6 +32,11 @@ def chat_endpoint(
     4. Returns the final assistant reply, step traces, and created/updated records.
     """
     logger.info(f"Received chat message from user {current_user.id} (role={current_user.role})")
+    if not current_user.role:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Role not assigned. Please complete onboarding at /onboarding.",
+        )
     try:
         response = run_agent_loop(
             user=current_user,

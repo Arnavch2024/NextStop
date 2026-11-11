@@ -41,6 +41,11 @@ def list_contacts(
     current_user: UserProfile = Depends(get_current_user),
     client: Client = Depends(get_supabase_client),
 ) -> ContactListResponse:
+    if not current_user.role:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Role not assigned. Please complete onboarding at /onboarding.",
+        )
     # 1. Fetch caller's saved contacts
     try:
         saved_res = client.table("user_saved_contacts").select("contact_id").eq("profile_id", current_user.id).execute()
