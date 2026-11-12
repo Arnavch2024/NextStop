@@ -1,25 +1,90 @@
 # Wildcatter Ventures — Recruiting Platform MVP
 
-> Connecting Mumbai college students (batches 2027 & 2028) with companies via an AI-powered conversational interface.
+> AI-powered campus recruiting ecosystem connecting Mumbai college students (batches 2027 & 2028), placement officers, companies, and recruiters via role-tailored conversational interfaces, verifiable readiness scoring, and a secure data lake.
 
 ---
 
-## Monorepo Structure
+## Table of Contents
+
+- [Monorepo Architecture](#monorepo-architecture)
+- [Key Capabilities by Persona](#key-capabilities-by-persona)
+- [Tech Stack](#tech-stack)
+- [Database Schema & Migrations](#database-schema--migrations)
+- [Quick Start](#quick-start)
+  - [Prerequisites](#prerequisites)
+  - [Environment Setup](#environment-setup)
+  - [Local Development](#local-development)
+  - [Running Tests (CI Parity)](#running-tests-ci-parity)
+- [Seed & Demo Data Architecture](#seed--demo-data-architecture)
+  - [Canonical CSV Lake](#canonical-csv-lake)
+  - [Synthetic Demo Data Seeder](#synthetic-demo-data-seeder)
+  - [Safe Demo Data Purge](#safe-demo-data-purge)
+- [Mobile & Emulator Setup (Expo SDK 51)](#mobile--emulator-setup-expo-sdk-51)
+- [Scoring Engines](#scoring-engines)
+- [Security, Privacy & Consent](#security-privacy--consent)
+- [Deployment](#deployment)
+
+---
+
+## Monorepo Architecture
 
 ```
 .
 ├── apps/
-│   ├── api/          # FastAPI backend — Gemini agent, Supabase JWT auth
-│   ├── web/          # Next.js 14 (App Router) — Supabase auth, chat UI
-│   └── mobile/       # Expo (expo-router) — mobile-identical flow
+│   ├── api/          # FastAPI backend — Gemini agent loop, scoring engines, Supabase JWT auth
+│   ├── web/          # Next.js 14 (App Router) — Persona dashboards, role-tailored chat UI
+│   └── mobile/       # Expo SDK 51 (expo-router) — Native Android & iOS app with audio mic support
 ├── packages/
-│   └── shared/       # TypeScript types + API client (shared by web & mobile)
+│   └── shared/       # Shared TypeScript types, client SDKs, and scoring interfaces
 ├── supabase/
-│   └── migrations/
-│       └── 001_init.sql   # Full DB schema + RLS policies
-├── turbo.json
+│   └── migrations/   # 9 idempotent migrations (Days 1–5 + consent architecture)
+├── data/
+│   └── seed/         # Canonical CSV files (colleges, companies, domains, contacts)
+├── turbo.json        # Turborepo task orchestrator
 └── pnpm-workspace.yaml
 ```
+
+---
+
+## Key Capabilities by Persona
+
+The platform features role-based routing and persona-specific chat interfaces across Web and Mobile:
+
+| Persona               | Primary Workflow                                                       | Conversational Quick Actions                                                                       | Data Privacy Boundaries                                                                                 |
+| :-------------------- | :--------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------ |
+| **Student**           | Resume ingestion, readiness scoring, consent management                | _"Add my resume"_, _"Calculate my score"_, audio voice mic                                         | Own profile only; explicit consent required for reference checks and discoverability.                   |
+| **Placement Officer** | Student list CSV import, batch-sharing toggles, campus hiring history  | _"Import student list (CSV)"_, _"Companies to contact for BE CS/IT"_, mic                          | College-scoped records; can toggle batch sharing with companies for batches 2027/2028.                  |
+| **Company**           | Candidate search, hiring cycle CSV upload, company tier score          | _"Import campus hiring file"_, _"Colleges to contact in Mumbai"_, _"Search students by CGPA"_, mic | Visibility filtered: can only view students who are **batch-shared** AND **not opted out**; no raw PII. |
+| **Recruiter**         | Placement cell outreach, cross-campus talent search, outreach drafting | _"Placement officers at engineering colleges"_, mic                                                | Unsuppressed shared contact lake; outreach drafts generated with audit trail.                           |
+
+---
+
+## Tech Stack
+
+| Domain              | Technology Stack                                                                             |
+| :------------------ | :------------------------------------------------------------------------------------------- |
+| **Backend API**     | FastAPI 0.111, Python 3.10+, Uvicorn, Pydantic v2                                            |
+| **AI / Agent**      | Google Gemini (`gemini-3.5-flash-lite`, `gemini-2.5-flash`) via `google-genai`               |
+| **Voice / Audio**   | Groq Whisper (`whisper-large-v3-turbo`) for multi-lingual Indian English audio transcription |
+| **Database & Auth** | Supabase Postgres with Row Level Security (RLS), Realtime replication, and GoTrue Auth       |
+| **Web Frontend**    | Next.js 14, React 18, Tailwind CSS, Lucide Icons, TypeScript                                 |
+| **Mobile App**      | Expo SDK 51, React Native 0.74, `expo-router` v3, `expo-av`                                  |
+| **Monorepo**        | pnpm workspaces, Turborepo, Husky pre-commit hooks, Ruff (lint/format)                       |
+
+---
+
+## Database Schema & Migrations
+
+All migrations located in `supabase/migrations/` are non-destructive and idempotent:
+
+- `001_init.sql`: Core tables (`profiles`, `colleges`, `companies`, `contacts`, `students`, `raw_events`, `agent_runs`).
+- `002_student_slice.sql`: Student portfolio tables (`education`, `internships`, `jobs`, `skills`, `documents`, `score_events`) and private Storage bucket.
+- `003_search_slice.sql` & `004_day3_security.sql`: Shared lake with provenance tracking (`contact_sources`, `search_cache`, `user_saved_contacts`, `outreach_drafts`, contact suppression).
+- `005_day4_roles.sql`: Day 4 schema additions (`student_records`, `campus_hiring`, `batch_sharing`, `is_demo` flag).
+- `006_college_domains.sql`: College domain registry (`college_domains`) with sub-domain root extraction and freemail filtering.
+- `007_profiles_guard.sql`: Profiles integrity security triggers.
+- `008_google_oauth_onboarding_guard.sql`: Google OAuth onboarding redirect and role guards.
+- `009_day5_consent.sql`: Day 5 student reference consent (`reference_authorizations`) and document pre-verification triggers (`guard_document_verification`).
 
 ---
 
@@ -27,128 +92,194 @@
 
 ### Prerequisites
 
-| Tool         | Version |
-| ------------ | ------- |
-| Node.js      | ≥ 20    |
-| pnpm         | ≥ 9     |
-| Python       | 3.12    |
-| Supabase CLI | latest  |
+| Tool             | Version Requirement |
+| :--------------- | :------------------ |
+| **Node.js**      | `>= 20.0.0`         |
+| **pnpm**         | `>= 9.0.0`          |
+| **Python**       | `>= 3.10`           |
+| **Supabase CLI** | Latest              |
 
-### 1. Install dependencies
+### Environment Setup
 
-```bash
-pnpm install
-```
-
-### 2. Configure environment variables
-
-Copy each `.env.example` to `.env.local` (web/mobile) or `.env` (api):
+Copy `.env.example` to target locations:
 
 ```bash
-# API
+# 1. API (.env)
 cp apps/api/.env.example apps/api/.env
 
-# Web
+# 2. Web (.env.local)
 cp apps/web/.env.example apps/web/.env.local
 
-# Mobile
+# 3. Mobile (.env)
 cp apps/mobile/.env.example apps/mobile/.env
 ```
 
-Fill in the values:
+Key environment configuration variables:
 
-| App        | Variable                                                          | Description                                                           |
-| ---------- | ----------------------------------------------------------------- | --------------------------------------------------------------------- |
-| api        | `SUPABASE_URL`                                                    | Your Supabase project URL                                             |
-| api        | `SUPABASE_ANON_KEY`                                               | Supabase anon/public key                                              |
-| api        | `SUPABASE_SERVICE_KEY`                                            | Supabase service-role key (**server-side only**)                      |
-| api        | `GEMINI_API_KEY`                                                  | Google AI Studio API key                                              |
-| api        | `LLM_PROVIDER`                                                    | LLM provider (default: `gemini`, swappable via env)                   |
-| api        | `LLM_AGENT_MODEL`                                                 | Agent loop reasoning model (pinned: `gemini-3.5-flash`)               |
-| api        | `LLM_FAST_MODEL`                                                  | Fast structured extraction model (pinned: `gemini-3.5-flash-lite`)    |
-| api        | `EXA_API_KEY` / `TAVILY_API_KEY`                                  | Public web search provider keys (Day 3 search)                        |
-| api        | `DEMO_SHOW_SAMPLE`                                                | Show sample/seed data in lake by default (default: `false`)           |
-| api        | `DEMO_LOGIN_ENABLED`                                              | Enable instant demo-account logins on auth screens (default: `false`) |
-| api        | `DEMO_USER_PASSWORD`                                              | Password for pre-seeded demo accounts (optional in dev, env-gated)    |
-| web        | `NEXT_PUBLIC_DEMO_ENABLED`                                        | Enable /demo persona picker & 'Try the demo' button (default: `true`) |
-| web/mobile | `NEXT_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_URL`           | Same Supabase URL                                                     |
-| web/mobile | `NEXT_PUBLIC_SUPABASE_ANON_KEY` / `EXPO_PUBLIC_SUPABASE_ANON_KEY` | Same anon key                                                         |
-| web/mobile | `NEXT_PUBLIC_API_BASE_URL` / `EXPO_PUBLIC_API_BASE_URL`           | URL of `apps/api` (e.g. `http://localhost:8000`)                      |
+| Variable                   | Target App             | Description                                                  |
+| :------------------------- | :--------------------- | :----------------------------------------------------------- |
+| `SUPABASE_URL`             | `api`, `web`, `mobile` | Project URL (or `http://10.0.2.2:54321` on Android emulator) |
+| `SUPABASE_ANON_KEY`        | `api`, `web`, `mobile` | Public anonymous client key                                  |
+| `SUPABASE_SERVICE_KEY`     | `api` (only)           | Elevated service-role key (never exposed to client)          |
+| `GEMINI_API_KEY`           | `api`                  | Google AI Studio Gemini API key                              |
+| `LLM_AGENT_MODEL`          | `api`                  | Agent model (`gemini-3.5-flash-lite` or `gemini-2.5-flash`)  |
+| `TRANSCRIPTION_API_KEY`    | `api`                  | Groq API key for high-speed Whisper audio transcription      |
+| `EXPO_PUBLIC_API_BASE_URL` | `mobile`               | Backend URL (`http://10.0.2.2:8000` for Android emulator)    |
 
-### 3. Apply the database migration
+### Local Development
 
 ```bash
-supabase db push
-# or against a local Supabase instance:
-supabase start
-supabase db reset
-```
+# 1. Install JS dependencies
+pnpm install
 
-### 4. Run everything locally
-
-```bash
-# API (Python)
+# 2. Setup Python Virtual Environment
 cd apps/api
 python -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
+# Windows:
+.venv\Scripts\activate
+# macOS/Linux:
+source .venv/bin/activate
 
-# Web (in another terminal)
+pip install -r requirements.txt
+
+# 3. Run FastAPI Backend
+uvicorn app.main:app --reload --port 8000
+```
+
+In separate terminals:
+
+```bash
+# Run Next.js Web App
 pnpm --filter @recruiting/web dev
 
-# Mobile (in another terminal)
-pnpm --filter @recruiting/mobile start   # then press 'i' for iOS, 'a' for Android
+# Run Expo Mobile App
+pnpm --filter @recruiting/mobile start
 ```
 
----
-
-## Run locally (CI parity)
-
-To run the exact checks that run in GitHub Actions CI:
-
-### 1. API checks (FastAPI)
+### Running Tests (CI Parity)
 
 ```bash
+# Run backend pytest suite (200 tests)
 cd apps/api
-# Lint & formatting verification
-ruff check .
-ruff format --check .
-
-# Run test suite
 pytest -v
-```
 
-### 2. Web & Mobile checks (Next.js & Expo)
-
-```bash
-# Build shared types
+# Run type checks and linters across monorepo
 pnpm --filter @recruiting/shared build
-
-# Linting
-pnpm --filter @recruiting/web lint
-pnpm exec eslint apps/mobile packages/shared
-
-# Typecheck all packages
-pnpm --filter @recruiting/shared exec tsc --noEmit
 pnpm --filter @recruiting/web exec tsc --noEmit
 pnpm --filter @recruiting/mobile exec tsc --noEmit
-
-# Production web build
-pnpm --filter @recruiting/web build
+ruff check apps/api
+ruff format --check apps/api
 ```
 
 ---
 
-## Build
+## Seed & Demo Data Architecture
 
-```bash
-# Build shared types + web (turbo handles dependency order)
-pnpm build
+The project includes an idempotent data seeding and isolation system.
 
-# API tests
-cd apps/api && python -m pytest -v
+### Canonical CSV Lake
+
+Located in `data/seed/`:
+
+- `colleges.csv`: 40+ Mumbai universities and engineering institutes.
+- `companies.csv`: Categorized recruiters (GCC, Tier 1 Investment Banks, Tech Enterprises, Startups).
+- `college_domains.csv`: Verified institutional domain roots mapped to college UUIDs.
+- `contacts.csv`: Sample placement coordinators and recruiters with synthetic provenance.
+
+To ingest or update the canonical CSV data:
+
+```powershell
+cd apps/api
+python scripts/seed_csv_data.py
 ```
+
+_Matches rows by normalized natural key; reports added, matched, and skipped counts without creating duplicates._
+
+### Synthetic Demo Data Seeder
+
+Populates clean, realistic, synthetic data flagged with `is_demo_data=true`:
+
+- **60 Student Records** for Demo Officer (`University of Mumbai`): Batches 2027 & 2028 across 5 engineering branches, varied CGPA (6.5 to 9.8) and percentages, statuses (`in_college`, `internship`, `full_time`, `not_placed`). **Strictly zero real PII (no personal emails, phones, Aadhaar, or documents)**.
+- **15 Student Records** for Second College (`JBIMS`): MBA Finance candidates including top-tier profiles (CGPA > 9.0) for recruiter filtering.
+- **Batch Sharing Rules**: Batch 2027 shared with recruiters; batch 2028 private; selective opt-outs for visibility testing.
+- **Campus Hiring Cycles**: Demo company (`JP Morgan Chase Global Technology`) drives across 3 cycles (2024–2026) testing all score bands (0-offer deduction, 5–9 offer band, and >20 offer bonus).
+- **Synthetic Internships & Jobs**: Populated for campus readiness scoring.
+- **Sample Placement Officers**: Generic college placement cell contacts.
+
+```powershell
+cd apps/api
+python scripts/seed_demo_data.py
+```
+
+### Safe Demo Data Purge
+
+Deletes **only** rows flagged as demo data (`is_demo_data=true` or created by demo profiles). Never touches manually imported or real user data:
+
+```powershell
+cd apps/api
+
+# 1. Preview scan (dry run, deletes nothing):
+python scripts/purge_demo_data.py
+
+# 2. Confirm and purge demo rows:
+python scripts/purge_demo_data.py --yes
+```
+
+---
+
+## Mobile & Emulator Setup (Expo SDK 51)
+
+The mobile client runs on **Expo SDK 51** with React Native 0.74:
+
+1. **Android Emulator Networking**:
+   - The Android Emulator routes host machine `localhost` via IP `10.0.2.2`.
+   - `apps/mobile/lib/supabase.ts` automatically maps `localhost` to `10.0.2.2` when running inside the Android environment.
+   - Set `EXPO_PUBLIC_API_BASE_URL=http://10.0.2.2:8000` in `apps/mobile/.env`.
+2. **Cleartext Traffic**:
+   - Enabled in `apps/mobile/app.json` (`"usesCleartextTraffic": true`) to permit local HTTP development calls to FastAPI.
+3. **CORS Allowlist**:
+   - `apps/api/app/config.py` allows all `localhost`, `10.0.2.2`, and local LAN IP ranges (`192.168.*.*`) automatically.
+4. **EAS Cloud Builds**:
+   - `apps/mobile/eas.json` is configured for APK builds under the `preview` profile:
+     ```bash
+     cd apps/mobile
+     eas build --platform android --profile preview
+     ```
+
+---
+
+## Scoring Engines
+
+The platform computes three deterministic scores (0–100) adhering strictly to `docs/scoring.md`:
+
+1. **Student Readiness Score (`app/scoring/engine.py`)**:
+   - Base 50 points.
+   - Education bonuses (CGPA > 8.0 or > 85% in 10th/12th/Degree).
+   - Verified internships and full-time experience duration bonuses.
+   - Pre-verified ID and authorized reference check boosts.
+2. **Campus Score & Campus Internship Score (`app/scoring/campus_score.py`)**:
+   - Grouped by hiring cycle year and company category:
+     - Tier 1 (Investment Banks, Institutional Investors, Global Fortune 500): +3 pts for >5 offers.
+     - Tier 2 (GCCs, Global Enterprises): +2 pts for >5 offers.
+     - Tier 3 (Domestic, Startups, SMEs): +1 pt for >5 offers.
+3. **Company Score (`app/scoring/company_score.py`)**:
+   - Base 50 points.
+   - Evaluates campus drives by cycle and offers made:
+     - 0 offers: `-1 pt` (deduction)
+     - 1–4 offers: `0 pts`
+     - 5–9 offers: `+1 pt`
+     - 10–20 offers: `+2 pts`
+     - `> 20` offers: `+3 pts`
+
+---
+
+## Security, Privacy & Consent
+
+- **Document Verification Guard (`009_day5_consent.sql`)**: Postgres trigger `guard_document_verification` prevents clients from directly updating `verified_flag`, `verified_at`, or `masked_id_tail`. All verification updates must originate from backend service-role procedures.
+- **Reference Check Consent**: Chat agents and LLMs can **propose** reference authorization but can **never grant** it. Granting requires an authenticated student API confirmation.
+- **Zero Document Leakage**: Resumes and documents are stored in a private Supabase bucket and are **never sent to external LLMs or OCR services**.
+- **Student Visibility Filter**: Company and Recruiter searches enforce `batch_sharing.shared_with_recruiters == true` AND `student_records.opted_out == false`. Candidate contact details (email, phone) are strictly omitted from recruiter search responses.
+- **Safe Log Sanitization**: All bearer tokens, JWTs, and API credentials are automatically stripped by `SafeLogFilter`.
 
 ---
 
@@ -156,187 +287,26 @@ cd apps/api && python -m pytest -v
 
 ### API → Docker / Railway / Render
 
-The `apps/api/Dockerfile` is production-ready.
+Production Docker build:
 
 ```bash
 docker build -t recruiting-api apps/api
 docker run -p 8000:8000 --env-file apps/api/.env recruiting-api
 ```
 
-Health probe: `GET /health` → `{ "status": "ok" }`
-
-For Railway/Render: set the `Start Command` to `uvicorn app.main:app --host 0.0.0.0 --port $PORT`.
-
-**Required Environment Variables for Railway / Render:**
-
-- `SUPABASE_URL` — Supabase project URL
-- `SUPABASE_ANON_KEY` — Supabase anon key
-- `SUPABASE_SERVICE_KEY` — Supabase service-role secret key
-- `GEMINI_API_KEY` — Google AI Studio API key (Gemini is default due to free-tier limits)
-- `LLM_PROVIDER` — `gemini` (swappable via env)
-- `LLM_AGENT_MODEL` — `gemini-3.5-flash` (pinned stable agent model)
-- `LLM_FAST_MODEL` — `gemini-3.5-flash-lite` (pinned fast extraction model)
-- `EXA_API_KEY` or `TAVILY_API_KEY` — search provider key
-- `TRANSCRIPTION_API_KEY` — Whisper transcription key (optional if using voice)
-
-**Model Verification:**
-The API performs an automated startup verification making a cheap 1-token real call per configured model (skipped in CI/tests). You can also run the pre-flight check manually:
-
-```bash
-cd apps/api
-python scripts/check_models.py
-```
-
-### Admin Scripts (Contacts Data Lake)
-
-#### 1. Ingest Real-World Contacts
-
-Populates the shared data lake with real web data for companies in the lake (using Exa/Tavily web search and Gemini extraction). Never scrapes LinkedIn; only public search result snippets and URLs are stored. Never stores phone numbers.
-
-- **Configurable Queries Per Company:** `INGEST_QUERIES_PER_COMPANY` (default `4` for targeted dry runs; recommend setting to `2` or `3` for wide-lake ingestion runs to conserve provider quota). Can be configured via environment variable or passed as `--queries-per-company N`.
-
-```bash
-cd apps/api
-
-# Dry-run: simulate additions without writing to database
-python scripts/ingest_contacts.py --category GCC --limit 5 --dry-run
-
-# Wide-lake ingestion run with 2 queries per company and rate-limiting delay
-python scripts/ingest_contacts.py --queries-per-company 2 --delay 1.5
-```
-
-#### 2. Purge Synthetic Seed Contacts
-
-Deletes synthetic seed rows (`source='seed'`) and their provenance records from `contact_sources` after explicit confirmation:
-
-```bash
-cd apps/api
-
-# Check seed row counts (dry-run)
-python scripts/purge_seed.py
-
-# Confirm and delete seed rows
-python scripts/purge_seed.py --yes
-```
+Start Command for PaaS: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
 
 ### Web → Vercel
 
-`apps/web/vercel.json` is included. In Vercel project settings:
-
-- **Framework Preset:** Next.js
-- **Root Directory:** `apps/web`
-- **Build Command:** `cd ../.. && pnpm --filter @recruiting/shared build && pnpm --filter @recruiting/web build`
-- **Environment Variables:** `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_API_BASE_URL`
-
-### Mobile → Expo EAS
+Configured via `apps/web/vercel.json`. Set root directory to `apps/web` and build command:
 
 ```bash
-npm install -g eas-cli
+cd ../.. && pnpm --filter @recruiting/shared build && pnpm --filter @recruiting/web build
+```
+
+### Mobile → Expo Application Services (EAS)
+
+```bash
 cd apps/mobile
-eas build --platform all
+eas build --platform all --profile preview
 ```
-
----
-
-## Architecture
-
-```
-Browser / Mobile App
-        │  Supabase JWT (Bearer token)
-        ▼
-   apps/api  (FastAPI)
-        │  verify JWT → load profile → run Gemini agent loop (≤5 turns)
-        │  tool: upsert_record(table, data)  [allow-listed tables only]
-        ▼
-   Supabase Postgres  ←─── RLS enforces row-level ownership
-        │
-        └── Realtime → web & mobile receive new raw_events live
-```
-
-### Agent Roles
-
-| Role                  | Can do via chat                        |
-| --------------------- | -------------------------------------- |
-| **Student**           | Update own profile, view opportunities |
-| **Placement Officer** | Manage college contacts & students     |
-| **Company**           | Update company profile, contacts       |
-| **Recruiter**         | Query across companies and students    |
-
----
-
-## Demo Personas & Isolated Sandbox (/demo)
-
-Web demo logins are isolated on their own dedicated page at `/demo`, keeping the primary `/login` screen clean and credential-focused with an optional secondary "Try the demo" button.
-
-### Demo Roles Available
-
-1. **Student (`student`)**: Aarav Sharma (SPIT Mumbai, Batch 2027) — view readiness scores, explore the Mumbai railway milestone timeline, and test mocked pre-verification.
-2. **Placement Officer (`placement_officer`)**: Prof. Sunita Patil (VJTI Mumbai) — manage campus batches, toggle batch-sharing permissions, and view student scores.
-3. **Company (`company`)**: Pooja Sharma (University Relations Lead) — upload hiring history CSVs, calculate company scores, and search opted-in candidates.
-4. **Recruiter (`recruiter`)**: Karan Mehta (Early Careers Specialist) — search candidate profiles via AI assistant, filter by scores, and save to My List.
-
-### Key Controls & Protections
-
-- **Notice Banner**: _"Demo accounts use sample data. Verification is mocked. Nothing is ever sent."_
-- **Role Switching**: An active demo session (`profiles.is_demo = true`) surfaces a "Switch demo role" button in all dashboard headers to sign out and return to `/demo`. Real users never see this button.
-- **Environment Gating**:
-  - Web: `NEXT_PUBLIC_DEMO_ENABLED` (when `false`, `/demo` renders a 404 not-found page and the login button is hidden).
-  - API: `DEMO_LOGIN_ENABLED` (when `false`, returns `404 Not Found`).
-- **Data Isolation**: Demo accounts search and interact exclusively with demo-flagged records (`is_demo_data = true`). Live external web searches and data ingestion are disabled for demo users.
-
----
-
-## Tech Stack
-
-| Layer     | Technology                                     |
-| --------- | ---------------------------------------------- |
-| API       | FastAPI 0.111, Python 3.12, Uvicorn            |
-| LLM       | Google Gemini 2.5 Flash (`google-genai`)       |
-| Auth / DB | Supabase (Postgres + RLS + Realtime + Auth)    |
-| Web       | Next.js 14, React 18, Tailwind CSS, TypeScript |
-| Mobile    | Expo 51, expo-router 3.5, React Native         |
-| Monorepo  | pnpm workspaces, Turborepo                     |
-| Types     | `packages/shared` (`@recruiting/shared`)       |
-
----
-
-## Security Notes
-
-- `SUPABASE_SERVICE_KEY` **never** leaves the API server
-- All log output passes through `SafeLogFilter` — bearer tokens and API keys are redacted
-- RLS policies ensure users can only read/write their own rows
-- `upsert_record` tool enforces an explicit allow-list of tables and Pydantic-validated schemas
-- `batch_year` is restricted to 2027 or 2028 at the API layer
-
----
-
-## Future Work
-
-Features deferred from Day 1–5 scope; listed in rough priority order.
-
-### Identity verification
-
-- **Real Aadhaar/PAN verification via DigiLocker / API Setu** — replace `MockVerifier` with `DigiLockerVerifier` using the DigiLocker API or the [API Setu](https://apisetu.gov.in) identity stack. This requires: (1) UIDAI AUA/KUA certification, (2) partner registration with API Setu or directly with NIC/DigiLocker, (3) DPDP compliance review, (4) a Supabase Vault or equivalent secrets store for the partner credentials. The `DigiLockerVerifier` stub in `apps/api/app/verification/verifier.py` raises `NotImplementedError` as a placeholder.
-
-### Authentication
-
-- **Native Google sign-in on mobile** — replace the current email/password + magic-link flow on Expo with the Expo Google Auth plugin for a smoother mobile onboarding; requires Google Cloud OAuth credentials.
-
-### Import & parsing
-
-- **LLM header mapping for CSV** — use `LLMProvider.generate_structured` to map non-standard column headers to known fields when the deterministic alias list fails. Only headers are sent to the LLM; cell values are never sent.
-- **XLSX import** — extend the student-records and campus-hiring import pipeline to accept `.xlsx` files via openpyxl; CSV-only for now.
-
-### Student visibility
-
-- **Individual student discoverable toggle** — let students mark themselves discoverable independently of officer batch-sharing. The `discoverable` column already exists in `student_records`; the UI and visibility rule are Day 5+.
-
-### Outreach
-
-- **Interview and offer letter drafts** — extend `outreach_draft_kind` with `'interview'` and `'offer'`; add letter-generation prompts for each kind.
-- **Outreach status tracking UI** — the `user_saved_contacts.status` column is already populated by migration 005; add a UI chip and agent tool to surface it.
-
-### Recruiter
-
-- **Recruiter dashboard polish** — dedicated home screen beyond My list (Day 3); recruiter currently uses chat + My list only.
-- **Mobile dashboards** — officer, company and recruiter web dashboards on mobile; mobile currently shows chat, lists and scores from Days 1–3.
