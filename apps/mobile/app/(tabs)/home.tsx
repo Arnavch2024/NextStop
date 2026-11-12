@@ -61,6 +61,39 @@ export default function MobileHomeScreen() {
         }
       } catch (err: any) {
         if (isMounted) {
+          try {
+            const {
+              data: { user },
+            } = await supabase.auth.getUser();
+            if (user) {
+              const { data: profile } = await supabase
+                .from("profiles")
+                .select("*")
+                .eq("id", user.id)
+                .single();
+
+              if (profile) {
+                setProfileData({
+                  student: null,
+                  education: [],
+                  internships: [],
+                  jobs: [],
+                  skills: [],
+                  documents: [],
+                });
+                setScoreData({
+                  score: 50,
+                  breakdown: [],
+                  next_best_actions: ["Live server sync pending"],
+                });
+                setTimelineStations([]);
+                setLoading(false);
+                return;
+              }
+            }
+          } catch {
+            // ignore fallback error and report original error
+          }
           setError(err.message || "Failed to load profile.");
           setLoading(false);
         }

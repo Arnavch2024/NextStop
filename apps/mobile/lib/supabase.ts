@@ -26,7 +26,7 @@ export function getMobileSupabaseClient(): SupabaseClient {
 
 function resolveApiBaseUrl(): string {
   const envUrl =
-    process.env.EXPO_PUBLIC_API_BASE_URL || "http://localhost:8001";
+    process.env.EXPO_PUBLIC_API_BASE_URL || "http://192.168.29.133:8001";
   // On Android emulator, localhost points to the emulator itself.
   // 10.0.2.2 points to the host development machine's localhost.
   if (Platform.OS === "android" && envUrl.includes("localhost")) {

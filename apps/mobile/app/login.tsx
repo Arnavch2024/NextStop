@@ -11,9 +11,27 @@ import {
   ScrollView,
 } from "react-native";
 import { useRouter } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
+import * as Linking from "expo-linking";
+import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getMobileSupabaseClient, API_BASE_URL } from "../lib/supabase";
 import { demoLogin } from "@recruiting/shared";
+
+WebBrowser.maybeCompleteAuthSession();
+
+const DEMO_CREDENTIALS: Record<string, { email: string; password: string }> = {
+  placement_officer: {
+    email: "demo-officer@example.com",
+    password: "DemoSecret123!",
+  },
+  company: { email: "demo-company@example.com", password: "DemoSecret123!" },
+  recruiter: {
+    email: "demo-recruiter@example.com",
+    password: "DemoSecret123!",
+  },
+  student: { email: "demo-student@example.com", password: "DemoSecret123!" },
+};
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -24,6 +42,7 @@ export default function LoginScreen() {
   const [isSignUp, setIsSignUp] = useState(false);
   const [useMagicLink, setUseMagicLink] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [demoRoleLoading, setDemoRoleLoading] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [infoMsg, setInfoMsg] = useState<string | null>(null);
@@ -78,17 +97,113 @@ export default function LoginScreen() {
     }
   }
 
+  async function handleGoogleLogin() {
+    setGoogleLoading(true);
+    setErrorMsg(null);
+    setInfoMsg(null);
+    try {
+      const redirectUrl = Linking.createURL("auth/callback");
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: redirectUrl,
+          skipBrowserRedirect: true,
+        },
+      });
+
+      if (error) throw error;
+      if (!data?.url) {
+        throw new Error("No authorization URL returned from Supabase.");
+      }
+
+      const res = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
+
+      if (res.type === "success" && res.url) {
+        const parsed = Linking.parse(res.url);
+        const code = parsed.queryParams?.code;
+        if (code && typeof code === "string") {
+          const { error: exchangeError } =
+            await supabase.auth.exchangeCodeForSession(code);
+          if (exchangeError) throw exchangeError;
+        }
+
+        if (res.url.includes("#")) {
+          const hashPart = res.url.split("#")[1];
+          const params = new URLSearchParams(hashPart);
+          const access_token = params.get("access_token");
+          const refresh_token = params.get("refresh_token");
+          if (access_token && refresh_token) {
+            const { error: sessionError } = await supabase.auth.setSession({
+              access_token,
+              refresh_token,
+            });
+            if (sessionError) throw sessionError;
+          }
+        }
+
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        if (session) {
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("role")
+            .eq("id", session.user.id)
+            .single();
+
+          if (!profile || !profile.role) {
+            router.replace("/onboarding");
+          } else if (profile.role === "student") {
+            router.replace("/(tabs)/home");
+          } else {
+            router.replace("/chat");
+          }
+        }
+      }
+    } catch (err: any) {
+      setErrorMsg(err?.message || "Google sign in failed.");
+    } finally {
+      setGoogleLoading(false);
+    }
+  }
+
   async function handleDemoLogin(role: string) {
     setDemoRoleLoading(role);
     setErrorMsg(null);
     try {
-      const res = await demoLogin(API_BASE_URL, role);
-      if (res.access_token && res.refresh_token) {
-        await supabase.auth.setSession({
-          access_token: res.access_token,
-          refresh_token: res.refresh_token,
-        });
+      let loggedIn = false;
+
+      // 1. Attempt API demo-login endpoint first
+      try {
+        const res = await demoLogin(API_BASE_URL, role);
+        if (res.access_token && res.refresh_token) {
+          await supabase.auth.setSession({
+            access_token: res.access_token,
+            refresh_token: res.refresh_token,
+          });
+          loggedIn = true;
+        }
+      } catch (apiErr) {
+        // Fallback directly to Supabase cloud auth if local API server is unreachable
+        console.warn(
+          "API demo-login unreachable, falling back to direct Supabase auth:",
+          apiErr
+        );
       }
+
+      // 2. Direct Supabase Auth fallback
+      if (!loggedIn) {
+        const creds = DEMO_CREDENTIALS[role];
+        if (creds) {
+          const { error } = await supabase.auth.signInWithPassword({
+            email: creds.email,
+            password: creds.password,
+          });
+          if (error) throw error;
+        }
+      }
+
       if (role === "student") {
         router.replace("/(tabs)/home");
       } else {
@@ -125,6 +240,38 @@ export default function LoginScreen() {
             </View>
           )}
 
+          {/* Google OAuth Button */}
+          <TouchableOpacity
+            style={[
+              styles.googleButton,
+              googleLoading && styles.buttonDisabled,
+            ]}
+            disabled={googleLoading || loading}
+            onPress={handleGoogleLogin}
+          >
+            {googleLoading ? (
+              <ActivityIndicator size="small" color="#EA4335" />
+            ) : (
+              <>
+                <Ionicons
+                  name="logo-google"
+                  size={18}
+                  color="#EA4335"
+                  style={styles.googleIcon}
+                />
+                <Text style={styles.googleButtonText}>
+                  Continue with Google
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          <View style={styles.dividerRow}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>OR CONTINUE WITH EMAIL</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
           <Text style={styles.label}>EMAIL ADDRESS</Text>
           <TextInput
             style={styles.input}
@@ -152,7 +299,7 @@ export default function LoginScreen() {
 
           <TouchableOpacity
             style={[styles.button, loading && styles.buttonDisabled]}
-            disabled={loading}
+            disabled={loading || googleLoading}
             onPress={handleAuth}
           >
             {loading ? (
@@ -205,7 +352,9 @@ export default function LoginScreen() {
                 <TouchableOpacity
                   key={item.role}
                   style={styles.demoButton}
-                  disabled={demoRoleLoading !== null}
+                  disabled={
+                    demoRoleLoading !== null || loading || googleLoading
+                  }
                   onPress={() => handleDemoLogin(item.role)}
                 >
                   {demoRoleLoading === item.role ? (
@@ -257,12 +406,51 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: 20,
   },
+  googleButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 12,
+    paddingVertical: 13,
+    marginBottom: 6,
+    shadowColor: "#000",
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  googleIcon: {
+    marginRight: 10,
+  },
+  googleButtonText: {
+    color: "#1e293b",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  dividerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: 14,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: "#e2e8f0",
+  },
+  dividerText: {
+    marginHorizontal: 10,
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#94a3b8",
+  },
   label: {
     fontSize: 11,
     fontWeight: "700",
     color: "#475569",
     marginBottom: 6,
-    marginTop: 12,
+    marginTop: 8,
   },
   input: {
     backgroundColor: "#ffffff",
@@ -279,7 +467,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: "center",
-    marginTop: 20,
+    marginTop: 18,
   },
   buttonDisabled: {
     opacity: 0.6,
