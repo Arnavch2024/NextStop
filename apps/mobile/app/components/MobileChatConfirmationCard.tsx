@@ -355,11 +355,13 @@ const styles = StyleSheet.create({
   },
   buttonRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
     marginTop: 12,
   },
   confirmButton: {
     flex: 1,
+    minWidth: 100,
     paddingVertical: 8,
     borderRadius: 8,
     alignItems: "center",

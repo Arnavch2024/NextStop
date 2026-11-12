@@ -11,6 +11,7 @@ import {
   StyleSheet,
   Modal,
   Alert,
+  ScrollView,
   useWindowDimensions,
 } from "react-native";
 import {
@@ -873,7 +874,7 @@ export default function ChatScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         keyboardVerticalOffset={Platform.OS === "ios" ? 10 : 0}
@@ -911,16 +912,42 @@ export default function ChatScreen() {
           </View>
         )}
 
-        {/* Header */}
+        {/* Responsive Header */}
         <View style={styles.header}>
-          <View>
-            <Text style={styles.headerTitle}>Recruiting Assistant</Text>
-            <Text style={styles.headerSubtitle}>
+          <View style={styles.headerLeft}>
+            <Text
+              numberOfLines={1}
+              ellipsizeMode="tail"
+              style={styles.headerTitle}
+            >
+              Recruiting Assistant
+            </Text>
+            <Text
+              numberOfLines={1}
+              ellipsizeMode="tail"
+              style={styles.headerSubtitle}
+            >
               {displayName} •{" "}
               <Text style={styles.roleText}>{role?.replace("_", " ")}</Text>
             </Text>
           </View>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <View style={styles.headerRight}>
+            <TouchableOpacity
+              onPress={() => router.push("/my-list")}
+              style={styles.myListHeaderBtn}
+              accessibilityLabel="My saved list"
+            >
+              <Text style={styles.myListHeaderText}>🔖 List</Text>
+            </TouchableOpacity>
+            {role === "student" && (
+              <TouchableOpacity
+                onPress={() => router.push("/(tabs)/home")}
+                style={styles.dashboardHeaderBtn}
+                accessibilityLabel="Student dashboard"
+              >
+                <Text style={styles.dashboardHeaderText}>Dashboard</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               onPress={() => setShowServerModal(true)}
               style={styles.serverSettingsHeaderBtn}
@@ -929,21 +956,11 @@ export default function ChatScreen() {
               <Text style={styles.serverSettingsHeaderText}>⚙️</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              onPress={() => router.push("/my-list")}
-              style={styles.myListHeaderBtn}
+              onPress={handleSignOut}
+              style={styles.signOutBtn}
+              accessibilityLabel="Sign out"
             >
-              <Text style={styles.myListHeaderText}>🔖 My List</Text>
-            </TouchableOpacity>
-            {role === "student" && (
-              <TouchableOpacity
-                onPress={() => router.push("/(tabs)/home")}
-                style={styles.dashboardHeaderBtn}
-              >
-                <Text style={styles.dashboardHeaderText}>Dashboard</Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity onPress={handleSignOut} style={styles.signOutBtn}>
-              <Text style={styles.signOutText}>Sign Out</Text>
+              <Text style={styles.signOutText}>Exit</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1007,6 +1024,10 @@ export default function ChatScreen() {
               (item.steps && item.steps.length > 0) ||
               (item.records && item.records.length > 0);
             const summary = item.resumeSummary;
+            const hasRichCards =
+              (item.contacts && item.contacts.length > 0) ||
+              (item.cards && item.cards.length > 0) ||
+              Boolean(summary);
 
             return (
               <View
@@ -1018,7 +1039,11 @@ export default function ChatScreen() {
                 <View
                   style={[
                     styles.bubble,
-                    isUser ? styles.bubbleUser : styles.bubbleAgent,
+                    isUser
+                      ? styles.bubbleUser
+                      : hasRichCards
+                        ? styles.bubbleAgentFull
+                        : styles.bubbleAgent,
                   ]}
                 >
                   <Text
@@ -1266,14 +1291,18 @@ export default function ChatScreen() {
             styles.composer,
             {
               paddingHorizontal: isSmallWidth ? 8 : 12,
-              paddingBottom: Math.max(insets.bottom, 10),
+              paddingBottom: Math.max(insets.bottom, 8),
+              gap: isSmallWidth ? 6 : 8,
             },
           ]}
         >
           {/* Add My Resume Button - Students only */}
           {role === "student" && (
             <TouchableOpacity
-              style={styles.resumeActionBtn}
+              style={[
+                styles.resumeActionBtn,
+                isSmallWidth && styles.actionBtnSmall,
+              ]}
               onPress={handleOpenResumePicker}
               disabled={isSending || isTranscribing || isUploadingResume}
             >
@@ -1283,7 +1312,11 @@ export default function ChatScreen() {
 
           {/* Voice Mic Button */}
           <TouchableOpacity
-            style={[styles.voiceBtn, isRecording && styles.voiceBtnRecording]}
+            style={[
+              styles.voiceBtn,
+              isSmallWidth && styles.actionBtnSmall,
+              isRecording && styles.voiceBtnRecording,
+            ]}
             onPress={toggleVoiceRecording}
             disabled={isSending || isTranscribing || isUploadingResume}
           >
@@ -1314,6 +1347,7 @@ export default function ChatScreen() {
           <TouchableOpacity
             style={[
               styles.sendBtn,
+              isSmallWidth && styles.actionBtnSmall,
               (!inputText.trim() || isSending || isRecording) &&
                 styles.sendBtnDisabled,
             ]}
@@ -1385,115 +1419,126 @@ export default function ChatScreen() {
         >
           <View style={styles.serverModalOverlay}>
             <View style={styles.serverModalContent}>
-              <View style={styles.serverModalHeader}>
-                <Text style={styles.serverModalTitle}>
-                  ⚙️ Backend Connection
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ paddingBottom: 10 }}
+              >
+                <View style={styles.serverModalHeader}>
+                  <Text style={styles.serverModalTitle}>
+                    ⚙️ Backend Connection
+                  </Text>
+                  <TouchableOpacity onPress={() => setShowServerModal(false)}>
+                    <Text style={styles.serverModalClose}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <Text style={styles.serverModalDesc}>
+                  Current active server:
                 </Text>
-                <TouchableOpacity onPress={() => setShowServerModal(false)}>
-                  <Text style={styles.serverModalClose}>✕</Text>
-                </TouchableOpacity>
-              </View>
+                <View style={styles.activeUrlBadge}>
+                  <Text style={styles.activeUrlBadgeText}>
+                    {currentBaseUrl}
+                  </Text>
+                </View>
 
-              <Text style={styles.serverModalDesc}>Current active server:</Text>
-              <View style={styles.activeUrlBadge}>
-                <Text style={styles.activeUrlBadgeText}>{currentBaseUrl}</Text>
-              </View>
-
-              <Text style={[styles.serverModalDesc, { marginTop: 12 }]}>
-                Quick presets:
-              </Text>
-              <View style={styles.presetButtonsRow}>
-                <TouchableOpacity
-                  style={[
-                    styles.presetBtn,
-                    { backgroundColor: "#eff6ff", borderColor: "#60a5fa" },
-                  ]}
-                  onPress={() => {
-                    const tunnelUrl =
-                      "https://characteristics-minds-compute-friends.trycloudflare.com";
-                    setCustomServerUrlInput(tunnelUrl);
-                    handleTestServerConnection(tunnelUrl);
-                  }}
-                >
-                  <Text
+                <Text style={[styles.serverModalDesc, { marginTop: 12 }]}>
+                  Quick presets:
+                </Text>
+                <View style={styles.presetButtonsRow}>
+                  <TouchableOpacity
                     style={[
-                      styles.presetBtnText,
-                      { color: "#1d4ed8", fontWeight: "700" },
+                      styles.presetBtn,
+                      { backgroundColor: "#eff6ff", borderColor: "#60a5fa" },
                     ]}
+                    onPress={() => {
+                      const tunnelUrl =
+                        "https://characteristics-minds-compute-friends.trycloudflare.com";
+                      setCustomServerUrlInput(tunnelUrl);
+                      handleTestServerConnection(tunnelUrl);
+                    }}
                   >
-                    ☁️ Cloudflare HTTPS Tunnel
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.presetBtn}
-                  onPress={() => {
-                    setCustomServerUrlInput("http://10.0.2.2:8001");
-                    handleTestServerConnection("http://10.0.2.2:8001");
-                  }}
-                >
-                  <Text style={styles.presetBtnText}>
-                    📱 Emulator (10.0.2.2)
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.presetBtn}
-                  onPress={() => {
-                    setCustomServerUrlInput("http://192.168.29.133:8001");
-                    handleTestServerConnection("http://192.168.29.133:8001");
-                  }}
-                >
-                  <Text style={styles.presetBtnText}>
-                    📶 Wi-Fi LAN (192.168.29.133)
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.presetBtn}
-                  onPress={() => {
-                    setCustomServerUrlInput("http://localhost:8001");
-                    handleTestServerConnection("http://localhost:8001");
-                  }}
-                >
-                  <Text style={styles.presetBtnText}>💻 Localhost (8001)</Text>
-                </TouchableOpacity>
-              </View>
+                    <Text
+                      style={[
+                        styles.presetBtnText,
+                        { color: "#1d4ed8", fontWeight: "700" },
+                      ]}
+                    >
+                      ☁️ Cloudflare HTTPS Tunnel
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.presetBtn}
+                    onPress={() => {
+                      setCustomServerUrlInput("http://10.0.2.2:8001");
+                      handleTestServerConnection("http://10.0.2.2:8001");
+                    }}
+                  >
+                    <Text style={styles.presetBtnText}>
+                      📱 Emulator (10.0.2.2)
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.presetBtn}
+                    onPress={() => {
+                      setCustomServerUrlInput("http://192.168.29.133:8001");
+                      handleTestServerConnection("http://192.168.29.133:8001");
+                    }}
+                  >
+                    <Text style={styles.presetBtnText}>
+                      📶 Wi-Fi LAN (192.168.29.133)
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.presetBtn}
+                    onPress={() => {
+                      setCustomServerUrlInput("http://localhost:8001");
+                      handleTestServerConnection("http://localhost:8001");
+                    }}
+                  >
+                    <Text style={styles.presetBtnText}>
+                      💻 Localhost (8001)
+                    </Text>
+                  </TouchableOpacity>
+                </View>
 
-              <Text style={[styles.serverModalDesc, { marginTop: 12 }]}>
-                Custom Server or Public Tunnel URL:
-              </Text>
-              <TextInput
-                style={styles.serverUrlInput}
-                value={customServerUrlInput}
-                onChangeText={setCustomServerUrlInput}
-                placeholder="http://192.168.29.133:8001 or https://...loca.lt"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-
-              {serverTestStatus && (
-                <Text style={styles.serverTestStatusText}>
-                  {serverTestStatus}
+                <Text style={[styles.serverModalDesc, { marginTop: 12 }]}>
+                  Custom Server or Public Tunnel URL:
                 </Text>
-              )}
+                <TextInput
+                  style={styles.serverUrlInput}
+                  value={customServerUrlInput}
+                  onChangeText={setCustomServerUrlInput}
+                  placeholder="http://192.168.29.133:8001 or https://...loca.lt"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
 
-              <View style={styles.serverModalActions}>
-                <TouchableOpacity
-                  style={styles.testBtn}
-                  onPress={() => handleTestServerConnection()}
-                  disabled={serverTestLoading}
-                >
-                  {serverTestLoading ? (
-                    <ActivityIndicator size="small" color="#1e40af" />
-                  ) : (
-                    <Text style={styles.testBtnText}>Test Connection</Text>
-                  )}
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.saveServerBtn}
-                  onPress={() => handleApplyServerUrl()}
-                >
-                  <Text style={styles.saveServerBtnText}>Save & Apply</Text>
-                </TouchableOpacity>
-              </View>
+                {serverTestStatus && (
+                  <Text style={styles.serverTestStatusText}>
+                    {serverTestStatus}
+                  </Text>
+                )}
+
+                <View style={styles.serverModalActions}>
+                  <TouchableOpacity
+                    style={styles.testBtn}
+                    onPress={() => handleTestServerConnection()}
+                    disabled={serverTestLoading}
+                  >
+                    {serverTestLoading ? (
+                      <ActivityIndicator size="small" color="#1e40af" />
+                    ) : (
+                      <Text style={styles.testBtnText}>Test Connection</Text>
+                    )}
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.saveServerBtn}
+                    onPress={() => handleApplyServerUrl()}
+                  >
+                    <Text style={styles.saveServerBtnText}>Save & Apply</Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
             </View>
           </View>
         </Modal>
@@ -1582,21 +1627,32 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     backgroundColor: "#ffffff",
     borderBottomWidth: 1,
     borderBottomColor: "#e2e8f0",
   },
+  headerLeft: {
+    flex: 1,
+    minWidth: 0,
+    marginRight: 6,
+  },
+  headerRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    flexShrink: 0,
+  },
   headerTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "700",
     color: "#0f172a",
   },
   headerSubtitle: {
-    fontSize: 12,
+    fontSize: 11,
     color: "#64748b",
-    marginTop: 2,
+    marginTop: 1,
   },
   roleText: {
     color: "#4f46e5",
@@ -1604,45 +1660,46 @@ const styles = StyleSheet.create({
     textTransform: "capitalize",
   },
   dashboardHeaderBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 5,
+    borderRadius: 6,
     borderWidth: 1,
     borderColor: "#cbd5e1",
     backgroundColor: "#ffffff",
   },
   dashboardHeaderText: {
-    fontSize: 12,
+    fontSize: 11,
     color: "#4f46e5",
     fontWeight: "600",
   },
   myListHeaderBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 5,
+    borderRadius: 6,
     borderWidth: 1,
     borderColor: "#c7d2fe",
     backgroundColor: "#eef2ff",
   },
   myListHeaderText: {
-    fontSize: 12,
+    fontSize: 11,
     color: "#4338ca",
     fontWeight: "700",
   },
   signOutBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 5,
+    borderRadius: 6,
     backgroundColor: "#f1f5f9",
   },
   signOutText: {
-    fontSize: 12,
+    fontSize: 11,
     color: "#475569",
     fontWeight: "600",
   },
   messageList: {
-    padding: 16,
-    paddingBottom: 24,
+    paddingHorizontal: 10,
+    paddingVertical: 12,
+    paddingBottom: 20,
   },
   emptyContainer: {
     alignItems: "center",
@@ -1669,15 +1726,18 @@ const styles = StyleSheet.create({
   },
   emptyActions: {
     flexDirection: "row",
-    gap: 10,
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: 8,
   },
   emptyBtn: {
     backgroundColor: "#eef2ff",
     borderWidth: 1,
     borderColor: "#c7d2fe",
     borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    maxWidth: "100%",
   },
   emptyBtnText: {
     fontSize: 12,
@@ -1704,9 +1764,9 @@ const styles = StyleSheet.create({
     justifyContent: "flex-start",
   },
   bubble: {
-    maxWidth: "85%",
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    maxWidth: "88%",
+    paddingHorizontal: 12,
+    paddingVertical: 9,
     borderRadius: 16,
   },
   bubbleUser: {
@@ -1718,6 +1778,16 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 4,
     borderWidth: 1,
     borderColor: "#e2e8f0",
+  },
+  bubbleAgentFull: {
+    backgroundColor: "#ffffff",
+    borderBottomLeftRadius: 4,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    maxWidth: "98%",
+    width: "98%",
+    paddingHorizontal: 8,
+    paddingVertical: 8,
   },
   bubbleTextUser: {
     color: "#ffffff",
@@ -1783,6 +1853,7 @@ const styles = StyleSheet.create({
   },
   summaryActions: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
     marginTop: 10,
     borderTopWidth: 1,
@@ -1791,6 +1862,7 @@ const styles = StyleSheet.create({
   },
   looksRightBtn: {
     flex: 1,
+    minWidth: 90,
     backgroundColor: "#4f46e5",
     paddingVertical: 7,
     borderRadius: 8,
@@ -1803,6 +1875,7 @@ const styles = StyleSheet.create({
   },
   fixBtn: {
     flex: 1,
+    minWidth: 90,
     backgroundColor: "#ffffff",
     borderWidth: 1,
     borderColor: "#cbd5e1",
@@ -2075,6 +2148,10 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#1d4ed8",
   },
+  actionBtnSmall: {
+    width: 36,
+    height: 36,
+  },
   serverModalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
@@ -2085,6 +2162,7 @@ const styles = StyleSheet.create({
   serverModalContent: {
     width: "100%",
     maxWidth: 480,
+    maxHeight: "88%",
     backgroundColor: "#ffffff",
     borderRadius: 12,
     padding: 20,
