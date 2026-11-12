@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   View,
   Text,
@@ -36,6 +36,20 @@ import {
 import { MobileContactCard } from "./components/MobileContactCard";
 import { DraftMessageSheet } from "./components/DraftMessageSheet";
 import { MobileChatConfirmationCard } from "./components/MobileChatConfirmationCard";
+
+interface QuickActionItem {
+  label: string;
+  prompt?: string;
+  isResumeUpload?: boolean;
+}
+
+interface RoleChatConfig {
+  icon: string;
+  title: string;
+  subtitle: string;
+  placeholder: string;
+  quickActions: QuickActionItem[];
+}
 
 interface ChatMessage {
   id: string;
@@ -91,6 +105,80 @@ export default function ChatScreen() {
   const flatListRef = useRef<FlatList>(null);
   const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
   const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const roleConfig: RoleChatConfig = useMemo(() => {
+    switch (role) {
+      case "placement_officer":
+        return {
+          icon: "🏛️",
+          title: "Welcome, Placement Officer!",
+          subtitle:
+            "Import your student list, search students by batch or status, or find companies to invite for campus hiring.",
+          placeholder: "Search students by batch, find hiring companies...",
+          quickActions: [
+            {
+              label: "📥 Import student list (CSV)",
+              prompt: "How can I import our student list via CSV?",
+            },
+            {
+              label: "🏢 Companies to contact for BE Computer Science/IT/AI",
+              prompt: "Companies to contact for BE Computer Science/IT/AI",
+            },
+          ],
+        };
+      case "company":
+        return {
+          icon: "🏢",
+          title: "Welcome, Hiring Partner!",
+          subtitle:
+            "Find colleges and placement officers, import your campus hiring file, or search students.",
+          placeholder: "Search colleges, placement officers, or students...",
+          quickActions: [
+            {
+              label: "📥 Import campus hiring file",
+              prompt: "How can I import our campus hiring file?",
+            },
+            {
+              label: "🏛️ Colleges to contact in Mumbai",
+              prompt: "Colleges to contact in Mumbai",
+            },
+            {
+              label: "🎯 Search students by CGPA",
+              prompt: "Search students by CGPA",
+            },
+          ],
+        };
+      case "recruiter":
+        return {
+          icon: "💼",
+          title: "Welcome, Campus Recruiter!",
+          subtitle: "Find placement officers at colleges, and draft outreach.",
+          placeholder: "Find placement officers, draft outreach...",
+          quickActions: [
+            {
+              label: "🏛️ Placement officers at engineering colleges",
+              prompt:
+                "Find placement officers at engineering colleges in Mumbai",
+            },
+          ],
+        };
+      case "student":
+      default:
+        return {
+          icon: "🤖",
+          title: "Welcome to your Recruiting Assistant!",
+          subtitle:
+            "Type or speak your details naturally, or tap “Add my resume” to extract your profile without filling forms.",
+          placeholder: "Type your details (college, batch)...",
+          quickActions: [
+            {
+              label: "📄 Add my resume",
+              isResumeUpload: true,
+            },
+          ],
+        };
+    }
+  }, [role]);
 
   function showToast(text: string) {
     setCrossDeviceToast(text);
@@ -705,21 +793,25 @@ export default function ChatScreen() {
           }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyIcon}>🤖</Text>
-              <Text style={styles.emptyTitle}>
-                Welcome to your Recruiting Assistant!
-              </Text>
-              <Text style={styles.emptySubtitle}>
-                Type or speak your details naturally, or tap &ldquo;Add my
-                resume&rdquo; to extract your profile without filling forms.
-              </Text>
+              <Text style={styles.emptyIcon}>{roleConfig.icon}</Text>
+              <Text style={styles.emptyTitle}>{roleConfig.title}</Text>
+              <Text style={styles.emptySubtitle}>{roleConfig.subtitle}</Text>
               <View style={styles.emptyActions}>
-                <TouchableOpacity
-                  style={styles.emptyBtn}
-                  onPress={handleOpenResumePicker}
-                >
-                  <Text style={styles.emptyBtnText}>📄 Add my resume</Text>
-                </TouchableOpacity>
+                {roleConfig.quickActions.map((qa, idx) => (
+                  <TouchableOpacity
+                    key={idx}
+                    style={styles.emptyBtn}
+                    onPress={() => {
+                      if (qa.isResumeUpload) {
+                        handleOpenResumePicker();
+                      } else if (qa.prompt) {
+                        setInputText(qa.prompt);
+                      }
+                    }}
+                  >
+                    <Text style={styles.emptyBtnText}>{qa.label}</Text>
+                  </TouchableOpacity>
+                ))}
                 <TouchableOpacity
                   style={[styles.emptyBtn, styles.emptyBtnOutline]}
                   onPress={toggleVoiceRecording}
@@ -982,14 +1074,16 @@ export default function ChatScreen() {
 
         {/* Composer */}
         <View style={styles.composer}>
-          {/* Add My Resume Button */}
-          <TouchableOpacity
-            style={styles.resumeActionBtn}
-            onPress={handleOpenResumePicker}
-            disabled={isSending || isTranscribing || isUploadingResume}
-          >
-            <Text style={styles.resumeActionIcon}>📎</Text>
-          </TouchableOpacity>
+          {/* Add My Resume Button - Students only */}
+          {role === "student" && (
+            <TouchableOpacity
+              style={styles.resumeActionBtn}
+              onPress={handleOpenResumePicker}
+              disabled={isSending || isTranscribing || isUploadingResume}
+            >
+              <Text style={styles.resumeActionIcon}>📎</Text>
+            </TouchableOpacity>
+          )}
 
           {/* Voice Mic Button */}
           <TouchableOpacity
@@ -1004,7 +1098,7 @@ export default function ChatScreen() {
             style={styles.composerInput}
             value={inputText}
             onChangeText={setInputText}
-            placeholder="Type your details (college, batch)..."
+            placeholder={roleConfig.placeholder}
             placeholderTextColor="#94a3b8"
             editable={
               !isSending &&
@@ -1027,50 +1121,54 @@ export default function ChatScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Consent Modal Sheet */}
-        <Modal
-          visible={isConsentVisible}
-          transparent
-          animationType="slide"
-          onRequestClose={() => setIsConsentVisible(false)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <Text style={styles.modalIcon}>📄</Text>
-              <Text style={styles.modalTitle}>Add your resume</Text>
-              <Text style={styles.modalMessage}>
-                We&rsquo;ll read this file to build your profile.
-              </Text>
-
-              <View style={styles.modalInfoBox}>
-                <Text style={styles.modalInfoText}>• Max size: 5 MB</Text>
-                <Text style={styles.modalInfoText}>• Formats: PDF or DOCX</Text>
-                <Text style={styles.modalInfoText}>
-                  • Structured records are generated automatically without
-                  forms.
+        {/* Consent Modal Sheet - Students only */}
+        {role === "student" && (
+          <Modal
+            visible={isConsentVisible}
+            transparent
+            animationType="slide"
+            onRequestClose={() => setIsConsentVisible(false)}
+          >
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalContent}>
+                <Text style={styles.modalIcon}>📄</Text>
+                <Text style={styles.modalTitle}>Add your resume</Text>
+                <Text style={styles.modalMessage}>
+                  We&rsquo;ll read this file to build your profile.
                 </Text>
-              </View>
 
-              <View style={styles.modalActions}>
-                <TouchableOpacity
-                  style={styles.modalCancelBtn}
-                  onPress={() => setIsConsentVisible(false)}
-                >
-                  <Text style={styles.modalCancelText}>Cancel</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.modalConfirmBtn}
-                  onPress={handleConsentConfirm}
-                >
-                  <Text style={styles.modalConfirmText}>
-                    I Agree & Choose File
+                <View style={styles.modalInfoBox}>
+                  <Text style={styles.modalInfoText}>• Max size: 5 MB</Text>
+                  <Text style={styles.modalInfoText}>
+                    • Formats: PDF or DOCX
                   </Text>
-                </TouchableOpacity>
+                  <Text style={styles.modalInfoText}>
+                    • Structured records are generated automatically without
+                    forms.
+                  </Text>
+                </View>
+
+                <View style={styles.modalActions}>
+                  <TouchableOpacity
+                    style={styles.modalCancelBtn}
+                    onPress={() => setIsConsentVisible(false)}
+                  >
+                    <Text style={styles.modalCancelText}>Cancel</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.modalConfirmBtn}
+                    onPress={handleConsentConfirm}
+                  >
+                    <Text style={styles.modalConfirmText}>
+                      I Agree & Choose File
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
-          </View>
-        </Modal>
+          </Modal>
+        )}
         {/* Outreach Draft Message Sheet Modal */}
         <DraftMessageSheet
           visible={!!draftingContact}

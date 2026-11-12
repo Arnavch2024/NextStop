@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { getSupabaseBrowserClient, API_BASE_URL } from "@/lib/supabase";
@@ -49,6 +49,19 @@ import {
   Mail,
   ShieldCheck,
 } from "lucide-react";
+
+interface QuickActionItem {
+  label: string;
+  prompt?: string;
+  isResumeUpload?: boolean;
+}
+
+interface RoleChatConfig {
+  title: string;
+  subtitle: string;
+  placeholder: string;
+  quickActions: QuickActionItem[];
+}
 
 interface ChatItem {
   id: string;
@@ -109,6 +122,77 @@ export default function ChatPage() {
   const recordIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const roleConfig: RoleChatConfig = useMemo(() => {
+    switch (role) {
+      case "placement_officer":
+        return {
+          title: "Welcome, Placement Officer!",
+          subtitle:
+            "Import your student list, search students by batch or status, or find companies to invite for campus hiring.",
+          placeholder: "Search students by batch, find hiring companies...",
+          quickActions: [
+            {
+              label: "Import student list (CSV)",
+              prompt: "How can I import our student list via CSV?",
+            },
+            {
+              label: "Companies to contact for BE Computer Science/IT/AI",
+              prompt: "Companies to contact for BE Computer Science/IT/AI",
+            },
+          ],
+        };
+      case "company":
+        return {
+          title: "Welcome, Hiring Partner!",
+          subtitle:
+            "Find colleges and placement officers, import your campus hiring file, or search students.",
+          placeholder: "Search colleges, placement officers, or students...",
+          quickActions: [
+            {
+              label: "Import campus hiring file",
+              prompt: "How can I import our campus hiring file?",
+            },
+            {
+              label: "Colleges to contact in Mumbai",
+              prompt: "Colleges to contact in Mumbai",
+            },
+            {
+              label: "Search students by CGPA",
+              prompt: "Search students by CGPA",
+            },
+          ],
+        };
+      case "recruiter":
+        return {
+          title: "Welcome, Campus Recruiter!",
+          subtitle: "Find placement officers at colleges, and draft outreach.",
+          placeholder: "Find placement officers, draft outreach...",
+          quickActions: [
+            {
+              label: "Placement officers at engineering colleges",
+              prompt:
+                "Find placement officers at engineering colleges in Mumbai",
+            },
+          ],
+        };
+      case "student":
+      default:
+        return {
+          title: "Welcome to your Recruiting Assistant!",
+          subtitle:
+            "Type or speak your details naturally, or tap “Add my resume” below to automatically extract your profile.",
+          placeholder:
+            "Type your details (e.g. I am Riya at St. Xavier's, batch 2027, BSc CS)...",
+          quickActions: [
+            {
+              label: "Add my resume",
+              isResumeUpload: true,
+            },
+          ],
+        };
+    }
+  }, [role]);
 
   // Show temporary toast
   function showToast(message: string) {
@@ -842,25 +926,33 @@ export default function ChatPage() {
                 <Bot className="h-6 w-6" />
               </div>
               <h2 className="text-base font-semibold text-slate-800">
-                Welcome to your Recruiting Assistant!
+                {roleConfig.title}
               </h2>
               <p className="mx-auto mt-1 max-w-sm text-xs text-slate-500">
-                Type or speak your details naturally, or tap &ldquo;Add my
-                resume&rdquo; below to automatically extract your profile.
+                {roleConfig.subtitle}
               </p>
               <div className="mt-4 flex flex-wrap justify-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleOpenResumePicker}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
-                >
-                  <FileText className="h-3.5 w-3.5" />
-                  <span>Add my resume</span>
-                </button>
+                {roleConfig.quickActions.map((qa, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => {
+                      if (qa.isResumeUpload) {
+                        handleOpenResumePicker();
+                      } else if (qa.prompt) {
+                        setInputText(qa.prompt);
+                      }
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition"
+                  >
+                    {qa.isResumeUpload && <FileText className="h-3.5 w-3.5" />}
+                    <span>{qa.label}</span>
+                  </button>
+                ))}
                 <button
                   type="button"
                   onClick={toggleRecording}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition"
                 >
                   <Mic className="h-3.5 w-3.5 text-indigo-600" />
                   <span>Speak via Voice</span>
@@ -1205,17 +1297,19 @@ export default function ChatPage() {
           onSubmit={(e) => handleSend(e)}
           className="mx-auto flex max-w-3xl items-center gap-2"
         >
-          {/* Resume Upload Action Button ("Add my resume") */}
-          <button
-            type="button"
-            onClick={handleOpenResumePicker}
-            disabled={isSending || isTranscribing || isUploadingResume}
-            title="Add my resume"
-            className="flex h-11 items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-medium text-slate-700 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-600 transition disabled:opacity-50"
-          >
-            <Paperclip className="h-4 w-4" />
-            <span className="hidden sm:inline">Add my resume</span>
-          </button>
+          {/* Resume Upload Action Button ("Add my resume") - Students only */}
+          {role === "student" && (
+            <button
+              type="button"
+              onClick={handleOpenResumePicker}
+              disabled={isSending || isTranscribing || isUploadingResume}
+              title="Add my resume"
+              className="flex h-11 items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-medium text-slate-700 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-600 transition disabled:opacity-50"
+            >
+              <Paperclip className="h-4 w-4" />
+              <span className="hidden sm:inline">Add my resume</span>
+            </button>
+          )}
 
           {/* Voice Input Mic Button */}
           <button
@@ -1241,7 +1335,7 @@ export default function ChatPage() {
             type="text"
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
-            placeholder="Type your details (e.g. I am Riya at St. Xavier's, batch 2027, BSc CS)..."
+            placeholder={roleConfig.placeholder}
             disabled={
               isSending || isRecording || isTranscribing || isUploadingResume
             }
@@ -1263,7 +1357,7 @@ export default function ChatPage() {
         </form>
       </footer>
 
-      {isConsentOpen && (
+      {role === "student" && isConsentOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
           <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl border border-slate-100 p-6 animate-in fade-in zoom-in-95">
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 mb-4">
