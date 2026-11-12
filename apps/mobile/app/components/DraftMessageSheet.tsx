@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { ContactCard, draftOutreach, ApiError } from "@recruiting/shared";
-import { API_BASE_URL } from "../../lib/supabase";
+import { withApiFallback } from "../../lib/supabase";
 
 interface DraftMessageSheetProps {
   visible: boolean;
@@ -53,10 +53,12 @@ export function DraftMessageSheet({
       setIsCopied(false);
 
       try {
-        const response = await draftOutreach(API_BASE_URL, token!, {
-          contact_id: contact!.id,
-          channel,
-        });
+        const response = await withApiFallback((url) =>
+          draftOutreach(url, token!, {
+            contact_id: contact!.id,
+            channel,
+          })
+        );
 
         if (isMounted) {
           setSubject(response.subject || "");

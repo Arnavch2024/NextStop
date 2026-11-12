@@ -13,7 +13,12 @@ import {
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { getMobileSupabaseClient, API_BASE_URL } from "../../lib/supabase";
+import {
+  getMobileSupabaseClient,
+  API_BASE_URL,
+  withApiFallback,
+  getEffectiveApiBaseUrl,
+} from "../../lib/supabase";
 import {
   getStudentScore,
   getStudentProfile,
@@ -47,6 +52,11 @@ export default function MobileHomeScreen() {
   // Modals state
   const [isPreVerifyVisible, setIsPreVerifyVisible] = useState(false);
   const [isRefAuthVisible, setIsRefAuthVisible] = useState(false);
+  const [currentBaseUrl, setCurrentBaseUrl] = useState<string>(API_BASE_URL);
+
+  useEffect(() => {
+    getEffectiveApiBaseUrl().then(setCurrentBaseUrl);
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -54,11 +64,16 @@ export default function MobileHomeScreen() {
 
     async function loadData(token: string) {
       try {
-        const [scoreRes, profRes, timelineRes] = await Promise.all([
-          getStudentScore(API_BASE_URL, token),
-          getStudentProfile(API_BASE_URL, token),
-          getTimeline(API_BASE_URL, token).catch(() => ({ stations: [] })),
-        ]);
+        const [scoreRes, profRes, timelineRes] = await withApiFallback(
+          (url) => {
+            setCurrentBaseUrl(url);
+            return Promise.all([
+              getStudentScore(url, token),
+              getStudentProfile(url, token),
+              getTimeline(url, token).catch(() => ({ stations: [] })),
+            ]);
+          }
+        );
 
         if (isMounted) {
           setScoreData(scoreRes);
@@ -485,15 +500,15 @@ export default function MobileHomeScreen() {
         visible={isPreVerifyVisible}
         onClose={() => setIsPreVerifyVisible(false)}
         token={sessionToken || ""}
-        baseUrl={API_BASE_URL}
+        baseUrl={currentBaseUrl}
         documents={documents}
         onSuccess={(sc) => {
           if (sc) setScoreData(sc);
           if (sessionToken) {
-            getStudentProfile(API_BASE_URL, sessionToken)
+            withApiFallback((url) => getStudentProfile(url, sessionToken))
               .then(setProfileData)
               .catch(() => {});
-            getTimeline(API_BASE_URL, sessionToken)
+            withApiFallback((url) => getTimeline(url, sessionToken))
               .then((t) => setTimelineStations(t.stations || []))
               .catch(() => {});
           }
@@ -505,13 +520,13 @@ export default function MobileHomeScreen() {
         visible={isRefAuthVisible}
         onClose={() => setIsRefAuthVisible(false)}
         token={sessionToken || ""}
-        baseUrl={API_BASE_URL}
+        baseUrl={currentBaseUrl}
         internships={internships}
         isAuthorized={isRefAuthorized}
         onSuccess={(sc) => {
           if (sc) setScoreData(sc);
           if (sessionToken) {
-            getTimeline(API_BASE_URL, sessionToken)
+            withApiFallback((url) => getTimeline(url, sessionToken))
               .then((t) => setTimelineStations(t.stations || []))
               .catch(() => {});
           }

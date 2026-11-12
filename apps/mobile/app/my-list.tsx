@@ -14,7 +14,7 @@ import {
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { getMobileSupabaseClient, API_BASE_URL } from "../lib/supabase";
+import { getMobileSupabaseClient, withApiFallback } from "../lib/supabase";
 import {
   ContactCard,
   listContacts,
@@ -61,10 +61,12 @@ export default function MyListScreen() {
     if (!silent) setIsLoading(true);
     setError(null);
     try {
-      const res = await listContacts(API_BASE_URL, token, {
-        saved_only: true,
-        page_size: 100,
-      });
+      const res = await withApiFallback((url) =>
+        listContacts(url, token, {
+          saved_only: true,
+          page_size: 100,
+        })
+      );
       setContacts(res.items || []);
     } catch (err: any) {
       if (err instanceof ApiError && err.status === 429) {
@@ -129,7 +131,9 @@ export default function MyListScreen() {
     if (!sessionToken || removingId) return;
     setRemovingId(contactId);
     try {
-      await removeSavedContact(API_BASE_URL, contactId, sessionToken);
+      await withApiFallback((url) =>
+        removeSavedContact(url, contactId, sessionToken)
+      );
       setContacts((prev) => prev.filter((c) => c.id !== contactId));
       showToast("Contact removed from your list");
     } catch (err: any) {

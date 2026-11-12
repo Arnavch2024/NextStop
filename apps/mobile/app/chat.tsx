@@ -21,7 +21,13 @@ import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Audio } from "expo-av";
 import * as DocumentPicker from "expo-document-picker";
-import { getMobileSupabaseClient, API_BASE_URL } from "../lib/supabase";
+import {
+  getMobileSupabaseClient,
+  API_BASE_URL,
+  withApiFallback,
+  getEffectiveApiBaseUrl,
+  saveCustomApiBaseUrl,
+} from "../lib/supabase";
 import {
   chat,
   transcribeAudio,
@@ -29,6 +35,7 @@ import {
   saveContact,
   removeSavedContact,
   listContacts,
+  health,
   AgentStep,
   RecordRef,
   RawEvent,
@@ -109,9 +116,62 @@ export default function ChatScreen() {
   // Realtime cross-device toast
   const [crossDeviceToast, setCrossDeviceToast] = useState<string | null>(null);
 
+  // Server connection states
+  const [currentBaseUrl, setCurrentBaseUrl] = useState<string>(API_BASE_URL);
+  const [showServerModal, setShowServerModal] = useState<boolean>(false);
+  const [customServerUrlInput, setCustomServerUrlInput] = useState<string>("");
+  const [serverTestLoading, setServerTestLoading] = useState<boolean>(false);
+  const [serverTestStatus, setServerTestStatus] = useState<string | null>(null);
+
   const flatListRef = useRef<FlatList>(null);
   const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
   const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    getEffectiveApiBaseUrl().then((url) => {
+      setCurrentBaseUrl(url);
+      setCustomServerUrlInput(url);
+    });
+  }, []);
+
+  async function handleTestServerConnection(urlToTest?: string) {
+    const target = (urlToTest || customServerUrlInput || currentBaseUrl)
+      .trim()
+      .replace(/\/+$/, "");
+    if (!target) return;
+    setServerTestLoading(true);
+    setServerTestStatus(null);
+    try {
+      const res = await health(target);
+      if (res && res.status === "ok") {
+        setServerTestStatus(
+          `✅ Connected successfully! (v${res.version || "1.0"})`
+        );
+      } else {
+        setServerTestStatus(
+          "⚠️ Server responded but health status was not ok."
+        );
+      }
+    } catch (err: any) {
+      setServerTestStatus(
+        `❌ Connection failed: ${err.message || "Network request failed"}`
+      );
+    } finally {
+      setServerTestLoading(false);
+    }
+  }
+
+  async function handleApplyServerUrl(newUrl?: string) {
+    const target = (newUrl || customServerUrlInput || currentBaseUrl)
+      .trim()
+      .replace(/\/+$/, "");
+    if (!target) return;
+    await saveCustomApiBaseUrl(target);
+    setCurrentBaseUrl(target);
+    setCustomServerUrlInput(target);
+    setShowServerModal(false);
+    showToast(`Server URL set to: ${target}`);
+  }
 
   const roleConfig: RoleChatConfig = useMemo(() => {
     switch (role) {
@@ -200,7 +260,10 @@ export default function ChatScreen() {
     if (!sessionToken || savingContactId) return;
     setSavingContactId(contactId);
     try {
-      await saveContact(API_BASE_URL, contactId, sessionToken);
+      await withApiFallback((url) => {
+        setCurrentBaseUrl(url);
+        return saveContact(url, contactId, sessionToken);
+      });
       setSavedContactIds((prev) => ({ ...prev, [contactId]: true }));
       showToast("Contact saved to your list");
     } catch (err: any) {
@@ -219,7 +282,10 @@ export default function ChatScreen() {
     if (!sessionToken || savingContactId) return;
     setSavingContactId(contactId);
     try {
-      await removeSavedContact(API_BASE_URL, contactId, sessionToken);
+      await withApiFallback((url) => {
+        setCurrentBaseUrl(url);
+        return removeSavedContact(url, contactId, sessionToken);
+      });
       setSavedContactIds((prev) => {
         const next = { ...prev };
         delete next[contactId];
@@ -287,7 +353,10 @@ export default function ChatScreen() {
       }
 
       // Load initial saved contacts
-      listContacts(API_BASE_URL, session.access_token, { saved_only: true })
+      withApiFallback((url) => {
+        setCurrentBaseUrl(url);
+        return listContacts(url, session.access_token, { saved_only: true });
+      })
         .then((res) => {
           if (res?.items) {
             const savedMap: Record<string, boolean> = {};
@@ -470,7 +539,10 @@ export default function ChatScreen() {
     ]);
 
     try {
-      const response = await chat(API_BASE_URL, text, sessionToken);
+      const response = await withApiFallback((url) => {
+        setCurrentBaseUrl(url);
+        return chat(url, text, sessionToken);
+      });
 
       // Extract confirmation cards from response.cards or step outputs
       const responseCards: ConfirmationCard[] = [...(response.cards || [])];
@@ -592,12 +664,10 @@ export default function ChatScreen() {
         type: "audio/m4a",
       };
 
-      const res = await transcribeAudio(
-        API_BASE_URL,
-        audioFile,
-        "voice_note.m4a",
-        sessionToken!
-      );
+      const res = await withApiFallback((url) => {
+        setCurrentBaseUrl(url);
+        return transcribeAudio(url, audioFile, "voice_note.m4a", sessionToken!);
+      });
 
       if (res.text && res.text.trim()) {
         await handleSend(res.text.trim());
@@ -677,12 +747,10 @@ export default function ChatScreen() {
         type: asset.mimeType || "application/pdf",
       };
 
-      const summary = await uploadResume(
-        API_BASE_URL,
-        filePayload,
-        asset.name,
-        sessionToken
-      );
+      const summary = await withApiFallback((url) => {
+        setCurrentBaseUrl(url);
+        return uploadResume(url, filePayload, asset.name, sessionToken);
+      });
 
       setMessages((prev) => [
         ...prev,
@@ -774,6 +842,13 @@ export default function ChatScreen() {
           </View>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
             <TouchableOpacity
+              onPress={() => setShowServerModal(true)}
+              style={styles.serverSettingsHeaderBtn}
+              accessibilityLabel="Server connection settings"
+            >
+              <Text style={styles.serverSettingsHeaderText}>⚙️</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
               onPress={() => router.push("/my-list")}
               style={styles.myListHeaderBtn}
             >
@@ -862,6 +937,17 @@ export default function ChatScreen() {
                   >
                     {item.text}
                   </Text>
+
+                  {item.text.includes("Error connecting to agent") && (
+                    <TouchableOpacity
+                      style={styles.retryConfigBtn}
+                      onPress={() => setShowServerModal(true)}
+                    >
+                      <Text style={styles.retryConfigBtnText}>
+                        ⚙️ Configure Server URL & Retry
+                      </Text>
+                    </TouchableOpacity>
+                  )}
 
                   {/* Parsed Summary Card */}
                   {summary && (
@@ -961,7 +1047,7 @@ export default function ChatScreen() {
                             key={`${item.id}-card-${cardIdx}`}
                             card={card}
                             token={sessionToken || ""}
-                            baseUrl={API_BASE_URL}
+                            baseUrl={currentBaseUrl || API_BASE_URL}
                             onSuccess={(sc, msg) => {
                               if (msg) showToast(msg);
                             }}
@@ -1188,6 +1274,107 @@ export default function ChatScreen() {
             </View>
           </Modal>
         )}
+        {/* Backend Server Configuration Modal */}
+        <Modal
+          visible={showServerModal}
+          animationType="fade"
+          transparent={true}
+          onRequestClose={() => setShowServerModal(false)}
+        >
+          <View style={styles.serverModalOverlay}>
+            <View style={styles.serverModalContent}>
+              <View style={styles.serverModalHeader}>
+                <Text style={styles.serverModalTitle}>
+                  ⚙️ Backend Connection
+                </Text>
+                <TouchableOpacity onPress={() => setShowServerModal(false)}>
+                  <Text style={styles.serverModalClose}>✕</Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.serverModalDesc}>Current active server:</Text>
+              <View style={styles.activeUrlBadge}>
+                <Text style={styles.activeUrlBadgeText}>{currentBaseUrl}</Text>
+              </View>
+
+              <Text style={[styles.serverModalDesc, { marginTop: 12 }]}>
+                Quick presets:
+              </Text>
+              <View style={styles.presetButtonsRow}>
+                <TouchableOpacity
+                  style={styles.presetBtn}
+                  onPress={() => {
+                    setCustomServerUrlInput("http://10.0.2.2:8001");
+                    handleTestServerConnection("http://10.0.2.2:8001");
+                  }}
+                >
+                  <Text style={styles.presetBtnText}>
+                    📱 Emulator (10.0.2.2)
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.presetBtn}
+                  onPress={() => {
+                    setCustomServerUrlInput("http://192.168.29.133:8001");
+                    handleTestServerConnection("http://192.168.29.133:8001");
+                  }}
+                >
+                  <Text style={styles.presetBtnText}>
+                    📶 Wi-Fi LAN (192.168.29.133)
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.presetBtn}
+                  onPress={() => {
+                    setCustomServerUrlInput("http://localhost:8001");
+                    handleTestServerConnection("http://localhost:8001");
+                  }}
+                >
+                  <Text style={styles.presetBtnText}>💻 Localhost (8001)</Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={[styles.serverModalDesc, { marginTop: 12 }]}>
+                Custom Server or Public Tunnel URL:
+              </Text>
+              <TextInput
+                style={styles.serverUrlInput}
+                value={customServerUrlInput}
+                onChangeText={setCustomServerUrlInput}
+                placeholder="http://192.168.29.133:8001 or https://...loca.lt"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+
+              {serverTestStatus && (
+                <Text style={styles.serverTestStatusText}>
+                  {serverTestStatus}
+                </Text>
+              )}
+
+              <View style={styles.serverModalActions}>
+                <TouchableOpacity
+                  style={styles.testBtn}
+                  onPress={() => handleTestServerConnection()}
+                  disabled={serverTestLoading}
+                >
+                  {serverTestLoading ? (
+                    <ActivityIndicator size="small" color="#1e40af" />
+                  ) : (
+                    <Text style={styles.testBtnText}>Test Connection</Text>
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.saveServerBtn}
+                  onPress={() => handleApplyServerUrl()}
+                >
+                  <Text style={styles.saveServerBtnText}>Save & Apply</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
         {/* Outreach Draft Message Sheet Modal */}
         <DraftMessageSheet
           visible={!!draftingContact}
@@ -1738,5 +1925,150 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
     color: "#ffffff",
+  },
+  serverSettingsHeaderBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    backgroundColor: "#f1f5f9",
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+  },
+  serverSettingsHeaderText: {
+    fontSize: 14,
+  },
+  retryConfigBtn: {
+    marginTop: 8,
+    alignSelf: "flex-start",
+    backgroundColor: "#eff6ff",
+    borderWidth: 1,
+    borderColor: "#3b82f6",
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  retryConfigBtnText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#1d4ed8",
+  },
+  serverModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 16,
+  },
+  serverModalContent: {
+    width: "100%",
+    maxWidth: 480,
+    backgroundColor: "#ffffff",
+    borderRadius: 12,
+    padding: 20,
+    shadowColor: "#000",
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  serverModalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  serverModalTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#0f172a",
+  },
+  serverModalClose: {
+    fontSize: 18,
+    color: "#64748b",
+    padding: 4,
+  },
+  serverModalDesc: {
+    fontSize: 13,
+    color: "#475569",
+    marginBottom: 6,
+  },
+  activeUrlBadge: {
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    padding: 8,
+    borderRadius: 6,
+  },
+  activeUrlBadgeText: {
+    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+    fontSize: 13,
+    color: "#0284c7",
+    fontWeight: "600",
+  },
+  presetButtonsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginBottom: 10,
+  },
+  presetBtn: {
+    backgroundColor: "#f1f5f9",
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  presetBtnText: {
+    fontSize: 12,
+    color: "#334155",
+    fontWeight: "500",
+  },
+  serverUrlInput: {
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 14,
+    color: "#0f172a",
+    backgroundColor: "#fff",
+    marginBottom: 10,
+  },
+  serverTestStatusText: {
+    fontSize: 13,
+    marginBottom: 10,
+    color: "#0f172a",
+  },
+  serverModalActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 10,
+    marginTop: 6,
+  },
+  testBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#93c5fd",
+    backgroundColor: "#eff6ff",
+    justifyContent: "center",
+  },
+  testBtnText: {
+    color: "#1e40af",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  saveServerBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 6,
+    backgroundColor: "#2563eb",
+    justifyContent: "center",
+  },
+  saveServerBtnText: {
+    color: "#ffffff",
+    fontSize: 13,
+    fontWeight: "600",
   },
 });

@@ -5,7 +5,12 @@
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://bsegerbrkbxnosyojmwf.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJzZWdlcmJya2J4bm9zeW9qbXdmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM5ODE5ODQsImV4cCI6MjEwOTU1Nzk4NH0.kmNEXwvifmNltHamteIKuZUUJ2w7Sqip5WnhQFsI4dQ",
+        "EXPO_PUBLIC_API_BASE_URL": "http://192.168.29.133:8001"
+      }
     },
     "preview": {
       "distribution": "internal",
@@ -18,7 +23,13 @@
         "EXPO_PUBLIC_API_BASE_URL": "http://192.168.29.133:8001"
       }
     },
-    "production": {}
+    "production": {
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://bsegerbrkbxnosyojmwf.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJzZWdlcmJya2J4bm9zeW9qbXdmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM5ODE5ODQsImV4cCI6MjEwOTU1Nzk4NH0.kmNEXwvifmNltHamteIKuZUUJ2w7Sqip5WnhQFsI4dQ",
+        "EXPO_PUBLIC_API_BASE_URL": "http://192.168.29.133:8001"
+      }
+    }
   },
   "submit": {
     "production": {}

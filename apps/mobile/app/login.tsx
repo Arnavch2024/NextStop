@@ -17,7 +17,7 @@ import * as Linking from "expo-linking";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { getMobileSupabaseClient, API_BASE_URL } from "../lib/supabase";
+import { getMobileSupabaseClient, withApiFallback } from "../lib/supabase";
 import { demoLogin } from "@recruiting/shared";
 
 WebBrowser.maybeCompleteAuthSession();
@@ -182,9 +182,9 @@ export default function LoginScreen() {
     try {
       let loggedIn = false;
 
-      // 1. Attempt API demo-login endpoint first
+      // 1. Attempt API demo-login endpoint first with auto-discovery failover
       try {
-        const res = await demoLogin(API_BASE_URL, role);
+        const res = await withApiFallback((url) => demoLogin(url, role));
         if (res.access_token && res.refresh_token) {
           await supabase.auth.setSession({
             access_token: res.access_token,
