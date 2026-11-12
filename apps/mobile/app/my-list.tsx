@@ -6,9 +6,13 @@ import {
   FlatList,
   ActivityIndicator,
   StyleSheet,
-  SafeAreaView,
   Platform,
+  useWindowDimensions,
 } from "react-native";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { getMobileSupabaseClient, API_BASE_URL } from "../lib/supabase";
 import {
@@ -23,6 +27,10 @@ import { DraftMessageSheet } from "./components/DraftMessageSheet";
 export default function MyListScreen() {
   const router = useRouter();
   const supabase = getMobileSupabaseClient();
+  const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const isTablet = width >= 600;
+  const isSmallWidth = width < 375;
 
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
@@ -137,118 +145,135 @@ export default function MyListScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* Realtime Toast */}
-      {crossDeviceToast && (
-        <View style={styles.toastBanner}>
-          <Text style={styles.toastIcon}>💻</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.toastText}>{crossDeviceToast}</Text>
-            <Text style={styles.toastSub}>Synced in realtime</Text>
+      <View
+        style={{ flex: 1, maxWidth: 640, width: "100%", alignSelf: "center" }}
+      >
+        {/* Realtime Toast */}
+        {crossDeviceToast && (
+          <View style={styles.toastBanner}>
+            <Text style={styles.toastIcon}>💻</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.toastText}>{crossDeviceToast}</Text>
+              <Text style={styles.toastSub}>Synced in realtime</Text>
+            </View>
+            <TouchableOpacity onPress={() => setCrossDeviceToast(null)}>
+              <Text style={styles.toastClose}>✕</Text>
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity onPress={() => setCrossDeviceToast(null)}>
-            <Text style={styles.toastClose}>✕</Text>
+        )}
+
+        {/* Header */}
+        <View
+          style={[
+            styles.header,
+            { paddingHorizontal: isSmallWidth ? 12 : isTablet ? 24 : 16 },
+          ]}
+        >
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={() => router.push("/chat")}
+          >
+            <Text style={styles.backBtnText}>&larr; Chat</Text>
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>My List</Text>
+          <TouchableOpacity
+            style={styles.refreshBtn}
+            onPress={() => sessionToken && fetchSavedList(sessionToken)}
+            disabled={isLoading}
+          >
+            <Text style={styles.refreshBtnText}>↻</Text>
           </TouchableOpacity>
         </View>
-      )}
 
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backBtn}
-          onPress={() => router.push("/chat")}
+        {/* Main Content */}
+        <View
+          style={[
+            styles.contentContainer,
+            {
+              paddingHorizontal: isSmallWidth ? 12 : isTablet ? 24 : 16,
+              paddingBottom: Math.max(insets.bottom + 16, 24),
+            },
+          ]}
         >
-          <Text style={styles.backBtnText}>&larr; Chat</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>My List</Text>
-        <TouchableOpacity
-          style={styles.refreshBtn}
-          onPress={() => sessionToken && fetchSavedList(sessionToken)}
-          disabled={isLoading}
-        >
-          <Text style={styles.refreshBtnText}>↻</Text>
-        </TouchableOpacity>
-      </View>
+          {/* Privacy Note */}
+          <View style={styles.privacyBox}>
+            <Text style={styles.privacyIcon}>🛡</Text>
+            <Text style={styles.privacyText}>
+              Public professional contact info only. Source and date shown for
+              every record. You can remove any saved contact from My list at any
+              time.
+            </Text>
+          </View>
 
-      {/* Main Content */}
-      <View style={styles.contentContainer}>
-        {/* Privacy Note */}
-        <View style={styles.privacyBox}>
-          <Text style={styles.privacyIcon}>🛡</Text>
-          <Text style={styles.privacyText}>
-            Public professional contact info only. Source and date shown for
-            every record. You can remove any saved contact from My list at any
-            time.
-          </Text>
+          {/* Loading State */}
+          {isLoading && (
+            <View style={styles.centerBox}>
+              <ActivityIndicator size="large" color="#4f46e5" />
+              <Text style={styles.centerText}>Loading saved contacts...</Text>
+            </View>
+          )}
+
+          {/* Error State */}
+          {!isLoading && error && (
+            <View style={styles.errorBox}>
+              <Text style={styles.errorTitle}>Could not load saved list</Text>
+              <Text style={styles.errorMessage}>{error}</Text>
+              <TouchableOpacity
+                style={styles.retryBtn}
+                onPress={() => sessionToken && fetchSavedList(sessionToken)}
+              >
+                <Text style={styles.retryBtnText}>Retry</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Empty State */}
+          {!isLoading && !error && contacts.length === 0 && (
+            <View style={styles.emptyBox}>
+              <Text style={styles.emptyIcon}>🔖</Text>
+              <Text style={styles.emptyTitle}>No saved contacts yet</Text>
+              <Text style={styles.emptyMessage}>
+                Search for recruiters in chat and save them to your list to
+                draft outreach.
+              </Text>
+              <TouchableOpacity
+                style={styles.findBtn}
+                onPress={() => router.push("/chat")}
+              >
+                <Text style={styles.findBtnText}>Find Recruiters in Chat</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Contacts List */}
+          {!isLoading && !error && contacts.length > 0 && (
+            <FlatList
+              data={contacts}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={styles.listContent}
+              renderItem={({ item }) => (
+                <MobileContactCard
+                  contact={item}
+                  isSaved={true}
+                  showRemoveOnly={true}
+                  isBusy={removingId === item.id}
+                  onRemove={handleRemove}
+                  onDraft={(c) => setDraftingContact(c)}
+                />
+              )}
+            />
+          )}
         </View>
 
-        {/* Loading State */}
-        {isLoading && (
-          <View style={styles.centerBox}>
-            <ActivityIndicator size="large" color="#4f46e5" />
-            <Text style={styles.centerText}>Loading saved contacts...</Text>
-          </View>
-        )}
-
-        {/* Error State */}
-        {!isLoading && error && (
-          <View style={styles.errorBox}>
-            <Text style={styles.errorTitle}>Could not load saved list</Text>
-            <Text style={styles.errorMessage}>{error}</Text>
-            <TouchableOpacity
-              style={styles.retryBtn}
-              onPress={() => sessionToken && fetchSavedList(sessionToken)}
-            >
-              <Text style={styles.retryBtnText}>Retry</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Empty State */}
-        {!isLoading && !error && contacts.length === 0 && (
-          <View style={styles.emptyBox}>
-            <Text style={styles.emptyIcon}>🔖</Text>
-            <Text style={styles.emptyTitle}>No saved contacts yet</Text>
-            <Text style={styles.emptyMessage}>
-              Search for recruiters in chat and save them to your list to draft
-              outreach.
-            </Text>
-            <TouchableOpacity
-              style={styles.findBtn}
-              onPress={() => router.push("/chat")}
-            >
-              <Text style={styles.findBtnText}>Find Recruiters in Chat</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Contacts List */}
-        {!isLoading && !error && contacts.length > 0 && (
-          <FlatList
-            data={contacts}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={styles.listContent}
-            renderItem={({ item }) => (
-              <MobileContactCard
-                contact={item}
-                isSaved={true}
-                showRemoveOnly={true}
-                isBusy={removingId === item.id}
-                onRemove={handleRemove}
-                onDraft={(c) => setDraftingContact(c)}
-              />
-            )}
-          />
-        )}
+        {/* Draft Message Sheet */}
+        <DraftMessageSheet
+          visible={!!draftingContact}
+          onClose={() => setDraftingContact(null)}
+          contact={draftingContact}
+          token={sessionToken}
+          showToast={showToast}
+        />
       </View>
-
-      {/* Draft Message Sheet */}
-      <DraftMessageSheet
-        visible={!!draftingContact}
-        onClose={() => setDraftingContact(null)}
-        contact={draftingContact}
-        token={sessionToken}
-        showToast={showToast}
-      />
     </SafeAreaView>
   );
 }

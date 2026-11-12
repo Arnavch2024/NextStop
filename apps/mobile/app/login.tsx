@@ -9,11 +9,13 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  useWindowDimensions,
 } from "react-native";
 import { useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import * as Linking from "expo-linking";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getMobileSupabaseClient, API_BASE_URL } from "../lib/supabase";
 import { demoLogin } from "@recruiting/shared";
@@ -36,6 +38,12 @@ const DEMO_CREDENTIALS: Record<string, { email: string; password: string }> = {
 export default function LoginScreen() {
   const router = useRouter();
   const supabase = getMobileSupabaseClient();
+  const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+
+  const isSmallWidth = width < 375;
+  const isTablet = width >= 600;
+  const isCompactHeight = height < 740;
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -219,12 +227,42 @@ export default function LoginScreen() {
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 10 : 0}
       style={styles.container}
     >
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <View style={styles.card}>
-          <Text style={styles.title}>Campus Recruiting</Text>
-          <Text style={styles.subtitle}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.scroll,
+          {
+            paddingTop: Math.max(insets.top + 10, 16),
+            paddingBottom: Math.max(insets.bottom + 20, 24),
+            paddingHorizontal: isSmallWidth ? 12 : isTablet ? 32 : 18,
+            justifyContent: isCompactHeight ? "flex-start" : "center",
+          },
+        ]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View
+          style={[
+            styles.card,
+            {
+              padding: isSmallWidth ? 16 : isTablet ? 28 : 22,
+              maxWidth: 440,
+              width: "100%",
+              alignSelf: "center",
+            },
+          ]}
+        >
+          <Text style={[styles.title, isSmallWidth && { fontSize: 20 }]}>
+            Campus Recruiting
+          </Text>
+          <Text
+            style={[
+              styles.subtitle,
+              isSmallWidth && { fontSize: 12, marginBottom: 14 },
+            ]}
+          >
             Mumbai College Batches 2027 & 2028
           </Text>
 
@@ -244,6 +282,7 @@ export default function LoginScreen() {
           <TouchableOpacity
             style={[
               styles.googleButton,
+              isSmallWidth && { paddingVertical: 11 },
               googleLoading && styles.buttonDisabled,
             ]}
             disabled={googleLoading || loading}
@@ -255,18 +294,25 @@ export default function LoginScreen() {
               <>
                 <Ionicons
                   name="logo-google"
-                  size={18}
+                  size={isSmallWidth ? 16 : 18}
                   color="#EA4335"
                   style={styles.googleIcon}
                 />
-                <Text style={styles.googleButtonText}>
+                <Text
+                  style={[
+                    styles.googleButtonText,
+                    isSmallWidth && { fontSize: 13 },
+                  ]}
+                >
                   Continue with Google
                 </Text>
               </>
             )}
           </TouchableOpacity>
 
-          <View style={styles.dividerRow}>
+          <View
+            style={[styles.dividerRow, isSmallWidth && { marginVertical: 10 }]}
+          >
             <View style={styles.dividerLine} />
             <Text style={styles.dividerText}>OR CONTINUE WITH EMAIL</Text>
             <View style={styles.dividerLine} />
@@ -274,7 +320,10 @@ export default function LoginScreen() {
 
           <Text style={styles.label}>EMAIL ADDRESS</Text>
           <TextInput
-            style={styles.input}
+            style={[
+              styles.input,
+              isSmallWidth && { paddingVertical: 10, fontSize: 13 },
+            ]}
             autoCapitalize="none"
             keyboardType="email-address"
             value={email}
@@ -287,7 +336,10 @@ export default function LoginScreen() {
             <>
               <Text style={styles.label}>PASSWORD</Text>
               <TextInput
-                style={styles.input}
+                style={[
+                  styles.input,
+                  isSmallWidth && { paddingVertical: 10, fontSize: 13 },
+                ]}
                 secureTextEntry
                 value={password}
                 onChangeText={setPassword}
@@ -298,14 +350,20 @@ export default function LoginScreen() {
           )}
 
           <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
+            style={[
+              styles.button,
+              isSmallWidth && { paddingVertical: 12, marginTop: 14 },
+              loading && styles.buttonDisabled,
+            ]}
             disabled={loading || googleLoading}
             onPress={handleAuth}
           >
             {loading ? (
               <ActivityIndicator color="#ffffff" />
             ) : (
-              <Text style={styles.buttonText}>
+              <Text
+                style={[styles.buttonText, isSmallWidth && { fontSize: 14 }]}
+              >
                 {useMagicLink
                   ? "Send Magic Link"
                   : isSignUp
@@ -316,10 +374,10 @@ export default function LoginScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.switchButton}
+            style={[styles.switchButton, isSmallWidth && { marginTop: 10 }]}
             onPress={() => setUseMagicLink(!useMagicLink)}
           >
-            <Text style={styles.switchText}>
+            <Text style={[styles.switchText, isSmallWidth && { fontSize: 12 }]}>
               {useMagicLink
                 ? "Sign in with Password instead"
                 : "Sign in with Magic Link"}
@@ -328,10 +386,12 @@ export default function LoginScreen() {
 
           {!useMagicLink && (
             <TouchableOpacity
-              style={styles.switchButton}
+              style={[styles.switchButton, { marginTop: 8 }]}
               onPress={() => setIsSignUp(!isSignUp)}
             >
-              <Text style={styles.switchSubtext}>
+              <Text
+                style={[styles.switchSubtext, isSmallWidth && { fontSize: 11 }]}
+              >
                 {isSignUp
                   ? "Already have an account? Sign In"
                   : "Don't have an account? Sign Up"}
@@ -340,7 +400,12 @@ export default function LoginScreen() {
           )}
 
           {/* Quick Demo Access Buttons */}
-          <View style={styles.demoSection}>
+          <View
+            style={[
+              styles.demoSection,
+              isSmallWidth && { marginTop: 16, paddingTop: 12 },
+            ]}
+          >
             <Text style={styles.demoHeader}>TRY DEMO PERSONAS</Text>
             <View style={styles.demoGrid}>
               {[
@@ -351,7 +416,10 @@ export default function LoginScreen() {
               ].map((item) => (
                 <TouchableOpacity
                   key={item.role}
-                  style={styles.demoButton}
+                  style={[
+                    styles.demoButton,
+                    isSmallWidth && { width: "100%", paddingVertical: 8 },
+                  ]}
                   disabled={
                     demoRoleLoading !== null || loading || googleLoading
                   }
@@ -360,7 +428,14 @@ export default function LoginScreen() {
                   {demoRoleLoading === item.role ? (
                     <ActivityIndicator size="small" color="#4f46e5" />
                   ) : (
-                    <Text style={styles.demoButtonText}>{item.label}</Text>
+                    <Text
+                      style={[
+                        styles.demoButtonText,
+                        isSmallWidth && { fontSize: 11 },
+                      ]}
+                    >
+                      {item.label}
+                    </Text>
                   )}
                 </TouchableOpacity>
               ))}
@@ -379,13 +454,10 @@ const styles = StyleSheet.create({
   },
   scroll: {
     flexGrow: 1,
-    justifyContent: "center",
-    padding: 20,
   },
   card: {
     backgroundColor: "#ffffff",
     borderRadius: 20,
-    padding: 24,
     borderWidth: 1,
     borderColor: "#e2e8f0",
     shadowColor: "#000",
@@ -449,7 +521,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "700",
     color: "#475569",
-    marginBottom: 6,
+    marginBottom: 5,
     marginTop: 8,
   },
   input: {
@@ -478,7 +550,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   switchButton: {
-    marginTop: 14,
+    marginTop: 12,
     alignItems: "center",
   },
   switchText: {
@@ -511,7 +583,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   demoSection: {
-    marginTop: 24,
+    marginTop: 22,
     paddingTop: 16,
     borderTopWidth: 1,
     borderTopColor: "#f1f5f9",

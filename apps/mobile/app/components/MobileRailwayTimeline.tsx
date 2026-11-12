@@ -221,6 +221,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
     color: "#0F172A",
+    flexShrink: 1,
   },
   stationTitleCurrent: {
     color: "#4338CA",

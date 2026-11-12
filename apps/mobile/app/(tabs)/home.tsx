@@ -1,14 +1,17 @@
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Platform,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
+  useWindowDimensions,
 } from "react-native";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { getMobileSupabaseClient, API_BASE_URL } from "../../lib/supabase";
 import {
@@ -26,6 +29,10 @@ import { MobileReferenceAuthModal } from "../components/MobileReferenceAuthModal
 export default function MobileHomeScreen() {
   const router = useRouter();
   const supabase = getMobileSupabaseClient();
+  const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const isSmallWidth = width < 375;
+  const isTablet = width >= 600;
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -263,7 +270,19 @@ export default function MobileHomeScreen() {
         </View>
       )}
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            paddingHorizontal: isSmallWidth ? 12 : isTablet ? 28 : 16,
+            paddingBottom: Math.max(insets.bottom + 24, 40),
+            maxWidth: 640,
+            width: "100%",
+            alignSelf: "center",
+          },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Header */}
         <View style={styles.header}>
           <View>

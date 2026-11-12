@@ -9,10 +9,14 @@ import {
   Platform,
   ActivityIndicator,
   StyleSheet,
-  SafeAreaView,
   Modal,
   Alert,
+  useWindowDimensions,
 } from "react-native";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Audio } from "expo-av";
@@ -66,6 +70,9 @@ interface ChatMessage {
 export default function ChatScreen() {
   const router = useRouter();
   const supabase = getMobileSupabaseClient();
+  const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const isSmallWidth = width < 375;
 
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
@@ -721,7 +728,11 @@ export default function ChatScreen() {
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={styles.container}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 10 : 0}
+        style={[
+          styles.container,
+          { maxWidth: 680, width: "100%", alignSelf: "center" },
+        ]}
       >
         {/* Realtime Sync Toast */}
         {crossDeviceToast && (
@@ -1073,7 +1084,15 @@ export default function ChatScreen() {
         )}
 
         {/* Composer */}
-        <View style={styles.composer}>
+        <View
+          style={[
+            styles.composer,
+            {
+              paddingHorizontal: isSmallWidth ? 8 : 12,
+              paddingBottom: Math.max(insets.bottom, 10),
+            },
+          ]}
+        >
           {/* Add My Resume Button - Students only */}
           {role === "student" && (
             <TouchableOpacity

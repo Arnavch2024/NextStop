@@ -6,8 +6,10 @@ import {
   ScrollView,
   StyleSheet,
   ActivityIndicator,
+  useWindowDimensions,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getMobileSupabaseClient } from "../lib/supabase";
 import { ProfileRole } from "@recruiting/shared";
 
@@ -48,6 +50,12 @@ const ROLES: RoleCard[] = [
 export default function OnboardingScreen() {
   const router = useRouter();
   const supabase = getMobileSupabaseClient();
+  const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+
+  const isSmallWidth = width < 375;
+  const isTablet = width >= 600;
+  const isCompactHeight = height < 700;
 
   const [loadingRole, setLoadingRole] = useState<ProfileRole | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
@@ -75,47 +83,80 @@ export default function OnboardingScreen() {
 
       if (error) throw error;
       router.replace("/chat");
-    } catch (err) {
+    } catch {
       setLoadingRole(null);
     }
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.badge}>Step 1 of 1</Text>
-        <Text style={styles.title}>Choose Your Role</Text>
-        <Text style={styles.subtitle}>
-          One tap sets your profile. Everything else is conversational.
-        </Text>
-      </View>
+    <ScrollView
+      contentContainerStyle={[
+        styles.container,
+        {
+          paddingTop: Math.max(insets.top + 12, 20),
+          paddingBottom: Math.max(insets.bottom + 20, 28),
+          paddingHorizontal: isSmallWidth ? 16 : isTablet ? 36 : 24,
+          justifyContent: isCompactHeight ? "flex-start" : "center",
+        },
+      ]}
+      showsVerticalScrollIndicator={false}
+    >
+      <View
+        style={[
+          styles.innerWrapper,
+          { maxWidth: 480, width: "100%", alignSelf: "center" },
+        ]}
+      >
+        <View style={[styles.header, isSmallWidth && { marginBottom: 16 }]}>
+          <Text style={styles.badge}>Step 1 of 1</Text>
+          <Text style={[styles.title, isSmallWidth && { fontSize: 22 }]}>
+            Choose Your Role
+          </Text>
+          <Text style={[styles.subtitle, isSmallWidth && { fontSize: 12 }]}>
+            One tap sets your profile. Everything else is conversational.
+          </Text>
+        </View>
 
-      <View style={styles.grid}>
-        {ROLES.map((r) => {
-          const isLoading = loadingRole === r.role;
-          return (
-            <TouchableOpacity
-              key={r.role}
-              style={styles.card}
-              onPress={() => handleSelect(r.role)}
-              disabled={loadingRole !== null}
-            >
-              <View style={styles.cardTop}>
-                <Text style={styles.cardTitle}>{r.title}</Text>
-                <Text style={styles.cardBadge}>{r.badge}</Text>
-              </View>
-              <Text style={styles.cardDesc}>{r.desc}</Text>
+        <View style={styles.grid}>
+          {ROLES.map((r) => {
+            const isLoading = loadingRole === r.role;
+            return (
+              <TouchableOpacity
+                key={r.role}
+                style={[styles.card, isSmallWidth && { padding: 14 }]}
+                onPress={() => handleSelect(r.role)}
+                disabled={loadingRole !== null}
+              >
+                <View style={styles.cardTop}>
+                  <Text
+                    style={[styles.cardTitle, isSmallWidth && { fontSize: 15 }]}
+                  >
+                    {r.title}
+                  </Text>
+                  <Text style={styles.cardBadge}>{r.badge}</Text>
+                </View>
+                <Text
+                  style={[
+                    styles.cardDesc,
+                    isSmallWidth && { fontSize: 12, lineHeight: 16 },
+                  ]}
+                >
+                  {r.desc}
+                </Text>
 
-              <View style={styles.cardBottom}>
-                {isLoading ? (
-                  <ActivityIndicator size="small" color="#4f46e5" />
-                ) : (
-                  <Text style={styles.selectText}>Select &rarr;</Text>
-                )}
-              </View>
-            </TouchableOpacity>
-          );
-        })}
+                <View
+                  style={[styles.cardBottom, isSmallWidth && { marginTop: 8 }]}
+                >
+                  {isLoading ? (
+                    <ActivityIndicator size="small" color="#4f46e5" />
+                  ) : (
+                    <Text style={styles.selectText}>Select &rarr;</Text>
+                  )}
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
       </View>
     </ScrollView>
   );
@@ -123,9 +164,11 @@ export default function OnboardingScreen() {
 
 const styles = StyleSheet.create({
   container: {
-    padding: 24,
     backgroundColor: "#f8fafc",
     flexGrow: 1,
+  },
+  innerWrapper: {
+    flex: 1,
     justifyContent: "center",
   },
   header: {
@@ -155,7 +198,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   grid: {
-    gap: 14,
+    gap: 12,
   },
   card: {
     backgroundColor: "#ffffff",
