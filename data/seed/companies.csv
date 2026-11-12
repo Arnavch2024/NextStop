@@ -1,0 +1,31 @@
+name,industry,category,source_url
+Barclays Global Service Centre,Banking & Financial Services,GCC,https://example.com/seed/mumbai-companies
+Morgan Stanley Advantage Services,Investment Banking,GCC,https://example.com/seed/mumbai-companies
+JP Morgan Chase Global Technology,Financial Technology,GCC,https://example.com/seed/mumbai-companies
+Citi GCC Mumbai,Banking,GCC,https://example.com/seed/mumbai-companies
+Deutsche Bank DBOI Global Services,Investment Banking,GCC,https://example.com/seed/mumbai-companies
+BNP Paribas India Solutions,Banking & Finance,GCC,https://example.com/seed/mumbai-companies
+Nomura Services India,Financial Services,GCC,https://example.com/seed/mumbai-companies
+UBS India Service Centre,Wealth Management,GCC,https://example.com/seed/mumbai-companies
+Bank of America Continuum,Banking & Tech,GCC,https://example.com/seed/mumbai-companies
+Macquarie Global Services,Financial Services,GCC,https://example.com/seed/mumbai-companies
+Tata Consultancy Services,Information Technology,enterprise,https://example.com/seed/mumbai-companies
+Reliance Industries,Conglomerate & Telecom,enterprise,https://example.com/seed/mumbai-companies
+Larsen & Toubro,Engineering & Technology,enterprise,https://example.com/seed/mumbai-companies
+Mahindra & Mahindra,Automotive & Technology,enterprise,https://example.com/seed/mumbai-companies
+HDFC Bank,Banking & Fintech,enterprise,https://example.com/seed/mumbai-companies
+ICICI Bank,Banking & Financial Services,enterprise,https://example.com/seed/mumbai-companies
+Tata Motors,Automotive,enterprise,https://example.com/seed/mumbai-companies
+Godrej Consumer Products,FMCG,enterprise,https://example.com/seed/mumbai-companies
+Kotak Mahindra Bank,Banking & Finance,enterprise,https://example.com/seed/mumbai-companies
+Aditya Birla Capital,Financial Services,enterprise,https://example.com/seed/mumbai-companies
+Zepto,Quick Commerce,startup,https://example.com/seed/mumbai-companies
+BookMyShow,Entertainment & Tech,startup,https://example.com/seed/mumbai-companies
+BrowserStack,Cloud & Developer Tools,startup,https://example.com/seed/mumbai-companies
+Nykaa,E-Commerce,startup,https://example.com/seed/mumbai-companies
+Upstox,Fintech & Wealth,startup,https://example.com/seed/mumbai-companies
+Pepperfry,E-Commerce,startup,https://example.com/seed/mumbai-companies
+Eruditus,EdTech,startup,https://example.com/seed/mumbai-companies
+CleverTap,SaaS & Analytics,startup,https://example.com/seed/mumbai-companies
+Rebel Foods,FoodTech,startup,https://example.com/seed/mumbai-companies
+Gupshup,Conversational AI & Messaging,startup,https://example.com/seed/mumbai-companies

@@ -33,9 +33,8 @@ const DEMO_ROLES: DemoRoleConfig[] = [
   {
     role: "student",
     badge: "Student",
-    displayName: "Aarav Sharma",
-    description:
-      "Final Year B.Tech Computer Engineering student (Batch 2027) at SPIT Mumbai.",
+    displayName: "Riya Sharma",
+    description: "Final Year student (Batch 2027) at University of Mumbai.",
     whatToTry:
       "View your Readiness Score, explore the Mumbai railway milestone timeline, and mock pre-verify your student identity.",
     icon: GraduationCap,
@@ -48,7 +47,7 @@ const DEMO_ROLES: DemoRoleConfig[] = [
     badge: "Placement Officer",
     displayName: "Prof. Sunita Patil",
     description:
-      "Training & Placement Officer managing campus batches and students at VJTI Mumbai.",
+      "University Placement Coordinator managing student batches and campus recruitment at University of Mumbai.",
     whatToTry:
       "Toggle batch sharing permissions, review student readiness breakdowns, and track campus recruitment stats.",
     icon: Building2,

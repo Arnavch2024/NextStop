@@ -562,20 +562,35 @@ def seed_contacts(
     return contact_ids
 
 
-def seed_data(client: Client) -> Dict[str, int]:
+def seed_data(client: Client) -> Dict[str, Any]:
     """
     Top-level idempotent seed function.
     Can be run repeatedly without duplicating rows.
-    Returns counts: {'colleges': int, 'companies': int, 'contacts': int}
+    Loads from data/seed/*.csv if present, falling back to python lists.
+    Covers colleges, companies, college_domains, and sample contacts.
+    Returns counts and report.
     """
-    logger.info("Starting idempotent seed for Day 3 shared lake...")
-    colleges = seed_colleges(client)
-    companies = seed_companies(client)
-    contacts = seed_contacts(client, companies, colleges)
-    summary = {
-        "colleges": len(colleges),
-        "companies": len(companies),
-        "contacts": len(contacts),
-    }
-    logger.info(f"Seed complete: {summary}")
-    return summary
+    logger.info("Starting idempotent seed for shared lake...")
+    try:
+        from scripts.seed_csv_data import seed_all_csvs
+
+        csv_report = seed_all_csvs(client)
+        summary = {
+            "colleges": csv_report["colleges"]["added"] + csv_report["colleges"]["matched"],
+            "companies": csv_report["companies"]["added"] + csv_report["companies"]["matched"],
+            "contacts": csv_report["contacts"]["added"] + csv_report["contacts"]["matched"],
+        }
+        logger.info(f"Seed complete via CSV: {summary}")
+        return summary
+    except Exception as exc:
+        logger.warning(f"CSV loader failed or not available ({exc}), falling back to internal list seed.")
+        colleges = seed_colleges(client)
+        companies = seed_companies(client)
+        contacts = seed_contacts(client, companies, colleges)
+        summary = {
+            "colleges": len(colleges),
+            "companies": len(companies),
+            "contacts": len(contacts),
+        }
+        logger.info(f"Seed complete: {summary}")
+        return summary

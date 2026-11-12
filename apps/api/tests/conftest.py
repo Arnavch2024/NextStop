@@ -120,7 +120,7 @@ class FakeQueryBuilder:
 
         elif self._action == "upsert":
             created_or_updated = []
-            on_conf = getattr(self, "_on_conflict", None)
+            on_conf = getattr(self, "_on_conflict", None) or "id"
             for item in self._payload:
                 new_row = dict(item)
                 matched = False
