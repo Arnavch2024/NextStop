@@ -7,6 +7,7 @@
     "dev": "turbo run dev",
     "lint": "turbo run lint",
     "clean": "turbo run clean",
+    "publish:backend": "node scripts/publish-backend.js",
     "prepare": "husky"
   },
   "lint-staged": {

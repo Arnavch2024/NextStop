@@ -26,6 +26,37 @@ export function getMobileSupabaseClient(): SupabaseClient {
   return mobileClient;
 }
 
+const REGISTRY_CONFIG_URL = `${supabaseUrl}/storage/v1/object/public/app-config/backend_url.json`;
+
+/**
+ * Automatically discovers the live backend URL from the central Supabase Cloud registry.
+ * Zero user configuration needed: the server publishes its live URL to Supabase storage,
+ * and any mobile client anywhere in the world fetches and connects to it automatically.
+ */
+export async function fetchRemoteApiBaseUrl(): Promise<string | null> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3500);
+    const res = await fetch(REGISTRY_CONFIG_URL, {
+      signal: controller.signal,
+      headers: { "Cache-Control": "no-cache" },
+    });
+    clearTimeout(timeout);
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.api_base_url && typeof data.api_base_url === "string") {
+        const clean = data.api_base_url.trim().replace(/\/+$/, "");
+        if (clean.startsWith("http://") || clean.startsWith("https://")) {
+          return clean;
+        }
+      }
+    }
+  } catch {
+    // Ignore fetch error, fall back to candidate list
+  }
+  return null;
+}
+
 // Ordered list of candidate backend URLs for auto-discovery and failover
 export const CANDIDATE_API_URLS: string[] = [
   // 1. Android emulator loopback alias (highest priority on Android emulator)
@@ -45,6 +76,8 @@ let cachedWorkingBaseUrl: string | null = null;
 
 export async function getEffectiveApiBaseUrl(): Promise<string> {
   if (cachedWorkingBaseUrl) return cachedWorkingBaseUrl;
+
+  // 1. Check for manual developer override in AsyncStorage first
   try {
     const custom = await AsyncStorage.getItem("custom_api_base_url");
     if (custom && custom.trim()) {
@@ -52,8 +85,17 @@ export async function getEffectiveApiBaseUrl(): Promise<string> {
       return cachedWorkingBaseUrl;
     }
   } catch {
-    // Ignore storage read error and fallback to candidate list
+    // Ignore storage read error and proceed
   }
+
+  // 2. Automatically fetch live discovered URL from Supabase Cloud registry
+  const remoteUrl = await fetchRemoteApiBaseUrl();
+  if (remoteUrl) {
+    cachedWorkingBaseUrl = remoteUrl;
+    return remoteUrl;
+  }
+
+  // 3. Fallback to candidate list
   return CANDIDATE_API_URLS[0];
 }
 
@@ -69,9 +111,8 @@ export async function saveCustomApiBaseUrl(url: string): Promise<void> {
 
 /**
  * Executes an API request with automatic multi-host failover.
- * If the current URL encounters "Network request failed", it immediately
- * retries across alternate candidate URLs (e.g. switching between Emulator 10.0.2.2
- * and Wi-Fi IP 192.168.29.133) and saves the working URL.
+ * If the current URL encounters "Network request failed", it automatically
+ * retries across alternate candidate URLs and saves the working URL.
  */
 export async function withApiFallback<T>(
   fn: (baseUrl: string) => Promise<T>
@@ -90,7 +131,20 @@ export async function withApiFallback<T>(
 
     if (!isNetworkErr) throw err;
 
-    // Iterate through other candidates
+    // First attempt to re-check the remote registry in case the server URL moved
+    const freshRemote = await fetchRemoteApiBaseUrl();
+    if (freshRemote && freshRemote !== primaryUrl) {
+      try {
+        const res = await fn(freshRemote);
+        setEffectiveApiBaseUrl(freshRemote);
+        await AsyncStorage.setItem("custom_api_base_url", freshRemote);
+        return res;
+      } catch {
+        // Try next candidate
+      }
+    }
+
+    // Iterate through candidates
     for (const candidate of CANDIDATE_API_URLS) {
       if (candidate === primaryUrl) continue;
       try {

@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     SUPABASE_URL: str = Field(default="https://placeholder.supabase.co")
     SUPABASE_ANON_KEY: str = Field(default="placeholder-anon-key")
     SUPABASE_SERVICE_KEY: str = Field(default="placeholder-service-key")
+    API_PUBLIC_URL: Optional[str] = Field(default=None)
 
     # LLM Settings (Gemini default, provider swappable via env)
     LLM_PROVIDER: str = Field(default="gemini")

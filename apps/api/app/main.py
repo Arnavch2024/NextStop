@@ -32,6 +32,17 @@ async def lifespan(app: FastAPI):
         check_configured_models(raise_on_error=True)
     # Verify database schema on startup
     check_database_schema(raise_on_error=True)
+
+    # Auto-publish active public backend URL to Supabase discovery bucket if configured
+    if settings.API_PUBLIC_URL:
+        try:
+            from scripts.publish_backend_url import publish_backend_url
+
+            publish_backend_url(settings.API_PUBLIC_URL)
+            logger.info(f"Auto-published backend URL to Supabase registry: {settings.API_PUBLIC_URL}")
+        except Exception as pub_err:
+            logger.warning(f"Failed to auto-publish backend URL: {pub_err}")
+
     yield
 
 
