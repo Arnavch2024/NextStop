@@ -75,7 +75,29 @@ class Settings(BaseSettings):
     PORT: int = Field(default=8000)
     HOST: str = Field(default="0.0.0.0")
     ENVIRONMENT: str = Field(default="development")
-    CORS_ORIGINS: List[str] = Field(default=["*"])
+    CORS_ORIGINS: List[str] = Field(
+        default=[
+            "http://localhost:3000",
+            "http://localhost:3001",
+            "http://localhost:8000",
+            "http://localhost:8001",
+            "http://localhost:8080",
+            "http://localhost:8081",
+            "http://localhost:19000",
+            "http://localhost:19006",
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:3001",
+            "http://127.0.0.1:8000",
+            "http://127.0.0.1:8001",
+            "http://10.0.2.2:3000",
+            "http://10.0.2.2:8000",
+            "http://10.0.2.2:8001",
+            "http://10.0.2.2:8081",
+        ]
+    )
+    CORS_ORIGIN_REGEX: Optional[str] = Field(
+        default=r"^https?://(localhost|127\.0\.0\.1|10\.0\.2\.2|192\.168\.\d+\.\d+)(:\d+)?$"
+    )
 
     # Day 4 & Day 5 Role & Demo Settings
     DEMO_LOGIN_ENABLED: bool = Field(default=False)
