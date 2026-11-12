@@ -45,8 +45,6 @@ import {
   ArrowRight,
   RefreshCw,
   Bookmark,
-  ExternalLink,
-  Mail,
   ShieldCheck,
 } from "lucide-react";
 
@@ -117,6 +115,9 @@ export default function ChatPage() {
   );
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLElement>(null);
+  const isNearBottomRef = useRef<boolean>(true);
+  const isSendingRef = useRef<boolean>(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -309,7 +310,7 @@ export default function ChatPage() {
 
     const chanId = Math.random().toString(36).slice(2, 7);
 
-    // A. Chat messages sync
+    // A. Chat messages sync with bidirectional deduplication
     const chatChannel = supabase
       .channel(`raw_events_${userId}_${chanId}`)
       .on(
@@ -326,13 +327,55 @@ export default function ChatPage() {
             newEvent.source === "user_message" ||
             newEvent.source === "agent_message"
           ) {
+            const isUser = newEvent.source === "user_message";
+            const eventText = (newEvent.payload?.message || "").trim();
+
             setMessages((prev) => {
+              // 1. If this exact DB event UUID is already in messages, do nothing
               if (prev.some((m) => m.id === newEvent.id)) return prev;
+
+              // 2. If it's a user message, check if we have a matching local optimistic message
+              if (isUser) {
+                const optUserIdx = prev.findIndex(
+                  (m) =>
+                    m.sender === "user" &&
+                    (m.id.startsWith("user-") || m.text.trim() === eventText)
+                );
+                if (optUserIdx !== -1) {
+                  const updated = [...prev];
+                  updated[optUserIdx] = {
+                    ...updated[optUserIdx],
+                    id: newEvent.id,
+                    timestamp: newEvent.created_at,
+                  };
+                  return updated;
+                }
+              }
+
+              // 3. If it's an agent message, check if we already have it rendered from HTTP
+              if (!isUser) {
+                const agentIdx = prev.findIndex(
+                  (m) =>
+                    m.sender === "agent" &&
+                    (m.id.startsWith("agent-") || m.text.trim() === eventText)
+                );
+                if (agentIdx !== -1) {
+                  const updated = [...prev];
+                  updated[agentIdx] = {
+                    ...updated[agentIdx],
+                    id: newEvent.id,
+                    timestamp: newEvent.created_at,
+                  };
+                  return updated;
+                }
+              }
+
+              // 4. Otherwise, it was sent from another device (e.g. mobile) -> append it
               return [
                 ...prev,
                 {
                   id: newEvent.id,
-                  sender: newEvent.source === "user_message" ? "user" : "agent",
+                  sender: isUser ? "user" : "agent",
                   text: newEvent.payload?.message || "",
                   timestamp: newEvent.created_at,
                 },
@@ -441,10 +484,15 @@ export default function ChatPage() {
     };
   }, [userId, supabase]);
 
-  // Scroll to bottom on new messages
+  // Smoothly track bottom only if user was already near the bottom and new messages arrive
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isSending, isTranscribing, isUploadingResume]);
+    if (isNearBottomRef.current && chatContainerRef.current) {
+      chatContainerRef.current.scrollTo({
+        top: chatContainerRef.current.scrollHeight,
+        behavior: "smooth",
+      });
+    }
+  }, [messages]);
 
   // Clean up recording timer on unmount
   useEffect(() => {
@@ -463,12 +511,13 @@ export default function ChatPage() {
   async function handleSend(e?: React.FormEvent, overrideText?: string) {
     if (e) e.preventDefault();
     const text = (overrideText ?? inputText).trim();
-    if (!text || isSending || !sessionToken) return;
+    if (!text || isSendingRef.current || isSending || !sessionToken) return;
+    isSendingRef.current = true;
+    setIsSending(true);
 
     if (!overrideText) {
       setInputText("");
     }
-    setIsSending(true);
 
     const tempUserId = `user-${Date.now()}`;
     // Optimistic UI append
@@ -481,6 +530,16 @@ export default function ChatPage() {
         timestamp: new Date().toISOString(),
       },
     ]);
+
+    // Scroll chat container down for the new question
+    setTimeout(() => {
+      if (chatContainerRef.current) {
+        chatContainerRef.current.scrollTo({
+          top: chatContainerRef.current.scrollHeight,
+          behavior: "smooth",
+        });
+      }
+    }, 50);
 
     try {
       const response = await chat(API_BASE_URL, text, sessionToken);
@@ -503,19 +562,51 @@ export default function ChatPage() {
       }
 
       const agentId = `agent-${Date.now()}`;
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: agentId,
-          sender: "agent",
-          text: response.reply,
-          steps: response.steps,
-          records: response.records_created,
-          contacts: response.contacts,
-          cards: responseCards.length > 0 ? responseCards : undefined,
-          timestamp: new Date().toISOString(),
-        },
-      ]);
+      setMessages((prev) => {
+        // Check if Realtime already received this reply while HTTP completed
+        const existingAgentIdx = prev.findIndex(
+          (m) =>
+            m.sender === "agent" &&
+            m.text.trim() === response.reply.trim() &&
+            !m.steps &&
+            !m.cards
+        );
+
+        if (existingAgentIdx !== -1) {
+          const updated = [...prev];
+          updated[existingAgentIdx] = {
+            ...updated[existingAgentIdx],
+            steps: response.steps,
+            records: response.records_created,
+            contacts: response.contacts,
+            cards: responseCards.length > 0 ? responseCards : undefined,
+          };
+          return updated;
+        }
+
+        return [
+          ...prev,
+          {
+            id: agentId,
+            sender: "agent",
+            text: response.reply,
+            steps: response.steps,
+            records: response.records_created,
+            contacts: response.contacts,
+            cards: responseCards.length > 0 ? responseCards : undefined,
+            timestamp: new Date().toISOString(),
+          },
+        ];
+      });
+
+      if (isNearBottomRef.current && chatContainerRef.current) {
+        setTimeout(() => {
+          chatContainerRef.current?.scrollTo({
+            top: chatContainerRef.current.scrollHeight,
+            behavior: "smooth",
+          });
+        }, 100);
+      }
     } catch (err: any) {
       setMessages((prev) => [
         ...prev,
@@ -527,6 +618,7 @@ export default function ChatPage() {
         },
       ]);
     } finally {
+      isSendingRef.current = false;
       setIsSending(false);
     }
   }
@@ -918,7 +1010,17 @@ export default function ChatPage() {
       )}
 
       {/* Chat Messages List */}
-      <main className="flex-1 overflow-y-auto p-4 sm:p-6">
+      <main
+        ref={chatContainerRef}
+        onScroll={() => {
+          if (!chatContainerRef.current) return;
+          const { scrollTop, scrollHeight, clientHeight } =
+            chatContainerRef.current;
+          isNearBottomRef.current =
+            scrollHeight - scrollTop - clientHeight < 120;
+        }}
+        className="flex-1 overflow-y-auto p-4 sm:p-6"
+      >
         <div className="mx-auto max-w-3xl space-y-4">
           {messages.length === 0 && (
             <div className="my-12 text-center">
