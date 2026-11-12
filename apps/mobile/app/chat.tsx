@@ -126,6 +126,8 @@ export default function ChatScreen() {
   const flatListRef = useRef<FlatList>(null);
   const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
   const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isSendingRef = useRef<boolean>(false);
+  const isNearBottomRef = useRef<boolean>(true);
 
   useEffect(() => {
     getEffectiveApiBaseUrl().then((url) => {
@@ -375,7 +377,7 @@ export default function ChatScreen() {
   useEffect(() => {
     if (!userId) return;
 
-    // Messages sync
+    // Messages sync with bidirectional deduplication
     const chatChannel = supabase
       .channel(`mobile_raw_events_${userId}`)
       .on(
@@ -392,13 +394,55 @@ export default function ChatScreen() {
             newEvent.source === "user_message" ||
             newEvent.source === "agent_message"
           ) {
+            const isUser = newEvent.source === "user_message";
+            const eventText = (newEvent.payload?.message || "").trim();
+
             setMessages((prev) => {
+              // 1. If this exact DB event UUID is already in the list, do nothing
               if (prev.some((m) => m.id === newEvent.id)) return prev;
+
+              // 2. If it's a user message, check if we have a matching local optimistic message
+              if (isUser) {
+                const optUserIdx = prev.findIndex(
+                  (m) =>
+                    m.sender === "user" &&
+                    (m.id.startsWith("user-") || m.text.trim() === eventText)
+                );
+                if (optUserIdx !== -1) {
+                  const updated = [...prev];
+                  updated[optUserIdx] = {
+                    ...updated[optUserIdx],
+                    id: newEvent.id,
+                    timestamp: newEvent.created_at,
+                  };
+                  return updated;
+                }
+              }
+
+              // 3. If it's an agent message, check if we already have it rendered from HTTP
+              if (!isUser) {
+                const agentIdx = prev.findIndex(
+                  (m) =>
+                    m.sender === "agent" &&
+                    (m.id.startsWith("agent-") || m.text.trim() === eventText)
+                );
+                if (agentIdx !== -1) {
+                  const updated = [...prev];
+                  updated[agentIdx] = {
+                    ...updated[agentIdx],
+                    id: newEvent.id,
+                    timestamp: newEvent.created_at,
+                  };
+                  return updated;
+                }
+              }
+
+              // 4. Otherwise, this event was sent from another device (e.g. laptop) -> append it
               return [
                 ...prev,
                 {
                   id: newEvent.id,
-                  sender: newEvent.source === "user_message" ? "user" : "agent",
+                  sender: isUser ? "user" : "agent",
                   text: newEvent.payload?.message || "",
                   timestamp: newEvent.created_at,
                 },
@@ -520,12 +564,13 @@ export default function ChatScreen() {
 
   async function handleSend(overrideText?: string) {
     const text = (overrideText ?? inputText).trim();
-    if (!text || isSending || !sessionToken) return;
+    if (!text || isSendingRef.current || isSending || !sessionToken) return;
+    isSendingRef.current = true;
+    setIsSending(true);
 
     if (!overrideText) {
       setInputText("");
     }
-    setIsSending(true);
 
     const tempUserId = `user-${Date.now()}`;
     setMessages((prev) => [
@@ -537,6 +582,11 @@ export default function ChatScreen() {
         timestamp: new Date().toISOString(),
       },
     ]);
+
+    // Ensure view tracks user message without scroll conflicts
+    setTimeout(() => {
+      flatListRef.current?.scrollToEnd({ animated: true });
+    }, 50);
 
     try {
       const response = await withApiFallback((url) => {
@@ -562,19 +612,48 @@ export default function ChatScreen() {
       }
 
       const agentId = `agent-${Date.now()}`;
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: agentId,
-          sender: "agent",
-          text: response.reply,
-          steps: response.steps,
-          records: response.records_created,
-          contacts: response.contacts,
-          cards: responseCards.length > 0 ? responseCards : undefined,
-          timestamp: new Date().toISOString(),
-        },
-      ]);
+      setMessages((prev) => {
+        // Check if Realtime already received this reply while HTTP completed
+        const existingAgentIdx = prev.findIndex(
+          (m) =>
+            m.sender === "agent" &&
+            m.text.trim() === response.reply.trim() &&
+            !m.steps &&
+            !m.cards
+        );
+
+        if (existingAgentIdx !== -1) {
+          const updated = [...prev];
+          updated[existingAgentIdx] = {
+            ...updated[existingAgentIdx],
+            steps: response.steps,
+            records: response.records_created,
+            contacts: response.contacts,
+            cards: responseCards.length > 0 ? responseCards : undefined,
+          };
+          return updated;
+        }
+
+        return [
+          ...prev,
+          {
+            id: agentId,
+            sender: "agent",
+            text: response.reply,
+            steps: response.steps,
+            records: response.records_created,
+            contacts: response.contacts,
+            cards: responseCards.length > 0 ? responseCards : undefined,
+            timestamp: new Date().toISOString(),
+          },
+        ];
+      });
+
+      if (isNearBottomRef.current) {
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+      }
     } catch (err: any) {
       setMessages((prev) => [
         ...prev,
@@ -586,6 +665,7 @@ export default function ChatScreen() {
         },
       ]);
     } finally {
+      isSendingRef.current = false;
       setIsSending(false);
     }
   }
@@ -874,9 +954,20 @@ export default function ChatScreen() {
           data={messages}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.messageList}
-          onContentSizeChange={() =>
-            flatListRef.current?.scrollToEnd({ animated: true })
-          }
+          onScroll={(e) => {
+            const { layoutMeasurement, contentOffset, contentSize } =
+              e.nativeEvent;
+            const paddingToBottom = 120;
+            isNearBottomRef.current =
+              layoutMeasurement.height + contentOffset.y >=
+              contentSize.height - paddingToBottom;
+          }}
+          scrollEventThrottle={32}
+          onContentSizeChange={() => {
+            if (isNearBottomRef.current) {
+              flatListRef.current?.scrollToEnd({ animated: false });
+            }
+          }}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyIcon}>{roleConfig.icon}</Text>
@@ -1205,6 +1296,13 @@ export default function ChatScreen() {
             onChangeText={setInputText}
             placeholder={roleConfig.placeholder}
             placeholderTextColor="#94a3b8"
+            returnKeyType="send"
+            onSubmitEditing={() => {
+              if (!isSendingRef.current && inputText.trim()) {
+                handleSend();
+              }
+            }}
+            blurOnSubmit={false}
             editable={
               !isSending &&
               !isRecording &&
@@ -1219,7 +1317,11 @@ export default function ChatScreen() {
               (!inputText.trim() || isSending || isRecording) &&
                 styles.sendBtnDisabled,
             ]}
-            onPress={() => handleSend()}
+            onPress={() => {
+              if (!isSendingRef.current && inputText.trim()) {
+                handleSend();
+              }
+            }}
             disabled={!inputText.trim() || isSending || isRecording}
           >
             <Text style={styles.sendBtnText}>&rarr;</Text>
@@ -1301,6 +1403,27 @@ export default function ChatScreen() {
                 Quick presets:
               </Text>
               <View style={styles.presetButtonsRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.presetBtn,
+                    { backgroundColor: "#eff6ff", borderColor: "#60a5fa" },
+                  ]}
+                  onPress={() => {
+                    const tunnelUrl =
+                      "https://characteristics-minds-compute-friends.trycloudflare.com";
+                    setCustomServerUrlInput(tunnelUrl);
+                    handleTestServerConnection(tunnelUrl);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.presetBtnText,
+                      { color: "#1d4ed8", fontWeight: "700" },
+                    ]}
+                  >
+                    ☁️ Cloudflare HTTPS Tunnel
+                  </Text>
+                </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.presetBtn}
                   onPress={() => {

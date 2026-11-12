@@ -30,11 +30,13 @@ export function getMobileSupabaseClient(): SupabaseClient {
 export const CANDIDATE_API_URLS: string[] = [
   // 1. Android emulator loopback alias (highest priority on Android emulator)
   Platform.OS === "android" ? "http://10.0.2.2:8001" : "http://localhost:8001",
-  // 2. Wi-Fi LAN IP (highest priority for physical devices on same Wi-Fi)
+  // 2. Active Cloudflare HTTPS Tunnel (reliable across all devices, zero cleartext restrictions)
+  "https://characteristics-minds-compute-friends.trycloudflare.com",
+  // 3. Wi-Fi LAN IP (for physical devices on same Wi-Fi)
   "http://192.168.29.133:8001",
-  // 3. Configured environment URL
+  // 4. Configured environment URL
   process.env.EXPO_PUBLIC_API_BASE_URL || "",
-  // 4. Standard localhosts
+  // 5. Standard localhosts
   "http://localhost:8001",
   "http://127.0.0.1:8001",
 ].filter(Boolean);
