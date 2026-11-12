@@ -15,6 +15,7 @@
     },
     "android": {
       "package": "com.wildcatter.recruiting",
+      "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "backgroundColor": "#ffffff"
       }
