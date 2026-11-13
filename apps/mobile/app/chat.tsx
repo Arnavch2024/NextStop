@@ -402,9 +402,13 @@ export default function ChatScreen() {
   useEffect(() => {
     if (!userId) return;
 
+    // Use a unique mount-instance suffix so re-mounting never conflicts with
+    // a stale channel that hasn't been cleaned up yet by Supabase.
+    const mountId = Date.now();
+
     // Messages sync with bidirectional deduplication
     const chatChannel = supabase
-      .channel(`mobile_raw_events_${userId}`)
+      .channel(`mobile_raw_events_${userId}_${mountId}`)
       .on(
         "postgres_changes",
         {
@@ -480,7 +484,7 @@ export default function ChatScreen() {
 
     // Score events sync -> "Updated from your laptop"
     const scoreChannel = supabase
-      .channel(`mobile_score_events_${userId}`)
+      .channel(`mobile_score_events_${userId}_${mountId}`)
       .on(
         "postgres_changes",
         {
@@ -502,7 +506,7 @@ export default function ChatScreen() {
 
     // Profile table updates
     const profileChannel = supabase
-      .channel(`mobile_profile_events_${userId}`)
+      .channel(`mobile_profile_events_${userId}_${mountId}`)
       .on(
         "postgres_changes",
         {
@@ -537,7 +541,7 @@ export default function ChatScreen() {
 
     // Saved contacts sync -> "Updated from your laptop"
     const savedContactsChannel = supabase
-      .channel(`mobile_saved_contacts_${userId}`)
+      .channel(`mobile_saved_contacts_${userId}_${mountId}`)
       .on(
         "postgres_changes",
         {

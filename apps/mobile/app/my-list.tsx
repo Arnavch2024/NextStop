@@ -116,8 +116,12 @@ export default function MyListScreen() {
   useEffect(() => {
     if (!userId || !sessionToken) return;
 
+    // Unique per-mount suffix prevents "cannot add callbacks after subscribe()" crash
+    // when navigating back to this screen without a full unmount.
+    const mountId = Date.now();
+
     const channel = supabase
-      .channel(`mobile_saved_sync_${userId}`)
+      .channel(`mobile_saved_sync_${userId}_${mountId}`)
       .on(
         "postgres_changes",
         {
