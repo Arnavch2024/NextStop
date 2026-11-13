@@ -1,0 +1,98 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: "Build Type (release or debug)"
+        required: true
+        default: "release"
+        type: choice
+        options:
+          - release
+          - debug
+      api_base_url:
+        description: "Backend API URL (Cloudflare tunnel or custom URL)"
+        required: false
+        default: "https://towards-interference-paths-mag.trycloudflare.com"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-apk:
+    name: Build Android APK (${{ github.event.inputs.build_type || 'release' }})
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "pnpm"
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: 17
+          cache: "gradle"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Monorepo Dependencies
+        run: pnpm install --frozen-lockfile || pnpm install
+
+      - name: Build Shared Workspace Package
+        run: pnpm --filter @recruiting/shared build
+
+      - name: Prebuild Native Android Project
+        working-directory: apps/mobile
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: "https://bsegerbrkbxnosyojmwf.supabase.co"
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJzZWdlcmJya2J4bm9zeW9qbXdmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM5ODE5ODQsImV4cCI6MjEwOTU1Nzk4NH0.kmNEXwvifmNltHamteIKuZUUJ2w7Sqip5WnhQFsI4dQ"
+          EXPO_PUBLIC_API_BASE_URL: ${{ github.event.inputs.api_base_url || 'https://towards-interference-paths-mag.trycloudflare.com' }}
+        run: |
+          npx expo prebuild --platform android --clean
+
+      - name: Build APK with Gradle
+        working-directory: apps/mobile/android
+        run: |
+          chmod +x gradlew
+          if [ "${{ github.event.inputs.build_type }}" = "debug" ]; then
+            echo "Building Debug APK..."
+            ./gradlew assembleDebug --no-daemon --stacktrace
+          else
+            echo "Building Release APK..."
+            ./gradlew assembleRelease --no-daemon --stacktrace
+          fi
+
+      - name: Locate and Stage APK
+        run: |
+          mkdir -p build-output
+          APK_FILE=$(find apps/mobile/android/app/build/outputs/apk -name "*.apk" | head -n 1)
+          if [ -z "$APK_FILE" ]; then
+            echo "Error: No APK file was generated!"
+            exit 1
+          fi
+          echo "Found APK at: $APK_FILE"
+          cp "$APK_FILE" build-output/nextstop-recruiting.apk
+          ls -lh build-output/
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextstop-recruiting-${{ github.event.inputs.build_type || 'release' }}-apk
+          path: build-output/nextstop-recruiting.apk
+          if-no-files-found: error
+          retention-days: 30

@@ -6,10 +6,15 @@ node_modules
 dist
 .next
 out
+# Expo / Native
 .expo
 .eas
 *.apk
 *.aab
+apps/mobile/android/
+apps/mobile/ios/
+android/
+ios/
 
 # Python virtual environment and caches
 .venv
