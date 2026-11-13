@@ -61,15 +61,11 @@ export async function fetchRemoteApiBaseUrl(): Promise<string | null> {
 export const CANDIDATE_API_URLS: string[] = [
   // 1. Production Render Cloud Backend (always live, zero cleartext restrictions)
   "https://nextstop-backend-1xbe.onrender.com",
-  // 2. Android emulator loopback alias (for local dev)
-  Platform.OS === "android" ? "http://10.0.2.2:8001" : "http://localhost:8001",
-  // 3. Active Cloudflare HTTPS Tunnel
-  "https://towards-interference-paths-mag.trycloudflare.com",
-  // 4. Wi-Fi LAN IP (for physical devices on same Wi-Fi)
-  "http://192.168.29.133:8001",
-  // 5. Configured environment URL
+  // 2. Configured environment URL (if custom)
   process.env.EXPO_PUBLIC_API_BASE_URL || "",
-  // 6. Standard localhosts
+  // 3. Android emulator loopback alias (for local dev)
+  Platform.OS === "android" ? "http://10.0.2.2:8001" : "http://localhost:8001",
+  // 4. Standard localhosts (for local dev only)
   "http://localhost:8001",
   "http://127.0.0.1:8001",
 ].filter(Boolean);

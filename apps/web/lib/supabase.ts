@@ -1,10 +1,17 @@
 import { createSharedSupabaseClient } from "@recruiting/shared";
 import { SupabaseClient } from "@supabase/supabase-js";
 
+// Production defaults (Supabase project bsegerbrkbxnosyojmwf)
+const PRODUCTION_SUPABASE_URL = "https://bsegerbrkbxnosyojmwf.supabase.co";
+const PRODUCTION_SUPABASE_ANON_KEY =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJzZWdlcmJya2J4bm9zeW9qbXdmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM5ODE5ODQsImV4cCI6MjEwOTU1Nzk4NH0.kmNEXwvifmNltHamteIKuZUUJ2w7Sqip5WnhQFsI4dQ";
+export const PRODUCTION_RENDER_BACKEND_URL =
+  "https://nextstop-backend-1xbe.onrender.com";
+
 const supabaseUrl =
-  process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
+  process.env.NEXT_PUBLIC_SUPABASE_URL || PRODUCTION_SUPABASE_URL;
 const supabaseAnonKey =
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-anon-key";
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || PRODUCTION_SUPABASE_ANON_KEY;
 
 let browserClient: SupabaseClient | null = null;
 
@@ -38,7 +45,7 @@ export async function getEffectiveApiBaseUrl(): Promise<string> {
   // 2. Fetch live discovered URL from Supabase Cloud registry
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3000);
+    const timeout = setTimeout(() => controller.abort(), 2500);
     const res = await fetch(REGISTRY_CONFIG_URL, {
       signal: controller.signal,
       cache: "no-store",
@@ -53,12 +60,12 @@ export async function getEffectiveApiBaseUrl(): Promise<string> {
       }
     }
   } catch {
-    // Fallback to local
+    // Fallback to production cloud backend
   }
 
-  // 3. Fallback to default port 8001
-  return "http://localhost:8001";
+  // 3. Fallback to production Render Cloud backend
+  return PRODUCTION_RENDER_BACKEND_URL;
 }
 
 export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8001";
+  process.env.NEXT_PUBLIC_API_BASE_URL || PRODUCTION_RENDER_BACKEND_URL;

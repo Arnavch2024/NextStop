@@ -45,15 +45,20 @@ export default function LoginPage() {
         const { error } = await supabase.auth.signInWithOtp({
           email,
           options: {
-            emailRedirectTo: `${window.location.origin}/`,
+            emailRedirectTo: `${window.location.origin}/auth/callback`,
           },
         });
         if (error) throw error;
-        setInfoMsg("Check your email for the magic login link!");
+        setInfoMsg(
+          "Check your email for the magic login link! Click it to sign in instantly."
+        );
       } else if (isSignUp) {
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
+          options: {
+            emailRedirectTo: `${window.location.origin}/auth/callback`,
+          },
         });
         if (error) throw error;
 
@@ -61,7 +66,7 @@ export default function LoginPage() {
           router.replace("/onboarding");
         } else {
           setInfoMsg(
-            "Account created! Please check your email to verify your address or log in."
+            "Account created! Please check your email inbox to verify your address, or sign in below."
           );
         }
       } else {
@@ -69,7 +74,20 @@ export default function LoginPage() {
           email,
           password,
         });
-        if (error) throw error;
+        if (error) {
+          if (
+            error.message.toLowerCase().includes("email not confirmed") ||
+            error.message.toLowerCase().includes("invalid login credentials")
+          ) {
+            // Provide clear advice if email confirmation is pending
+            throw new Error(
+              error.message.toLowerCase().includes("email not confirmed")
+                ? "Your email is not verified yet. Please check your inbox for the confirmation email, or choose 'Use magic link' below to sign in directly."
+                : "Invalid email or password. Please verify your credentials or use magic link."
+            );
+          }
+          throw error;
+        }
 
         const { data: profile } = await supabase
           .from("profiles")

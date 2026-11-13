@@ -74,13 +74,13 @@ export default function OnboardingPage() {
       }
       setSessionToken(session.access_token);
 
-      // If user already has a configured role (not student or null), route to dashboard
+      // If user already has a configured role, route directly to their dashboard
       const { data: profile } = await supabase
         .from("profiles")
         .select("role")
         .eq("id", session.user.id)
         .single();
-      if (profile?.role && profile.role !== "student") {
+      if (profile?.role) {
         router.replace(getRoleDashboardPath(profile.role));
       }
     });
@@ -99,8 +99,32 @@ export default function OnboardingPage() {
       setStatusMsg(res.message);
       setTimeout(() => {
         router.replace(getRoleDashboardPath(res.role));
-      }, 1000);
+      }, 800);
     } catch (err: any) {
+      // Resilient fallback: directly update Supabase profiles table
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (session?.user?.id) {
+          const { error: directErr } = await supabase.from("profiles").upsert({
+            id: session.user.id,
+            role,
+            updated_at: new Date().toISOString(),
+          });
+
+          if (!directErr) {
+            setStatusMsg("Role saved successfully! Directing to dashboard...");
+            setTimeout(() => {
+              router.replace(getRoleDashboardPath(role));
+            }, 800);
+            return;
+          }
+        }
+      } catch (fallbackErr) {
+        console.warn("Direct profile update fallback failed:", fallbackErr);
+      }
+
       setErrorMsg(
         err?.message || "Failed to set profile role. Please try again."
       );

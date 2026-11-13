@@ -82,7 +82,14 @@ export default function LoginScreen() {
           email,
           password,
         });
-        if (error) throw error;
+        if (error) {
+          if (error.message.toLowerCase().includes("email not confirmed")) {
+            throw new Error(
+              "Your email is not verified yet. Please check your inbox for the confirmation email, or choose 'Use magic link' to sign in instantly."
+            );
+          }
+          throw error;
+        }
 
         const { data: profile } = await supabase
           .from("profiles")

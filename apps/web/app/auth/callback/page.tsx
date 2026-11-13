@@ -15,7 +15,21 @@ export default function AuthCallbackPage() {
   useEffect(() => {
     async function processCallback() {
       try {
-        // Exchange code if PKCE query parameter 'code' is present
+        // 1. Support Implicit hash fragment tokens (#access_token=...&refresh_token=...)
+        if (typeof window !== "undefined" && window.location.hash) {
+          const hashClean = window.location.hash.replace(/^#/, "");
+          const hashParams = new URLSearchParams(hashClean);
+          const accessToken = hashParams.get("access_token");
+          const refreshToken = hashParams.get("refresh_token");
+          if (accessToken && refreshToken) {
+            await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken,
+            });
+          }
+        }
+
+        // 2. Exchange code if PKCE query parameter 'code' is present
         const urlParams = new URLSearchParams(window.location.search);
         const code = urlParams.get("code");
 
@@ -36,18 +50,35 @@ export default function AuthCallbackPage() {
           return;
         }
 
-        // Query user profile from public.profiles
-        const { data: profile, error: profileError } = await supabase
+        // 3. Query user profile from public.profiles
+        const { data: initialProfile, error: profileError } = await supabase
           .from("profiles")
           .select("role")
           .eq("id", session.user.id)
           .single();
 
-        if (profileError && profileError.code !== "PGRST116") {
-          console.warn("Could not load user profile:", profileError);
+        let profile = initialProfile;
+
+        // If profile row doesn't exist yet, provision it immediately
+        if (!profile && profileError && profileError.code === "PGRST116") {
+          const fallbackName =
+            session.user.user_metadata?.full_name ||
+            session.user.user_metadata?.name ||
+            session.user.email?.split("@")[0] ||
+            "User";
+          const { data: newProfile } = await supabase
+            .from("profiles")
+            .upsert({
+              id: session.user.id,
+              display_name: fallbackName,
+              updated_at: new Date().toISOString(),
+            })
+            .select("role")
+            .single();
+          profile = newProfile;
         }
 
-        // Direct to onboarding if no role is chosen yet, else sync and route to role dashboard
+        // 4. Direct to onboarding if no role is chosen yet, else sync and route to role dashboard
         if (!profile?.role) {
           router.replace("/onboarding");
         } else {

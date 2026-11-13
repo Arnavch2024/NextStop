@@ -6,12 +6,13 @@ import {
   ScrollView,
   StyleSheet,
   ActivityIndicator,
+  Alert,
   useWindowDimensions,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { getMobileSupabaseClient } from "../lib/supabase";
-import { ProfileRole } from "@recruiting/shared";
+import { getMobileSupabaseClient, withApiFallback } from "../lib/supabase";
+import { ProfileRole, completeOnboarding } from "@recruiting/shared";
 
 interface RoleCard {
   role: ProfileRole;
@@ -59,14 +60,30 @@ export default function OnboardingScreen() {
 
   const [loadingRole, setLoadingRole] = useState<ProfileRole | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
+  const [sessionToken, setSessionToken] = useState<string | null>(null);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!session) {
         router.replace("/login");
         return;
       }
       setUserId(session.user.id);
+      setSessionToken(session.access_token);
+
+      // If user already has a role, route to their dashboard
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", session.user.id)
+        .single();
+      if (profile?.role) {
+        if (profile.role === "student") {
+          router.replace("/(tabs)/home");
+        } else {
+          router.replace("/chat");
+        }
+      }
     });
   }, [router, supabase]);
 
@@ -75,6 +92,21 @@ export default function OnboardingScreen() {
     setLoadingRole(role);
 
     try {
+      // 1. Try server-side onboarding to link college / company records
+      if (sessionToken) {
+        try {
+          await withApiFallback((url) =>
+            completeOnboarding(url, sessionToken, { role })
+          );
+        } catch (apiErr) {
+          console.warn(
+            "Backend onboarding failed, falling back to direct profile update",
+            apiErr
+          );
+        }
+      }
+
+      // 2. Direct profile update to ensure role is persisted in Supabase
       const { error } = await supabase.from("profiles").upsert({
         id: userId,
         role,
@@ -82,8 +114,17 @@ export default function OnboardingScreen() {
       });
 
       if (error) throw error;
-      router.replace("/chat");
-    } catch {
+
+      if (role === "student") {
+        router.replace("/(tabs)/home");
+      } else {
+        router.replace("/chat");
+      }
+    } catch (err: any) {
+      Alert.alert(
+        "Onboarding Error",
+        err?.message || "Failed to set profile role. Please try again."
+      );
       setLoadingRole(null);
     }
   }
