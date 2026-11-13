@@ -4,9 +4,22 @@ import { getStripeClient, PRICING_PLANS } from "@/lib/stripe";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { plan, interval = "month", userId, userEmail, returnOrigin } = body;
+    const {
+      plan,
+      planId,
+      interval,
+      billingCycle,
+      userId,
+      userEmail,
+      returnOrigin,
+    } = body;
 
-    const planConfig = PRICING_PLANS[plan];
+    const selectedPlan = plan || planId;
+    const rawInterval = interval || billingCycle || "month";
+    const normalizedInterval =
+      rawInterval === "annual" || rawInterval === "year" ? "year" : "month";
+
+    const planConfig = PRICING_PLANS[selectedPlan];
     if (!planConfig || planConfig.id === "free") {
       return NextResponse.json(
         { error: "Invalid plan selected for checkout." },
@@ -22,8 +35,9 @@ export async function POST(req: NextRequest) {
       "https://nextstop-web.vercel.app";
 
     const unitAmount =
-      interval === "year" ? planConfig.annualCents : planConfig.monthlyCents;
-    const intervalValue = interval === "year" ? "year" : "month";
+      normalizedInterval === "year"
+        ? planConfig.annualCents
+        : planConfig.monthlyCents;
 
     const sessionParams: any = {
       payment_method_types: ["card"],
@@ -37,7 +51,7 @@ export async function POST(req: NextRequest) {
             },
             unit_amount: unitAmount,
             recurring: {
-              interval: intervalValue,
+              interval: normalizedInterval,
             },
           },
           quantity: 1,
@@ -46,12 +60,12 @@ export async function POST(req: NextRequest) {
       mode: "subscription",
       allow_promotion_codes: true,
       billing_address_collection: "auto",
-      success_url: `${origin}/pricing?success=true&plan=${plan}&session_id={CHECKOUT_SESSION_ID}`,
+      success_url: `${origin}/pricing?success=true&plan=${selectedPlan}&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/pricing?canceled=true`,
       metadata: {
         userId: userId || "anonymous",
-        plan: plan,
-        interval: intervalValue,
+        plan: selectedPlan,
+        interval: normalizedInterval,
       },
     };
 
@@ -68,6 +82,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       sessionId: session.id,
       url: session.url,
+      checkoutUrl: session.url,
     });
   } catch (err: any) {
     console.error("Stripe checkout session creation failed:", err);

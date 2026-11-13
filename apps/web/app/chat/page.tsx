@@ -26,6 +26,13 @@ import { ChatConfirmationCard } from "@/app/components/ChatConfirmationCard";
 import { SwitchDemoRoleButton } from "@/app/components/SwitchDemoRoleButton";
 import { MarkdownText } from "@/app/components/MarkdownText";
 import { DownloadAppButton } from "@/app/components/DownloadAppButton";
+import { ProBadge } from "@/app/components/ProBadge";
+import { UpgradeLimitModal } from "@/app/components/UpgradeLimitModal";
+import {
+  canPerformAction,
+  recordActionUsage,
+  QuotaAction,
+} from "@/lib/subscription";
 import {
   Send,
   Mic,
@@ -115,6 +122,11 @@ export default function ChatPage() {
   const [draftingContact, setDraftingContact] = useState<ContactCard | null>(
     null
   );
+
+  // Upgrade & Quota Limit modal state
+  const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
+  const [upgradeAction, setUpgradeAction] =
+    useState<QuotaAction>("chat_messages");
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLElement>(null);
@@ -514,11 +526,23 @@ export default function ChatPage() {
     if (e) e.preventDefault();
     const text = (overrideText ?? inputText).trim();
     if (!text || isSendingRef.current || isSending || !sessionToken) return;
+
+    // Check Free Quota limit (bypass for demo profiles)
+    if (!isDemo && !canPerformAction("chat_messages")) {
+      setUpgradeAction("chat_messages");
+      setIsUpgradeModalOpen(true);
+      return;
+    }
+
     isSendingRef.current = true;
     setIsSending(true);
 
     if (!overrideText) {
       setInputText("");
+    }
+
+    if (!isDemo) {
+      recordActionUsage("chat_messages");
     }
 
     const tempUserId = `user-${Date.now()}`;
@@ -802,6 +826,12 @@ export default function ChatPage() {
       return;
     }
 
+    if (!isDemo && !canPerformAction("resume_evaluations")) {
+      setUpgradeAction("resume_evaluations");
+      setIsUpgradeModalOpen(true);
+      return;
+    }
+
     setIsUploadingResume(true);
 
     // Optimistic user note
@@ -823,6 +853,10 @@ export default function ChatPage() {
         file.name,
         sessionToken
       );
+
+      if (!isDemo) {
+        recordActionUsage("resume_evaluations");
+      }
 
       const agentMsgId = `agent-resume-${Date.now()}`;
       setMessages((prev) => [
@@ -921,6 +955,15 @@ export default function ChatPage() {
               <span className="rounded-full bg-indigo-100 px-2 py-0.2 text-[10px] font-semibold text-indigo-700 capitalize">
                 {role?.replace("_", " ")}
               </span>
+              <ProBadge
+                role={role === "recruiter" ? "recruiter" : "student"}
+                showQuotaFor={isDemo ? undefined : "chat_messages"}
+                quotaLabel="chats"
+                onClickUpgrade={() => {
+                  setUpgradeAction("chat_messages");
+                  setIsUpgradeModalOpen(true);
+                }}
+              />
             </div>
           </div>
         </div>
@@ -1530,6 +1573,14 @@ export default function ChatPage() {
         contact={draftingContact}
         token={sessionToken}
         onToast={showToast}
+      />
+
+      {/* Upgrade & Free Quota Limit Modal */}
+      <UpgradeLimitModal
+        isOpen={isUpgradeModalOpen}
+        onClose={() => setIsUpgradeModalOpen(false)}
+        action={upgradeAction}
+        role={role === "recruiter" ? "recruiter" : "student"}
       />
     </div>
   );

@@ -24,15 +24,14 @@ import {
   Smartphone,
   X,
   ShieldCheck,
-  Building2,
-  AlertTriangle,
-  RotateCcw,
 } from "lucide-react";
 import { RailwayTimeline } from "@/app/components/RailwayTimeline";
 import { PreVerifySheet } from "@/app/components/PreVerifySheet";
 import { ReferenceAuthSheet } from "@/app/components/ReferenceAuthSheet";
 import { SwitchDemoRoleButton } from "@/app/components/SwitchDemoRoleButton";
 import { DownloadAppButton } from "@/app/components/DownloadAppButton";
+import { ProBadge } from "@/app/components/ProBadge";
+import { UpgradeLimitModal } from "@/app/components/UpgradeLimitModal";
 
 export default function StudentHomePage() {
   const router = useRouter();
@@ -48,6 +47,7 @@ export default function StudentHomePage() {
   );
   const [syncToast, setSyncToast] = useState<string | null>(null);
   const [isDemo, setIsDemo] = useState(false);
+  const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
   // Modals state
   const [isPreVerifyOpen, setIsPreVerifyOpen] = useState(false);
@@ -293,11 +293,17 @@ export default function StudentHomePage() {
             <h1 className="text-lg font-bold text-slate-900">
               Student Dashboard
             </h1>
-            <p className="text-xs text-slate-500">
-              {student?.full_name
-                ? `${student.full_name} • Batch ${student.batch_year}`
-                : "Campus Recruiting"}
-            </p>
+            <div className="flex items-center gap-2 mt-0.5">
+              <p className="text-xs text-slate-500">
+                {student?.full_name
+                  ? `${student.full_name} • Batch ${student.batch_year}`
+                  : "Campus Recruiting"}
+              </p>
+              <ProBadge
+                role="student"
+                onClickUpgrade={() => setIsUpgradeModalOpen(true)}
+              />
+            </div>
           </div>
           <div className="flex items-center gap-2.5">
             <DownloadAppButton variant="header" />
@@ -609,6 +615,12 @@ export default function StudentHomePage() {
               .catch(() => {});
           }
         }}
+      />
+
+      <UpgradeLimitModal
+        isOpen={isUpgradeModalOpen}
+        onClose={() => setIsUpgradeModalOpen(false)}
+        role="student"
       />
     </div>
   );

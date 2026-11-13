@@ -12,7 +12,6 @@ import {
   CreditCard,
   ArrowLeft,
   Loader2,
-  Lock,
   Building2,
   GraduationCap,
   CheckCircle2,
@@ -20,6 +19,7 @@ import {
 } from "lucide-react";
 import { getCurrentSession } from "@/lib/auth";
 import { PRICING_PLANS } from "@/lib/stripe";
+import { setProSubscription, getCurrentPlan } from "@/lib/subscription";
 
 function PricingContent() {
   const router = useRouter();
@@ -33,11 +33,27 @@ function PricingContent() {
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [userSession, setUserSession] = useState<any>(null);
-  const [currentTier, setCurrentTier] = useState<string>("free");
+  const [currentTier, setCurrentTier] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      return getCurrentPlan();
+    }
+    return "free";
+  });
 
   const isSuccess = searchParams?.get("success") === "true";
   const isCanceled = searchParams?.get("canceled") === "true";
   const successPlan = searchParams?.get("plan");
+
+  useEffect(() => {
+    if (
+      isSuccess &&
+      successPlan &&
+      (successPlan === "student_pro" || successPlan === "recruiter_pro")
+    ) {
+      setProSubscription(successPlan as any);
+      setCurrentTier(successPlan);
+    }
+  }, [isSuccess, successPlan]);
 
   useEffect(() => {
     getCurrentSession().then((session) => {

@@ -14,6 +14,8 @@ import { ContactCardItem } from "@/app/components/ContactCardItem";
 import { DraftMessageModal } from "@/app/components/DraftMessageModal";
 import { SwitchDemoRoleButton } from "@/app/components/SwitchDemoRoleButton";
 import { DownloadAppButton } from "@/app/components/DownloadAppButton";
+import { ProBadge } from "@/app/components/ProBadge";
+import { UpgradeLimitModal } from "@/app/components/UpgradeLimitModal";
 import {
   Bookmark,
   MessageSquare,
@@ -46,6 +48,7 @@ export default function MyListPage() {
   const [draftingContact, setDraftingContact] = useState<ContactCard | null>(
     null
   );
+  const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
   // Cross-device sync toast state
   const [crossDeviceToast, setCrossDeviceToast] = useState<string | null>(null);
@@ -208,6 +211,10 @@ export default function MyListPage() {
               <span className="rounded-full bg-indigo-50 px-2 py-0.2 text-[10px] font-semibold text-indigo-700 capitalize">
                 {role?.replace("_", " ")}
               </span>
+              <ProBadge
+                role={(role as any) === "student" ? "student" : "recruiter"}
+                onClickUpgrade={() => setIsUpgradeModalOpen(true)}
+              />
             </div>
           </div>
         </div>
@@ -343,6 +350,13 @@ export default function MyListPage() {
         contact={draftingContact}
         token={sessionToken}
         onToast={showToast}
+      />
+
+      <UpgradeLimitModal
+        isOpen={isUpgradeModalOpen}
+        onClose={() => setIsUpgradeModalOpen(false)}
+        action="candidate_unlocks"
+        role={(role as any) === "student" ? "student" : "recruiter"}
       />
     </div>
   );
