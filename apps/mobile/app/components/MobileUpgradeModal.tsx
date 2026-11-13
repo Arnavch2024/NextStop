@@ -85,12 +85,12 @@ export function MobileUpgradeModal({
   const handleOpenStripeWeb = async () => {
     try {
       await WebBrowser.openBrowserAsync(
-        "https://nextstop-web.vercel.app/pricing"
+        `https://nextstop-web.vercel.app/pricing?plan=${planId}&role=${role}`
       );
     } catch {
       Alert.alert(
         "Open in Browser",
-        "Please visit https://nextstop-web.vercel.app/pricing to manage your subscription."
+        `Please visit https://nextstop-web.vercel.app/pricing?plan=${planId} to manage your subscription.`
       );
     }
   };

@@ -265,11 +265,11 @@ export function UpgradeLimitModal({
               Stripe Test Mode active &bull; Instant unlock
             </span>
             <Link
-              href="/pricing"
+              href={`/pricing?role=${role}&plan=${planId}`}
               onClick={onClose}
               className="text-amber-400 hover:text-amber-300 underline underline-offset-2 transition-colors font-medium"
             >
-              Compare all plans &rarr;
+              View Plan Details &rarr;
             </Link>
           </div>
         </div>

@@ -27,6 +27,40 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Role enforcement: ensure logged-in user only purchases their own persona's plan
+    if (userId) {
+      try {
+        const { getSupabaseBrowserClient } = await import("@/lib/supabase");
+        // Use direct Supabase query with admin/service role if available or fallback
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+        const supabaseKey =
+          process.env.SUPABASE_SERVICE_ROLE_KEY ||
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+        if (supabaseUrl && supabaseKey) {
+          const { createClient } = await import("@supabase/supabase-js");
+          const supabase = createClient(supabaseUrl, supabaseKey);
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("role")
+            .eq("id", userId)
+            .single();
+
+          if (profile?.role && planConfig.targetRole !== "all") {
+            if (profile.role !== planConfig.targetRole) {
+              return NextResponse.json(
+                {
+                  error: `Your account role is '${profile.role}'. You can only subscribe to plans for your specific role.`,
+                },
+                { status: 403 }
+              );
+            }
+          }
+        }
+      } catch (valErr) {
+        console.warn("Could not validate user role for plan:", valErr);
+      }
+    }
+
     const stripe = getStripeClient();
     const origin =
       returnOrigin ||
