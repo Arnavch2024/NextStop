@@ -94,10 +94,11 @@ class Settings(BaseSettings):
             "http://10.0.2.2:8000",
             "http://10.0.2.2:8001",
             "http://10.0.2.2:8081",
+            "https://nextstop-web.vercel.app",
         ]
     )
     CORS_ORIGIN_REGEX: Optional[str] = Field(
-        default=r"^https?://(localhost|127\.0\.0\.1|10\.0\.2\.2|192\.168\.\d+\.\d+)(:\d+)?$"
+        default=r"^https?://(localhost|127\.0\.0\.1|10\.0\.2\.2|192\.168\.\d+\.\d+)(:\d+)?$|^https?://.*\.vercel\.app$"
     )
 
     # Day 4 & Day 5 Role & Demo Settings

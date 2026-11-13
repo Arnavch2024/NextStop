@@ -23,5 +23,5 @@ def publish_backend_url(url: str):
 
 
 if __name__ == "__main__":
-    target_url = sys.argv[1] if len(sys.argv) > 1 else "https://characteristics-minds-compute-friends.trycloudflare.com"
+    target_url = sys.argv[1] if len(sys.argv) > 1 else "https://nextstop-backend-1xbe.onrender.com"
     publish_backend_url(target_url)

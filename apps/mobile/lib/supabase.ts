@@ -59,15 +59,17 @@ export async function fetchRemoteApiBaseUrl(): Promise<string | null> {
 
 // Ordered list of candidate backend URLs for auto-discovery and failover
 export const CANDIDATE_API_URLS: string[] = [
-  // 1. Android emulator loopback alias (highest priority on Android emulator)
+  // 1. Production Render Cloud Backend (always live, zero cleartext restrictions)
+  "https://nextstop-backend-1xbe.onrender.com",
+  // 2. Android emulator loopback alias (for local dev)
   Platform.OS === "android" ? "http://10.0.2.2:8001" : "http://localhost:8001",
-  // 2. Active Cloudflare HTTPS Tunnel (reliable across all devices, zero cleartext restrictions)
-  "https://characteristics-minds-compute-friends.trycloudflare.com",
-  // 3. Wi-Fi LAN IP (for physical devices on same Wi-Fi)
+  // 3. Active Cloudflare HTTPS Tunnel
+  "https://towards-interference-paths-mag.trycloudflare.com",
+  // 4. Wi-Fi LAN IP (for physical devices on same Wi-Fi)
   "http://192.168.29.133:8001",
-  // 4. Configured environment URL
+  // 5. Configured environment URL
   process.env.EXPO_PUBLIC_API_BASE_URL || "",
-  // 5. Standard localhosts
+  // 6. Standard localhosts
   "http://localhost:8001",
   "http://127.0.0.1:8001",
 ].filter(Boolean);

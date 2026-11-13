@@ -1577,6 +1577,36 @@ export default function ChatScreen() {
                   <TouchableOpacity
                     style={[
                       styles.presetBtn,
+                      { backgroundColor: "#f0fdf4", borderColor: "#86efac" },
+                    ]}
+                    onPress={() => {
+                      const renderUrl =
+                        "https://nextstop-backend-1xbe.onrender.com";
+                      setCustomServerUrlInput(renderUrl);
+                      handleTestServerConnection(renderUrl);
+                    }}
+                  >
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 5,
+                      }}
+                    >
+                      <Feather name="server" size={12} color="#15803d" />
+                      <Text
+                        style={[
+                          styles.presetBtnText,
+                          { color: "#15803d", fontWeight: "700" },
+                        ]}
+                      >
+                        Render Cloud (Production)
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.presetBtn,
                       { backgroundColor: "#eff6ff", borderColor: "#60a5fa" },
                     ]}
                     onPress={() => {
