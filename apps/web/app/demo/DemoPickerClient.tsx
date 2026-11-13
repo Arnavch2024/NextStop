@@ -16,6 +16,7 @@ import {
   ShieldAlert,
   AlertTriangle,
 } from "lucide-react";
+import { DownloadAppButton } from "../components/DownloadAppButton";
 
 interface DemoRoleConfig {
   role: string;
@@ -134,13 +135,16 @@ export default function DemoPickerClient() {
             </div>
           </div>
 
-          <Link
-            href="/login"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-indigo-600 transition shadow-2xs"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            <span>Back to normal login</span>
-          </Link>
+          <div className="flex items-center gap-2.5">
+            <DownloadAppButton variant="header" />
+            <Link
+              href="/login"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-indigo-600 transition shadow-2xs"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              <span>Back to normal login</span>
+            </Link>
+          </div>
         </div>
       </header>
 

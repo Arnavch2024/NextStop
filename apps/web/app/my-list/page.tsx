@@ -13,6 +13,7 @@ import {
 import { ContactCardItem } from "@/app/components/ContactCardItem";
 import { DraftMessageModal } from "@/app/components/DraftMessageModal";
 import { SwitchDemoRoleButton } from "@/app/components/SwitchDemoRoleButton";
+import { DownloadAppButton } from "@/app/components/DownloadAppButton";
 import {
   Bookmark,
   MessageSquare,
@@ -212,6 +213,7 @@ export default function MyListPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          <DownloadAppButton variant="header" />
           {isDemo && <SwitchDemoRoleButton />}
           <button
             type="button"

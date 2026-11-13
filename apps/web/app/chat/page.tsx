@@ -25,6 +25,7 @@ import { DraftMessageModal } from "@/app/components/DraftMessageModal";
 import { ChatConfirmationCard } from "@/app/components/ChatConfirmationCard";
 import { SwitchDemoRoleButton } from "@/app/components/SwitchDemoRoleButton";
 import { MarkdownText } from "@/app/components/MarkdownText";
+import { DownloadAppButton } from "@/app/components/DownloadAppButton";
 import {
   Send,
   Mic,
@@ -925,6 +926,8 @@ export default function ChatPage() {
         </div>
 
         <div className="flex items-center gap-3">
+          <DownloadAppButton variant="header" />
+
           <Link
             href="/my-list"
             className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 hover:text-indigo-600 shadow-2xs"

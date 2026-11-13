@@ -32,6 +32,7 @@ import { RailwayTimeline } from "@/app/components/RailwayTimeline";
 import { PreVerifySheet } from "@/app/components/PreVerifySheet";
 import { ReferenceAuthSheet } from "@/app/components/ReferenceAuthSheet";
 import { SwitchDemoRoleButton } from "@/app/components/SwitchDemoRoleButton";
+import { DownloadAppButton } from "@/app/components/DownloadAppButton";
 
 export default function StudentHomePage() {
   const router = useRouter();
@@ -299,6 +300,7 @@ export default function StudentHomePage() {
             </p>
           </div>
           <div className="flex items-center gap-2.5">
+            <DownloadAppButton variant="header" />
             {isDemo && <SwitchDemoRoleButton />}
             <Link
               href="/chat"

@@ -7,6 +7,7 @@ import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { getCurrentSession, getRoleDashboardPath } from "@/lib/auth";
 import { isDemoEnabled } from "@/lib/config";
 import { Mail, Lock, ArrowRight, Loader2, Sparkles } from "lucide-react";
+import { DownloadAppButton } from "../components/DownloadAppButton";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -292,6 +293,9 @@ export default function LoginPage() {
             </div>
           )}
         </div>
+
+        {/* Mobile App Download Card */}
+        <DownloadAppButton variant="card" />
       </div>
     </div>
   );
