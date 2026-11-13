@@ -23,8 +23,22 @@ export default function LoginPage() {
 
   const demoAvailable = isDemoEnabled();
 
-  // Check if already logged in
+  // Check if redirected here with auth tokens or already logged in
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      if (
+        window.location.hash &&
+        window.location.hash.includes("access_token")
+      ) {
+        router.replace(`/auth/callback${window.location.hash}`);
+        return;
+      }
+      if (window.location.search && window.location.search.includes("code=")) {
+        router.replace(`/auth/callback${window.location.search}`);
+        return;
+      }
+    }
+
     getCurrentSession().then((session) => {
       if (session) {
         router.replace(getRoleDashboardPath(session.user.role));

@@ -1654,36 +1654,6 @@ export default function ChatScreen() {
                     </View>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={[
-                      styles.presetBtn,
-                      { backgroundColor: "#eff6ff", borderColor: "#60a5fa" },
-                    ]}
-                    onPress={() => {
-                      const tunnelUrl =
-                        "https://towards-interference-paths-mag.trycloudflare.com";
-                      setCustomServerUrlInput(tunnelUrl);
-                      handleTestServerConnection(tunnelUrl);
-                    }}
-                  >
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        gap: 5,
-                      }}
-                    >
-                      <Feather name="cloud" size={12} color="#1d4ed8" />
-                      <Text
-                        style={[
-                          styles.presetBtnText,
-                          { color: "#1d4ed8", fontWeight: "700" },
-                        ]}
-                      >
-                        Cloudflare HTTPS Tunnel
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-                  <TouchableOpacity
                     style={styles.presetBtn}
                     onPress={() => {
                       setCustomServerUrlInput("http://10.0.2.2:8001");
