@@ -929,6 +929,15 @@ export default function ChatPage() {
           <DownloadAppButton variant="header" />
 
           <Link
+            href="/pricing"
+            className="flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-gradient-to-r from-indigo-50/70 to-blue-50/70 px-3 py-1.5 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100 hover:border-indigo-300 shadow-2xs"
+            title="View Pro Plans & Pricing"
+          >
+            <Sparkles className="h-3.5 w-3.5 text-indigo-600" />
+            <span>Pricing</span>
+          </Link>
+
+          <Link
             href="/my-list"
             className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 hover:text-indigo-600 shadow-2xs"
           >
