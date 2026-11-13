@@ -2,7 +2,7 @@ import React from "react";
 import { Smartphone, Download } from "lucide-react";
 
 export const APP_DOWNLOAD_URL =
-  "https://github.com/Arnavch2024/NextStop/releases/download/v0.1.2-mobile-preview/recruiting-v0.1.2.apk";
+  "https://github.com/Arnavch2024/NextStop/releases/download/mobile-latest/nextstop-recruiting.apk";
 export const APP_RELEASES_URL =
   "https://github.com/Arnavch2024/NextStop/releases/latest";
 
@@ -35,7 +35,7 @@ export function DownloadAppButton({
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 mt-0.5">
-                v0.1.2 • Cross-device sync with your web dashboard
+                Latest Android build • Cross-device sync with your web dashboard
               </p>
             </div>
           </div>
