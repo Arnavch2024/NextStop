@@ -34,3 +34,6 @@ apps/api/.cache/
 .turbo
 *.tsbuildinfo
 supabase/.temp/
+
+.vercel
+.env*
