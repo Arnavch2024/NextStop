@@ -24,6 +24,7 @@ import { ScoreBreakdownCard } from "@/components/ScoreBreakdownCard";
 import { ConsentModal } from "@/components/ConsentModal";
 import { DraftLetterModal } from "@/components/DraftLetterModal";
 import { SwitchDemoRoleButton } from "@/app/components/SwitchDemoRoleButton";
+import { ProBadge } from "@/app/components/ProBadge";
 import {
   Building2,
   MessageSquare,
@@ -38,6 +39,7 @@ import {
   Award,
   Layers,
   ShieldCheck,
+  Sparkles,
 } from "lucide-react";
 
 export default function CompanyHomePage() {
@@ -252,14 +254,25 @@ export default function CompanyHomePage() {
               <h1 className="text-base font-bold text-slate-900">
                 Company Hiring Portal
               </h1>
-              <p className="text-xs text-slate-500">
-                {session?.user.displayName || "Tech Recruiting Partner"} •
-                Mumbai Campus Talent
-              </p>
+              <div className="flex items-center gap-2 mt-0.5">
+                <p className="text-xs text-slate-500">
+                  {session?.user.displayName || "Tech Recruiting Partner"} •
+                  Mumbai Campus Talent
+                </p>
+                <ProBadge role="company" />
+              </div>
             </div>
           </div>
 
           <div className="flex items-center gap-2.5">
+            <Link
+              href="/pricing"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-gradient-to-r from-purple-50 to-indigo-50 px-3 py-2 text-xs font-semibold text-purple-800 hover:bg-purple-100 transition shadow-2xs"
+            >
+              <Sparkles className="h-3.5 w-3.5 text-purple-600" />
+              <span>Enterprise Pro</span>
+            </Link>
+
             <Link
               href="/chat"
               className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100 transition shadow-2xs"

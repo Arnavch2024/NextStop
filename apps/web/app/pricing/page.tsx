@@ -14,6 +14,8 @@ import {
   Loader2,
   Building2,
   GraduationCap,
+  Briefcase,
+  School,
   CheckCircle2,
   HelpCircle,
 } from "lucide-react";
@@ -27,9 +29,9 @@ function PricingContent() {
   const [billingInterval, setBillingInterval] = useState<"month" | "year">(
     "month"
   );
-  const [activeRoleTab, setActiveRoleTab] = useState<"student" | "recruiter">(
-    "student"
-  );
+  const [activeRoleTab, setActiveRoleTab] = useState<
+    "student" | "recruiter" | "placement_officer" | "company"
+  >("student");
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [userSession, setUserSession] = useState<any>(null);
@@ -48,7 +50,9 @@ function PricingContent() {
     if (
       isSuccess &&
       successPlan &&
-      (successPlan === "student_pro" || successPlan === "recruiter_pro")
+      ["student_pro", "recruiter_pro", "officer_pro", "company_pro"].includes(
+        successPlan
+      )
     ) {
       setProSubscription(successPlan as any);
       setCurrentTier(successPlan);
@@ -59,10 +63,11 @@ function PricingContent() {
     getCurrentSession().then((session) => {
       if (session) {
         setUserSession(session);
-        if (
-          session.user.role === "recruiter" ||
-          session.user.role === "company"
-        ) {
+        if (session.user.role === "company") {
+          setActiveRoleTab("company");
+        } else if (session.user.role === "placement_officer") {
+          setActiveRoleTab("placement_officer");
+        } else if (session.user.role === "recruiter") {
           setActiveRoleTab("recruiter");
         }
         // Fetch current subscription status
@@ -115,10 +120,19 @@ function PricingContent() {
     }
   }
 
-  const studentPlans = [PRICING_PLANS.free, PRICING_PLANS.student_pro];
-  const recruiterPlans = [PRICING_PLANS.free, PRICING_PLANS.recruiter_pro];
-  const displayedPlans =
-    activeRoleTab === "student" ? studentPlans : recruiterPlans;
+  const displayedPlans = (() => {
+    switch (activeRoleTab) {
+      case "company":
+        return [PRICING_PLANS.free, PRICING_PLANS.company_pro];
+      case "placement_officer":
+        return [PRICING_PLANS.free, PRICING_PLANS.officer_pro];
+      case "recruiter":
+        return [PRICING_PLANS.free, PRICING_PLANS.recruiter_pro];
+      case "student":
+      default:
+        return [PRICING_PLANS.free, PRICING_PLANS.student_pro];
+    }
+  })();
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans pb-24">
@@ -219,30 +233,54 @@ function PricingContent() {
           </p>
 
           {/* Role Persona Toggle */}
-          <div className="mt-8 inline-flex p-1 bg-slate-200/80 rounded-2xl border border-slate-200 shadow-inner">
+          <div className="mt-8 inline-flex flex-wrap items-center justify-center gap-1 p-1 bg-slate-200/80 rounded-2xl border border-slate-200 shadow-inner">
             <button
               type="button"
               onClick={() => setActiveRoleTab("student")}
-              className={`flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-bold transition ${
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition ${
                 activeRoleTab === "student"
                   ? "bg-white text-indigo-600 shadow-xs"
                   : "text-slate-600 hover:text-slate-900"
               }`}
             >
               <GraduationCap className="h-4 w-4" />
-              <span>For Students & Candidates</span>
+              <span>Students ($3/mo)</span>
             </button>
             <button
               type="button"
               onClick={() => setActiveRoleTab("recruiter")}
-              className={`flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-bold transition ${
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition ${
                 activeRoleTab === "recruiter"
                   ? "bg-white text-indigo-600 shadow-xs"
                   : "text-slate-600 hover:text-slate-900"
               }`}
             >
+              <Briefcase className="h-4 w-4" />
+              <span>Recruiters ($19/mo)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveRoleTab("placement_officer")}
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition ${
+                activeRoleTab === "placement_officer"
+                  ? "bg-white text-emerald-700 shadow-xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <School className="h-4 w-4" />
+              <span>Placement Officers ($15/mo)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveRoleTab("company")}
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition ${
+                activeRoleTab === "company"
+                  ? "bg-white text-purple-700 shadow-xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
               <Building2 className="h-4 w-4" />
-              <span>For Recruiters & Companies</span>
+              <span>Companies ($39/mo)</span>
             </button>
           </div>
 

@@ -10,15 +10,17 @@ import {
   ArrowRight,
   ShieldCheck,
   Crown,
+  Building2,
+  GraduationCap,
   Loader2,
 } from "lucide-react";
-import { QuotaAction, FREE_TIER_LIMITS } from "@/lib/subscription";
+import { QuotaAction, FREE_TIER_LIMITS, PersonaRole } from "@/lib/subscription";
 
 interface UpgradeLimitModalProps {
   isOpen: boolean;
   onClose: () => void;
   action?: QuotaAction;
-  role?: "student" | "recruiter";
+  role?: PersonaRole;
   customTitle?: string;
   customDescription?: string;
 }
@@ -39,11 +41,53 @@ export function UpgradeLimitModal({
 
   if (!isOpen) return null;
 
-  const isRecruiter = role === "recruiter";
-  const planId = isRecruiter ? "recruiter_pro" : "student_pro";
-  const monthlyPrice = isRecruiter ? 19 : 3;
-  const annualPrice = isRecruiter ? 189 : 29;
-  const effectiveAnnualMonthly = isRecruiter ? 15 : 2.4;
+  let planId = "student_pro";
+  let monthlyPrice = 3;
+  let annualPrice = 29;
+  let effectiveAnnualMonthly = 2.4;
+  let roleTitle = "Student Pro";
+  let roleDesc =
+    "Upgrade to Student Pro to continue chatting with the AI placement assistant, boost your ATS resume score, and unlock the shiny PRO badge.";
+  let roleIcon = (
+    <Zap className="h-7 w-7 text-slate-950 fill-slate-950 drop-shadow" />
+  );
+  let featureHighlight =
+    "Priority placement spotlight for top Mumbai campus recruiters.";
+
+  if (role === "company") {
+    planId = "company_pro";
+    monthlyPrice = 39;
+    annualPrice = 349;
+    effectiveAnnualMonthly = 29;
+    roleTitle = "Company Enterprise Pro";
+    roleDesc =
+      "Upgrade to Company Pro for multi-seat campus recruitment, direct TPO hotlines, and unlimited candidate CSV pipeline exports.";
+    roleIcon = <Building2 className="h-7 w-7 text-slate-950 drop-shadow" />;
+    featureHighlight =
+      "Multi-seat recruitment, direct TPO hotlines & unlimited candidate CSV pipeline exports.";
+  } else if (role === "placement_officer") {
+    planId = "officer_pro";
+    monthlyPrice = 15;
+    annualPrice = 149;
+    effectiveAnnualMonthly = 12.4;
+    roleTitle = "Placement Officer Pro";
+    roleDesc =
+      "Upgrade to Officer Pro to import batch student CSVs, invite top Mumbai employers, and export verified NIRF/NAAC placement audit reports.";
+    roleIcon = <GraduationCap className="h-7 w-7 text-slate-950 drop-shadow" />;
+    featureHighlight =
+      "1-Click student CSV batch imports, recruiter invites & audit reports.";
+  } else if (role === "recruiter") {
+    planId = "recruiter_pro";
+    monthlyPrice = 19;
+    annualPrice = 189;
+    effectiveAnnualMonthly = 15;
+    roleTitle = "Recruiter Pro";
+    roleDesc =
+      "Upgrade to Recruiter Pro to unlock verified candidate contacts, direct outreach, and unlimited discovery across Mumbai universities.";
+    roleIcon = <Crown className="h-7 w-7 text-slate-950 drop-shadow" />;
+    featureHighlight =
+      "Full verified email & phone unlocks + 1-click candidate CSV exports.";
+  }
 
   const limitNumber = FREE_TIER_LIMITS[action] ?? 5;
 
@@ -111,11 +155,7 @@ export function UpgradeLimitModal({
           <div className="relative mb-3 flex items-center justify-center">
             <div className="absolute -inset-2 rounded-full bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 opacity-60 blur-lg animate-pulse" />
             <div className="relative flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 text-slate-950 shadow-lg">
-              {isRecruiter ? (
-                <Crown className="h-7 w-7 text-slate-950 drop-shadow" />
-              ) : (
-                <Zap className="h-7 w-7 text-slate-950 fill-slate-950 drop-shadow" />
-              )}
+              {roleIcon}
             </div>
           </div>
 
@@ -130,10 +170,7 @@ export function UpgradeLimitModal({
           </h3>
 
           <p className="mt-2 text-sm text-slate-300 leading-relaxed max-w-md">
-            {customDescription ||
-              (isRecruiter
-                ? "Upgrade to Recruiter Pro to unlock verified candidate contacts, direct outreach, and unlimited discovery across Mumbai universities."
-                : "Upgrade to Student Pro to continue chatting with the AI placement assistant, boost your ATS resume score, and unlock the shiny PRO badge.")}
+            {customDescription || roleDesc}
           </p>
         </div>
 
@@ -186,11 +223,7 @@ export function UpgradeLimitModal({
           </div>
           <div className="flex items-start gap-2.5 text-xs sm:text-sm text-slate-200">
             <CheckCircle2 className="h-4 w-4 shrink-0 text-indigo-400 mt-0.5" />
-            <span>
-              {isRecruiter
-                ? "Full verified email & phone unlocks + 1-click candidate CSV exports."
-                : "Priority placement spotlight for top Mumbai campus recruiters."}
-            </span>
+            <span>{featureHighlight}</span>
           </div>
         </div>
 

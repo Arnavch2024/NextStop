@@ -20,11 +20,11 @@ export function getStripeClient(): Stripe {
 }
 
 export interface PricingPlan {
-  id: "free" | "student_pro" | "recruiter_pro";
+  id: "free" | "student_pro" | "recruiter_pro" | "officer_pro" | "company_pro";
   name: string;
   badge?: string;
   description: string;
-  targetRole: "student" | "recruiter" | "all";
+  targetRole: "student" | "recruiter" | "placement_officer" | "company" | "all";
   monthlyPrice: number; // in USD
   annualPrice: number; // in USD (discounted)
   monthlyCents: number;
@@ -78,7 +78,7 @@ export const PRICING_PLANS: Record<string, PricingPlan> = {
   recruiter_pro: {
     id: "recruiter_pro",
     name: "Recruiter Pro",
-    badge: "Enterprise Grade",
+    badge: "Talent Scout",
     description: "Unlock top engineering talent across Mumbai colleges.",
     targetRole: "recruiter",
     monthlyPrice: 19,
@@ -94,6 +94,50 @@ export const PRICING_PLANS: Record<string, PricingPlan> = {
       "Verified Pro Recruiter badge with direct student trust",
     ],
     ctaLabel: "Upgrade to Recruiter Pro ($19/mo)",
+    highlighted: true,
+  },
+  officer_pro: {
+    id: "officer_pro",
+    name: "Placement Officer Pro",
+    badge: "Campus Leader",
+    description:
+      "Empower your college placement cell with batch student imports and corporate hiring invites.",
+    targetRole: "placement_officer",
+    monthlyPrice: 15,
+    annualPrice: 149,
+    monthlyCents: 1500,
+    annualCents: 14900,
+    features: [
+      "1-Click batch student CSV imports & automated readiness scoring",
+      "Direct Mumbai tech recruiter & HR contact directory",
+      "Automated student document pre-verification pipeline",
+      "NIRF & NAAC placement audit report generator",
+      "Priority college hiring drive broadcasting to employers",
+      "Verified Campus Placement Cell official badge",
+    ],
+    ctaLabel: "Upgrade to Officer Pro ($15/mo)",
+    highlighted: true,
+  },
+  company_pro: {
+    id: "company_pro",
+    name: "Company Enterprise Pro",
+    badge: "Enterprise Grade",
+    description:
+      "Scale campus hiring drives, manage multi-seat recruitment, and access direct college hotlines.",
+    targetRole: "company",
+    monthlyPrice: 39,
+    annualPrice: 349,
+    monthlyCents: 3900,
+    annualCents: 34900,
+    features: [
+      "Multi-seat team hiring pipeline across all Mumbai campuses",
+      "Direct TPO & Placement Officer hotline directory",
+      "Unlimited candidate discovery, resumes & CGPA filtering",
+      "Full verified email & phone unlocks with direct outreach",
+      "Automated campus hiring drive announcements",
+      "Verified Corporate Employer Diamond badge",
+    ],
+    ctaLabel: "Upgrade to Company Pro ($39/mo)",
     highlighted: true,
   },
 };

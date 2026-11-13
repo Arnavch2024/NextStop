@@ -19,37 +19,53 @@ const STORAGE_KEYS = {
 
 const CHANGE_EVENT = "nextstop_subscription_change";
 
+export type SubscriptionTier =
+  "free" | "student_pro" | "recruiter_pro" | "officer_pro" | "company_pro";
+
+export type PersonaRole =
+  "student" | "recruiter" | "placement_officer" | "company";
+
 /**
  * Check if the active user currently has Pro status.
  */
-export function isProUser(targetRole?: "student" | "recruiter"): boolean {
+export function isProUser(targetRole?: PersonaRole): boolean {
   if (typeof window === "undefined") return false;
   try {
     const tier = localStorage.getItem(STORAGE_KEYS.TIER);
-    if (!tier) return false;
+    if (!tier || tier === "free") return false;
 
-    if (tier === "recruiter_pro") {
-      return (
-        !targetRole || targetRole === "recruiter" || targetRole === "student"
-      );
+    if (!targetRole) return true;
+
+    if (targetRole === "company") {
+      return tier === "company_pro";
     }
-    if (tier === "student_pro") {
-      return !targetRole || targetRole === "student";
+    if (targetRole === "placement_officer") {
+      return tier === "officer_pro";
     }
-    return false;
-  } catch {
+    if (targetRole === "recruiter") {
+      return tier === "recruiter_pro" || tier === "company_pro";
+    }
+    if (targetRole === "student") {
+      return tier === "student_pro";
+    }
+    return true;
+  } catch (err) {
+    console.warn("Unable to check pro status", err);
     return false;
   }
 }
 
 /**
- * Get current plan details: 'free' | 'student_pro' | 'recruiter_pro'
+ * Get current plan details
  */
-export function getCurrentPlan(): string {
+export function getCurrentPlan(): SubscriptionTier {
   if (typeof window === "undefined") return "free";
   try {
-    return localStorage.getItem(STORAGE_KEYS.TIER) || "free";
-  } catch {
+    return (
+      (localStorage.getItem(STORAGE_KEYS.TIER) as SubscriptionTier) || "free"
+    );
+  } catch (err) {
+    console.warn("Unable to get current plan", err);
     return "free";
   }
 }
@@ -58,7 +74,7 @@ export function getCurrentPlan(): string {
  * Set Pro status (called after successful checkout or webhook verification)
  */
 export function setProSubscription(
-  planId: "student_pro" | "recruiter_pro",
+  planId: "student_pro" | "recruiter_pro" | "officer_pro" | "company_pro",
   email?: string
 ): void {
   if (typeof window === "undefined") return;

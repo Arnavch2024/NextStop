@@ -2,17 +2,25 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { Sparkles, Crown, Zap } from "lucide-react";
+import {
+  Sparkles,
+  Crown,
+  Zap,
+  ShieldCheck,
+  Building2,
+  GraduationCap,
+} from "lucide-react";
 import {
   isProUser,
   getCurrentPlan,
   subscribeToSubscriptionChanges,
   getRemainingQuota,
   QuotaAction,
+  PersonaRole,
 } from "@/lib/subscription";
 
 interface ProBadgeProps {
-  role?: "student" | "recruiter";
+  role?: PersonaRole;
   showQuotaFor?: QuotaAction;
   quotaLabel?: string;
   className?: string;
@@ -53,35 +61,50 @@ export function ProBadge({
 
   // If user has paid / is Pro
   if (pro) {
-    const isRecruiter = plan === "recruiter_pro" || role === "recruiter";
+    let badgeGradient =
+      "bg-gradient-to-r from-amber-500 via-amber-600 to-yellow-500 shadow-amber-500/30 ring-1 ring-amber-300/40";
+    let badgeLabel = "PRO";
+    let icon = (
+      <Sparkles className="h-3.5 w-3.5 fill-yellow-200 text-yellow-200 animate-pulse" />
+    );
+    let title = "Student Pro Member";
+
+    if (role === "company" || plan === "company_pro") {
+      badgeGradient =
+        "bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-800 shadow-purple-500/30 ring-1 ring-purple-300/40";
+      badgeLabel = "ENTERPRISE";
+      icon = (
+        <Building2 className="h-3.5 w-3.5 text-purple-200 drop-shadow-xs" />
+      );
+      title = "Company Enterprise Pro";
+    } else if (role === "placement_officer" || plan === "officer_pro") {
+      badgeGradient =
+        "bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 shadow-emerald-500/30 ring-1 ring-emerald-300/40";
+      badgeLabel = "OFFICER PRO";
+      icon = (
+        <GraduationCap className="h-3.5 w-3.5 text-emerald-200 drop-shadow-xs" />
+      );
+      title = "Placement Officer Pro";
+    } else if (role === "recruiter" || plan === "recruiter_pro") {
+      badgeGradient =
+        "bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 shadow-indigo-500/25 ring-1 ring-indigo-400/30";
+      badgeLabel = "PRO";
+      icon = <Crown className="h-3.5 w-3.5 text-yellow-300 drop-shadow-xs" />;
+      title = "Recruiter Pro Member";
+    }
+
     return (
       <Link
         href="/pricing"
-        title={
-          isRecruiter
-            ? "Recruiter Pro Member - Unlimited access"
-            : "Student Pro Member - Priority placement spotlight"
-        }
-        className={`group relative inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold tracking-wide text-white shadow-xs transition-all duration-300 hover:scale-105 hover:shadow-md ${
-          isRecruiter
-            ? "bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 shadow-indigo-500/25 ring-1 ring-indigo-400/30"
-            : "bg-gradient-to-r from-amber-500 via-amber-600 to-yellow-500 shadow-amber-500/30 ring-1 ring-amber-300/40"
-        } ${className}`}
+        title={title}
+        className={`group relative inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold tracking-wide text-white shadow-xs transition-all duration-300 hover:scale-105 hover:shadow-md ${badgeGradient} ${className}`}
       >
         {/* Shimmer pulse effect */}
         <span className="absolute inset-0 rounded-full bg-white/20 opacity-0 transition-opacity group-hover:opacity-100" />
-
-        {isRecruiter ? (
-          <Crown className="h-3.5 w-3.5 text-yellow-300 drop-shadow-xs" />
-        ) : (
-          <Sparkles className="h-3.5 w-3.5 fill-yellow-200 text-yellow-200 animate-pulse" />
-        )}
-
-        <span className="text-[11px] font-black uppercase tracking-wider text-white drop-shadow-xs">
-          PRO
+        {icon}
+        <span className="text-[10px] font-black uppercase tracking-wider text-white drop-shadow-xs">
+          {badgeLabel}
         </span>
-
-        {/* Shiny dot */}
         <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 shadow-xs ring-1 ring-white/50" />
       </Link>
     );
