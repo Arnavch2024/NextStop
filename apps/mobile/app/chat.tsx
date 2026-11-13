@@ -48,6 +48,7 @@ import {
 import { MobileContactCard } from "./components/MobileContactCard";
 import { DraftMessageSheet } from "./components/DraftMessageSheet";
 import { MobileChatConfirmationCard } from "./components/MobileChatConfirmationCard";
+import { MarkdownText } from "./components/MarkdownText";
 
 interface QuickActionItem {
   label: string;
@@ -1046,13 +1047,13 @@ export default function ChatScreen() {
                         : styles.bubbleAgent,
                   ]}
                 >
-                  <Text
+                  <MarkdownText
+                    content={item.text}
+                    isUser={isUser}
                     style={
                       isUser ? styles.bubbleTextUser : styles.bubbleTextAgent
                     }
-                  >
-                    {item.text}
-                  </Text>
+                  />
 
                   {item.text.includes("Error connecting to agent") && (
                     <TouchableOpacity

@@ -24,6 +24,7 @@ import { ContactCardItem } from "@/app/components/ContactCardItem";
 import { DraftMessageModal } from "@/app/components/DraftMessageModal";
 import { ChatConfirmationCard } from "@/app/components/ChatConfirmationCard";
 import { SwitchDemoRoleButton } from "@/app/components/SwitchDemoRoleButton";
+import { MarkdownText } from "@/app/components/MarkdownText";
 import {
   Send,
   Mic,
@@ -1089,9 +1090,11 @@ export default function ChatPage() {
                       : "border border-slate-200 bg-white text-slate-800 shadow-sm"
                   }`}
                 >
-                  <p className="whitespace-pre-wrap leading-relaxed">
-                    {item.text}
-                  </p>
+                  <MarkdownText
+                    content={item.text}
+                    isUser={isUser}
+                    className="whitespace-pre-wrap leading-relaxed"
+                  />
 
                   {/* Parsed-Summary Card for Resumes */}
                   {summary && (
