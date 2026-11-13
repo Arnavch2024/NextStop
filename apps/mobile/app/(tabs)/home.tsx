@@ -31,6 +31,8 @@ import {
 import { MobileRailwayTimeline } from "../components/MobileRailwayTimeline";
 import { MobilePreVerifyModal } from "../components/MobilePreVerifyModal";
 import { MobileReferenceAuthModal } from "../components/MobileReferenceAuthModal";
+import { MobileProBadge } from "../components/MobileProBadge";
+import { MobileUpgradeModal } from "../components/MobileUpgradeModal";
 
 export default function MobileHomeScreen() {
   const router = useRouter();
@@ -53,6 +55,7 @@ export default function MobileHomeScreen() {
   // Modals state
   const [isPreVerifyVisible, setIsPreVerifyVisible] = useState(false);
   const [isRefAuthVisible, setIsRefAuthVisible] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [currentBaseUrl, setCurrentBaseUrl] = useState<string>(API_BASE_URL);
 
   useEffect(() => {
@@ -304,13 +307,26 @@ export default function MobileHomeScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <View>
+          <View style={{ flex: 1, paddingRight: 8 }}>
             <Text style={styles.headerTitle}>Student Dashboard</Text>
-            <Text style={styles.headerSubtitle}>
-              {student?.full_name
-                ? `${student.full_name} • Batch ${student.batch_year}`
-                : "NextStop Recruiting"}
-            </Text>
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                marginTop: 2,
+                flexWrap: "wrap",
+              }}
+            >
+              <Text style={styles.headerSubtitle}>
+                {student?.full_name
+                  ? `${student.full_name} • Batch ${student.batch_year}`
+                  : "NextStop Recruiting"}
+              </Text>
+              <MobileProBadge
+                role="student"
+                onPressUpgrade={() => setShowUpgradeModal(true)}
+              />
+            </View>
           </View>
           <TouchableOpacity
             style={styles.chatHeaderButton}
@@ -557,6 +573,12 @@ export default function MobileHomeScreen() {
               .catch(() => {});
           }
         }}
+      />
+
+      <MobileUpgradeModal
+        visible={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+        role="student"
       />
     </SafeAreaView>
   );

@@ -49,6 +49,13 @@ import { MobileContactCard } from "./components/MobileContactCard";
 import { DraftMessageSheet } from "./components/DraftMessageSheet";
 import { MobileChatConfirmationCard } from "./components/MobileChatConfirmationCard";
 import { MarkdownText } from "./components/MarkdownText";
+import { MobileProBadge } from "./components/MobileProBadge";
+import { MobileUpgradeModal } from "./components/MobileUpgradeModal";
+import {
+  canMobilePerformAction,
+  recordMobileActionUsage,
+  MobileQuotaAction,
+} from "../lib/subscription";
 import { Feather } from "@expo/vector-icons";
 
 interface QuickActionItem {
@@ -126,6 +133,11 @@ export default function ChatScreen() {
   const [customServerUrlInput, setCustomServerUrlInput] = useState<string>("");
   const [serverTestLoading, setServerTestLoading] = useState<boolean>(false);
   const [serverTestStatus, setServerTestStatus] = useState<string | null>(null);
+
+  // Upgrade Modal & Quota state
+  const [showUpgradeModal, setShowUpgradeModal] = useState<boolean>(false);
+  const [upgradeAction, setUpgradeAction] =
+    useState<MobileQuotaAction>("chat_messages");
 
   const flatListRef = useRef<FlatList>(null);
   const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -575,12 +587,23 @@ export default function ChatScreen() {
   async function handleSend(overrideText?: string) {
     const text = (overrideText ?? inputText).trim();
     if (!text || isSendingRef.current || isSending || !sessionToken) return;
+
+    // Quota check
+    const canSend = await canMobilePerformAction("chat_messages", role as any);
+    if (!canSend) {
+      setUpgradeAction("chat_messages");
+      setShowUpgradeModal(true);
+      return;
+    }
+
     isSendingRef.current = true;
     setIsSending(true);
 
     if (!overrideText) {
       setInputText("");
     }
+
+    recordMobileActionUsage("chat_messages");
 
     const tempUserId = `user-${Date.now()}`;
     setMessages((prev) => [
@@ -790,6 +813,16 @@ export default function ChatScreen() {
     setIsConsentVisible(false);
     if (!sessionToken) return;
 
+    const canUpload = await canMobilePerformAction(
+      "resume_evaluations",
+      role as any
+    );
+    if (!canUpload) {
+      setUpgradeAction("resume_evaluations");
+      setShowUpgradeModal(true);
+      return;
+    }
+
     try {
       const res = await DocumentPicker.getDocumentAsync({
         type: [
@@ -935,14 +968,30 @@ export default function ChatScreen() {
             >
               Recruiting Assistant
             </Text>
-            <Text
-              numberOfLines={1}
-              ellipsizeMode="tail"
-              style={styles.headerSubtitle}
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                flexWrap: "wrap",
+              }}
             >
-              {displayName} •{" "}
-              <Text style={styles.roleText}>{role?.replace("_", " ")}</Text>
-            </Text>
+              <Text
+                numberOfLines={1}
+                ellipsizeMode="tail"
+                style={styles.headerSubtitle}
+              >
+                {displayName} •{" "}
+                <Text style={styles.roleText}>{role?.replace("_", " ")}</Text>
+              </Text>
+              <MobileProBadge
+                role={role as any}
+                showQuotaFor="chat_messages"
+                onPressUpgrade={() => {
+                  setUpgradeAction("chat_messages");
+                  setShowUpgradeModal(true);
+                }}
+              />
+            </View>
           </View>
           <View style={styles.headerRight}>
             <TouchableOpacity
@@ -1743,6 +1792,14 @@ export default function ChatScreen() {
           contact={draftingContact}
           token={sessionToken}
           showToast={showToast}
+        />
+
+        {/* Upgrade & Free Quota Limit Modal */}
+        <MobileUpgradeModal
+          visible={showUpgradeModal}
+          onClose={() => setShowUpgradeModal(false)}
+          role={role as any}
+          action={upgradeAction}
         />
       </KeyboardAvoidingView>
     </SafeAreaView>

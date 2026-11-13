@@ -23,6 +23,7 @@ import {
 } from "@recruiting/shared";
 import { MobileContactCard } from "./components/MobileContactCard";
 import { DraftMessageSheet } from "./components/DraftMessageSheet";
+import { MobileProBadge } from "./components/MobileProBadge";
 import { Feather } from "@expo/vector-icons";
 
 export default function MyListScreen() {
@@ -35,6 +36,7 @@ export default function MyListScreen() {
 
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
+  const [role, setRole] = useState<string | null>(null);
   const [contacts, setContacts] = useState<ContactCard[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -91,6 +93,14 @@ export default function MyListScreen() {
       }
       setSessionToken(session.access_token);
       setUserId(session.user.id);
+      supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", session.user.id)
+        .single()
+        .then(({ data }) => {
+          if (data?.role) setRole(data.role);
+        });
       fetchSavedList(session.access_token);
     });
   }, [router, supabase, fetchSavedList]);
@@ -188,7 +198,10 @@ export default function MyListScreen() {
               <Text style={styles.backBtnText}>Chat</Text>
             </View>
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>My List</Text>
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <Text style={styles.headerTitle}>My List</Text>
+            <MobileProBadge role={role as any} />
+          </View>
           <TouchableOpacity
             style={styles.refreshBtn}
             onPress={() => sessionToken && fetchSavedList(sessionToken)}
