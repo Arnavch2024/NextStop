@@ -50,7 +50,7 @@ export const PRICING_PLANS: Record<string, PricingPlan> = {
       "Up to 5 campus recruiter directory searches / day",
       "Standard community response speed",
     ],
-    ctaLabel: "Current Plan",
+    ctaLabel: "Free Starter",
     highlighted: false,
   },
   student_pro: {

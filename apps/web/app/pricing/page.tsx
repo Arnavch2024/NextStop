@@ -18,15 +18,22 @@ import {
   School,
   CheckCircle2,
   HelpCircle,
-  Lock,
+  Award,
 } from "lucide-react";
 import { getCurrentSession, getRoleDashboardPath } from "@/lib/auth";
 import { PRICING_PLANS } from "@/lib/stripe";
-import { setProSubscription, getCurrentPlan } from "@/lib/subscription";
+import {
+  setProSubscription,
+  getCurrentPlan,
+  subscribeToSubscriptionChanges,
+} from "@/lib/subscription";
+import { getSupabaseBrowserClient } from "@/lib/supabase";
 
 function PricingContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const supabase = getSupabaseBrowserClient();
+
   const [billingInterval, setBillingInterval] = useState<"month" | "year">(
     "month"
   );
@@ -36,6 +43,8 @@ function PricingContent() {
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [userSession, setUserSession] = useState<any>(null);
+  const [isAuthChecking, setIsAuthChecking] = useState(true);
+
   const [currentTier, setCurrentTier] = useState<string>(() => {
     if (typeof window !== "undefined") {
       return getCurrentPlan();
@@ -46,8 +55,17 @@ function PricingContent() {
   const isSuccess = searchParams?.get("success") === "true";
   const isCanceled = searchParams?.get("canceled") === "true";
   const successPlan = searchParams?.get("plan");
+  const sessionId = searchParams?.get("session_id");
 
-  // Handle URL query parameters for guests / initial deep links
+  // Keep currentTier synchronized with storage events
+  useEffect(() => {
+    const unsub = subscribeToSubscriptionChanges(() => {
+      setCurrentTier(getCurrentPlan());
+    });
+    return () => unsub();
+  }, []);
+
+  // Handle URL query parameters for deep links
   useEffect(() => {
     const paramRole = searchParams?.get("role");
     const paramPlan = searchParams?.get("plan");
@@ -66,7 +84,25 @@ function PricingContent() {
     }
   }, [searchParams]);
 
-  const sessionId = searchParams?.get("session_id");
+  // Support incoming OAuth hash tokens if landed on /pricing directly
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.location.hash) {
+      const hashClean = window.location.hash.replace(/^#/, "");
+      const hashParams = new URLSearchParams(hashClean);
+      const accessToken = hashParams.get("access_token");
+      const refreshToken = hashParams.get("refresh_token");
+      if (accessToken && refreshToken) {
+        supabase.auth
+          .setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          })
+          .then(() => {
+            window.location.hash = "";
+          });
+      }
+    }
+  }, [supabase]);
 
   // Immediate subscription activation upon returning from Stripe
   useEffect(() => {
@@ -114,33 +150,44 @@ function PricingContent() {
     activateSubscription();
   }, [isSuccess, successPlan, sessionId, activeRoleTab]);
 
+  // Authenticate user & sync live subscription status from database
   useEffect(() => {
-    getCurrentSession().then((session) => {
-      if (session) {
-        setUserSession(session);
-        // Strictly lock to the authenticated user's persona
-        if (session.user.role === "company") {
-          setActiveRoleTab("company");
-        } else if (session.user.role === "placement_officer") {
-          setActiveRoleTab("placement_officer");
-        } else if (session.user.role === "recruiter") {
-          setActiveRoleTab("recruiter");
-        } else if (session.user.role === "student") {
-          setActiveRoleTab("student");
-        }
+    async function initSession() {
+      try {
+        setIsAuthChecking(true);
+        const session = await getCurrentSession();
+        if (session) {
+          setUserSession(session);
 
-        // Fetch current subscription status from backend
-        fetch(`/api/stripe/status?userId=${session.user.id}`)
-          .then((res) => res.json())
-          .then((data) => {
-            if (data?.tier && data.tier !== "free") {
-              setProSubscription(data.tier);
-              setCurrentTier(data.tier);
-            }
-          })
-          .catch(() => {});
+          // Strictly lock to the authenticated user's persona
+          if (session.user.role === "company") {
+            setActiveRoleTab("company");
+          } else if (session.user.role === "placement_officer") {
+            setActiveRoleTab("placement_officer");
+          } else if (session.user.role === "recruiter") {
+            setActiveRoleTab("recruiter");
+          } else if (session.user.role === "student") {
+            setActiveRoleTab("student");
+          }
+
+          // Fetch current subscription status from backend database
+          const res = await fetch(
+            `/api/stripe/status?userId=${session.user.id}`
+          );
+          const data = await res.json();
+          if (data?.tier && data.tier !== "free") {
+            setProSubscription(data.tier);
+            setCurrentTier(data.tier);
+          }
+        }
+      } catch (err) {
+        console.warn("Failed to initialize session on pricing page:", err);
+      } finally {
+        setIsAuthChecking(false);
       }
-    });
+    }
+
+    initSession();
   }, []);
 
   async function handleCheckout(planId: string) {
@@ -234,6 +281,8 @@ function PricingContent() {
     }
   }, [activeRoleTab]);
 
+  const isUserPro = currentTier !== "free";
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans pb-24">
       {/* Top Header */}
@@ -257,18 +306,80 @@ function PricingContent() {
           </div>
 
           <div className="flex items-center gap-2.5">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-800">
-              <CreditCard className="h-3 w-3" />
-              <span>Stripe Test Mode</span>
-            </span>
+            {isUserPro ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-800 shadow-2xs">
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                <span>Pro Active</span>
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-700">
+                <CreditCard className="h-3 w-3 text-slate-500" />
+                <span>Stripe Test Mode</span>
+              </span>
+            )}
           </div>
         </div>
       </header>
 
       {/* Main Container */}
       <main className="max-w-5xl mx-auto px-4 pt-10 sm:pt-14">
-        {/* Success Alert Banner */}
-        {isSuccess && (
+        {/* Guest Warning Banner if not signed in */}
+        {!isAuthChecking && !userSession && (
+          <div className="mb-8 rounded-2xl border border-amber-200 bg-amber-50/90 p-4 text-xs text-amber-900 flex items-center justify-between shadow-2xs">
+            <div className="flex items-center gap-2.5">
+              <Sparkles className="h-4 w-4 text-amber-600 shrink-0" />
+              <span>
+                You are currently viewing plans as a guest.{" "}
+                <strong>Sign in with your account</strong> to access your
+                dashboard and personalized tier.
+              </span>
+            </div>
+            <Link
+              href="/login"
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-amber-600 text-white font-bold hover:bg-amber-700 transition shrink-0 ml-3 shadow-2xs"
+            >
+              <span>Sign In</span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+        )}
+
+        {/* Pro Active Status Announcement Banner */}
+        {isUserPro && (
+          <div className="mb-8 rounded-2xl border border-emerald-200 bg-emerald-50/90 p-5 shadow-xs">
+            <div className="flex items-center gap-3.5">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-md">
+                <Award className="h-6 w-6" />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-emerald-950">
+                    Your Pro Subscription is Active!
+                  </h3>
+                  <span className="rounded-full bg-emerald-200 px-2 py-0.5 text-[10px] font-extrabold text-emerald-900 uppercase">
+                    Paid &bull; Verified
+                  </span>
+                </div>
+                <p className="text-xs text-emerald-800 mt-0.5">
+                  Your account is fully activated on{" "}
+                  <strong>{activeProPlanName}</strong>. All quotas are
+                  unlimited, badges are displayed across your profile, and
+                  priority tooling is live.
+                </p>
+              </div>
+              <Link
+                href={backHref}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-700 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-800 transition shadow-2xs shrink-0"
+              >
+                <span>Go to Portal</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+          </div>
+        )}
+
+        {/* Success Alert Banner (Shown right after Stripe redirect) */}
+        {isSuccess && !isUserPro && (
           <div className="mb-8 rounded-2xl border border-emerald-200 bg-emerald-50/80 p-5 shadow-xs animate-in fade-in slide-in-from-top-4">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-sm">
@@ -276,12 +387,11 @@ function PricingContent() {
               </div>
               <div className="flex-1">
                 <h3 className="text-sm font-bold text-emerald-900">
-                  Subscription Activated!
+                  Payment Confirmed!
                 </h3>
                 <p className="text-xs text-emerald-700 mt-0.5">
-                  Your {activeProPlanName} membership is now live. All advanced
-                  tools, automated evaluations, and verification badges are
-                  fully unlocked.
+                  Activating your {activeProPlanName} membership and updating
+                  database records...
                 </p>
               </div>
               <Link
@@ -488,19 +598,31 @@ function PricingContent() {
               <div
                 key={plan.id}
                 className={`relative rounded-3xl p-8 flex flex-col justify-between transition-all duration-200 ${
-                  plan.highlighted
-                    ? "bg-white border-2 border-indigo-600 shadow-xl shadow-indigo-100/50 scale-[1.02]"
-                    : "bg-white border border-slate-200 shadow-sm hover:border-slate-300"
+                  isCurrent
+                    ? "bg-white border-2 border-emerald-500 shadow-xl shadow-emerald-100/60 ring-2 ring-emerald-500/20 scale-[1.02]"
+                    : plan.highlighted
+                      ? "bg-white border-2 border-indigo-600 shadow-xl shadow-indigo-100/50 scale-[1.01]"
+                      : "bg-white border border-slate-200 shadow-sm hover:border-slate-300"
                 }`}
               >
-                {/* Highlighted Badge */}
-                {plan.highlighted && plan.badge && (
+                {/* Active Plan or Highlighted Badge */}
+                {isCurrent ? (
                   <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
-                    <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-indigo-600 to-blue-600 px-3.5 py-1 text-[11px] font-bold text-white shadow-sm uppercase tracking-wider">
-                      <Sparkles className="h-3 w-3" />
-                      {plan.badge}
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600 px-3.5 py-1 text-[11px] font-bold text-white shadow-sm uppercase tracking-wider">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      ACTIVE SUBSCRIPTION
                     </span>
                   </div>
+                ) : (
+                  plan.highlighted &&
+                  plan.badge && (
+                    <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-indigo-600 to-blue-600 px-3.5 py-1 text-[11px] font-bold text-white shadow-sm uppercase tracking-wider">
+                        <Sparkles className="h-3 w-3" />
+                        {plan.badge}
+                      </span>
+                    </div>
+                  )
                 )}
 
                 <div>
@@ -509,8 +631,8 @@ function PricingContent() {
                       {plan.name}
                     </h3>
                     {isCurrent && (
-                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-700">
-                        Active
+                      <span className="rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 px-2.5 py-0.5 text-[11px] font-bold">
+                        Current
                       </span>
                     )}
                   </div>
@@ -546,9 +668,11 @@ function PricingContent() {
                       <div key={idx} className="flex items-start gap-2.5">
                         <div
                           className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full ${
-                            plan.highlighted
-                              ? "bg-indigo-100 text-indigo-700"
-                              : "bg-slate-100 text-slate-600"
+                            isCurrent
+                              ? "bg-emerald-100 text-emerald-700"
+                              : plan.highlighted
+                                ? "bg-indigo-100 text-indigo-700"
+                                : "bg-slate-100 text-slate-600"
                           }`}
                         >
                           <Check className="h-2.5 w-2.5 stroke-[3]" />
@@ -568,10 +692,12 @@ function PricingContent() {
                   disabled={loadingPlan !== null || isCurrent}
                   className={`w-full py-3 px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition focus:outline-none focus:ring-2 focus:ring-offset-2 ${
                     isCurrent
-                      ? "bg-slate-100 text-slate-400 cursor-default"
-                      : plan.highlighted
-                        ? "bg-indigo-600 text-white hover:bg-indigo-700 focus:ring-indigo-500 shadow-md shadow-indigo-200"
-                        : "bg-slate-900 text-white hover:bg-slate-800 focus:ring-slate-900 shadow-sm"
+                      ? "bg-emerald-50 text-emerald-800 border border-emerald-300 cursor-default shadow-inner"
+                      : isUserPro && plan.id === "free"
+                        ? "bg-slate-100 text-slate-500 border border-slate-200 cursor-default"
+                        : plan.highlighted
+                          ? "bg-indigo-600 text-white hover:bg-indigo-700 focus:ring-indigo-500 shadow-md shadow-indigo-200"
+                          : "bg-slate-900 text-white hover:bg-slate-800 focus:ring-slate-900 shadow-sm"
                   }`}
                 >
                   {loadingPlan === plan.id ? (
@@ -580,7 +706,12 @@ function PricingContent() {
                       <span>Redirecting to Stripe...</span>
                     </>
                   ) : isCurrent ? (
-                    <span>Your Current Plan</span>
+                    <span className="flex items-center gap-1.5 text-emerald-700 font-extrabold">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                      <span>Your Active Plan</span>
+                    </span>
+                  ) : isUserPro && plan.id === "free" ? (
+                    <span>Basic Starter (Included)</span>
                   ) : (
                     <>
                       <span>{plan.ctaLabel}</span>

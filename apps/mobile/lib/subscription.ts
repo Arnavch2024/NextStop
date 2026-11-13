@@ -26,7 +26,33 @@ export async function isMobileProUser(
   targetRole?: MobilePersonaRole
 ): Promise<boolean> {
   try {
-    const tier = await AsyncStorage.getItem(STORAGE_KEYS.TIER);
+    let tier = await AsyncStorage.getItem(STORAGE_KEYS.TIER);
+    if (!tier || tier === "free") {
+      try {
+        const { getMobileSupabaseClient } = await import("./supabase");
+        const supabase = getMobileSupabaseClient();
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (session?.user?.id) {
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("subscription_tier")
+            .eq("id", session.user.id)
+            .single();
+          if (
+            profile?.subscription_tier &&
+            profile.subscription_tier !== "free"
+          ) {
+            tier = profile.subscription_tier;
+            await AsyncStorage.setItem(STORAGE_KEYS.TIER, tier);
+          }
+        }
+      } catch {
+        // network non-blocking
+      }
+    }
+
     if (!tier || tier === "free") return false;
     if (!targetRole) return true;
 
@@ -46,7 +72,32 @@ export async function isMobileProUser(
  */
 export async function getMobileCurrentPlan(): Promise<MobileSubscriptionTier> {
   try {
-    const tier = await AsyncStorage.getItem(STORAGE_KEYS.TIER);
+    let tier = await AsyncStorage.getItem(STORAGE_KEYS.TIER);
+    if (!tier || tier === "free") {
+      try {
+        const { getMobileSupabaseClient } = await import("./supabase");
+        const supabase = getMobileSupabaseClient();
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (session?.user?.id) {
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("subscription_tier")
+            .eq("id", session.user.id)
+            .single();
+          if (
+            profile?.subscription_tier &&
+            profile.subscription_tier !== "free"
+          ) {
+            tier = profile.subscription_tier;
+            await AsyncStorage.setItem(STORAGE_KEYS.TIER, tier);
+          }
+        }
+      } catch {
+        // network non-blocking
+      }
+    }
     return (tier as MobileSubscriptionTier) || "free";
   } catch {
     return "free";
