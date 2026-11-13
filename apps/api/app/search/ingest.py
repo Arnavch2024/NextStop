@@ -111,9 +111,26 @@ def run_ingest(
 
     # Filter by category if requested
     if category:
-        all_companies = [
-            c for c in all_companies if (c.get("category") or "").strip().lower() == category.strip().lower()
-        ]
+        raw_cats = [cat.strip().lower() for cat in category.replace(";", ",").split(",") if cat.strip()]
+        matched_companies = []
+        for c in all_companies:
+            c_cat = (c.get("category") or "").strip().lower()
+            c_ind = (c.get("industry") or "").strip().lower()
+            matches = False
+            for target_cat in raw_cats:
+                if target_cat in (c_cat, c_ind):
+                    matches = True
+                elif target_cat in ("investment_bank", "investment_banking") and (
+                    "investment" in c_ind or "bank" in c_ind
+                ):
+                    matches = True
+                elif target_cat in ("fortune500_global", "fortune500", "enterprise") and (c_cat == "enterprise"):
+                    matches = True
+                elif target_cat in c_cat or target_cat in c_ind:
+                    matches = True
+            if matches:
+                matched_companies.append(c)
+        all_companies = matched_companies
 
     # Limit
     if limit is not None and limit > 0:
@@ -163,6 +180,14 @@ def run_ingest(
         f"{total_companies * len(query_templates)} base search calls (up to {est_search_calls} if Tavily fallback is needed) "
         f"+ {est_gemini_calls} Gemini calls"
     )
+    print("\n----------------- Pre-Run Estimate -----------------")
+    print(f"Target Companies:       {total_companies}")
+    print(f"Queries per Company:    {len(query_templates)}")
+    print(f"Base Search Calls:      {total_companies * len(query_templates)} (Exa primary)")
+    print(f"Max Fallback Calls:     {total_companies * len(query_templates)} (Tavily, only on thin results < 3)")
+    print(f"Max Search Call Budget: {est_search_calls}")
+    print(f"Estimated Gemini Calls: {est_gemini_calls}")
+    print("----------------------------------------------------\n")
 
     if est_search_calls > 200 and not confirm_yes:
         raise ValueError(

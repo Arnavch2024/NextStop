@@ -100,14 +100,22 @@ export function setProSubscription(
  * Sync subscription tier from Supabase profile into localStorage
  */
 export function syncSubscriptionFromProfile(tier?: string | null): void {
-  if (typeof window === "undefined") return;
-  if (
-    tier &&
-    ["student_pro", "recruiter_pro", "officer_pro", "company_pro"].includes(
-      tier
-    )
-  ) {
-    setProSubscription(tier as any);
+  if (typeof window === "undefined") {
+    return;
+  }
+  if (!tier) {
+    return;
+  }
+
+  const validProTiers: Exclude<SubscriptionTier, "free">[] = [
+    "student_pro",
+    "recruiter_pro",
+    "officer_pro",
+    "company_pro",
+  ];
+
+  if (validProTiers.includes(tier as any)) {
+    setProSubscription(tier as Exclude<SubscriptionTier, "free">);
   } else if (tier === "free") {
     clearProSubscription();
   }

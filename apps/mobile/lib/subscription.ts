@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { getMobileSupabaseClient } from "./supabase";
 
 export const MOBILE_FREE_TIER_LIMITS = {
   chat_messages: 5,
@@ -29,7 +30,6 @@ export async function isMobileProUser(
     let tier = await AsyncStorage.getItem(STORAGE_KEYS.TIER);
     if (!tier || tier === "free") {
       try {
-        const { getMobileSupabaseClient } = await import("./supabase");
         const supabase = getMobileSupabaseClient();
         const {
           data: { session },
@@ -45,7 +45,7 @@ export async function isMobileProUser(
             profile.subscription_tier !== "free"
           ) {
             tier = profile.subscription_tier;
-            await AsyncStorage.setItem(STORAGE_KEYS.TIER, tier);
+            await AsyncStorage.setItem(STORAGE_KEYS.TIER, String(tier));
           }
         }
       } catch {
@@ -75,7 +75,6 @@ export async function getMobileCurrentPlan(): Promise<MobileSubscriptionTier> {
     let tier = await AsyncStorage.getItem(STORAGE_KEYS.TIER);
     if (!tier || tier === "free") {
       try {
-        const { getMobileSupabaseClient } = await import("./supabase");
         const supabase = getMobileSupabaseClient();
         const {
           data: { session },
@@ -91,7 +90,7 @@ export async function getMobileCurrentPlan(): Promise<MobileSubscriptionTier> {
             profile.subscription_tier !== "free"
           ) {
             tier = profile.subscription_tier;
-            await AsyncStorage.setItem(STORAGE_KEYS.TIER, tier);
+            await AsyncStorage.setItem(STORAGE_KEYS.TIER, String(tier));
           }
         }
       } catch {

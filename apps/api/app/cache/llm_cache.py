@@ -167,7 +167,7 @@ class LLMReplyCache:
             self._last_invalidation_reason = reason
             self._stats["invalidations"] += 1
             logger.info(
-                f"[LLMCache] INVALIDATED {count} items due to: '{reason}'. " f"New lake version: {self._lake_version}."
+                f"[LLMCache] INVALIDATED {count} items due to: '{reason}'. New lake version: {self._lake_version}."
             )
 
     def maybe_sync_database_fingerprint(self, client: Client, check_interval_seconds: int = 20) -> None:
