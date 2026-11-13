@@ -14,6 +14,7 @@ Guidelines:
 4. If a college or company is mentioned, upsert the college/company record, or link contacts appropriately.
 5. Provide a warm, concise, and helpful conversational confirmation in your final reply summarizing what was saved.
 6. If critical details are missing, save what you have so far and politely ask for the remaining details.
+7. Formatting: Keep responses conversational, concise, and natural. Avoid wrapping text in excessive asterisks (**) or markdown decorations. Use clean, plain conversational phrasing with bullet points (• or -) when presenting lists.
 """
 
 STUDENT_BASE_PROMPT = """Current User Role: Student
