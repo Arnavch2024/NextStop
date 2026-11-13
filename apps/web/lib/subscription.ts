@@ -97,6 +97,23 @@ export function setProSubscription(
 }
 
 /**
+ * Sync subscription tier from Supabase profile into localStorage
+ */
+export function syncSubscriptionFromProfile(tier?: string | null): void {
+  if (typeof window === "undefined") return;
+  if (
+    tier &&
+    ["student_pro", "recruiter_pro", "officer_pro", "company_pro"].includes(
+      tier
+    )
+  ) {
+    setProSubscription(tier as any);
+  } else if (tier === "free") {
+    clearProSubscription();
+  }
+}
+
+/**
  * Clear Pro subscription (e.g. on downgrade or logout)
  */
 export function clearProSubscription(): void {

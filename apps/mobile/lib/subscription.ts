@@ -67,6 +67,28 @@ export async function setMobileProSubscription(
 }
 
 /**
+ * Sync subscription tier from Supabase profile into mobile storage
+ */
+export async function syncMobileSubscription(
+  tier?: string | null
+): Promise<void> {
+  try {
+    if (
+      tier &&
+      ["student_pro", "recruiter_pro", "officer_pro", "company_pro"].includes(
+        tier
+      )
+    ) {
+      await AsyncStorage.setItem(STORAGE_KEYS.TIER, tier);
+    } else if (tier === "free") {
+      await AsyncStorage.setItem(STORAGE_KEYS.TIER, "free");
+    }
+  } catch (err) {
+    console.warn("Unable to sync mobile subscription tier:", err);
+  }
+}
+
+/**
  * Get usage count for an action
  */
 export async function getMobileActionUsage(

@@ -110,6 +110,11 @@ export function MobileProBadge({
     );
   }
 
+  let upgradePrice = "$3";
+  if (role === "company") upgradePrice = "$39";
+  else if (role === "recruiter") upgradePrice = "$19";
+  else if (role === "placement_officer") upgradePrice = "$15";
+
   return (
     <TouchableOpacity
       activeOpacity={0.7}
@@ -117,7 +122,7 @@ export function MobileProBadge({
       style={styles.freePill}
     >
       <Text style={styles.freePillText}>Free</Text>
-      <Text style={styles.freeUpgradePillText}>• $3 Pro</Text>
+      <Text style={styles.freeUpgradePillText}>• {upgradePrice} Pro</Text>
     </TouchableOpacity>
   );
 }

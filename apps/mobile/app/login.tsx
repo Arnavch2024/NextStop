@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getMobileSupabaseClient, withApiFallback } from "../lib/supabase";
 import { demoLogin } from "@recruiting/shared";
+import { syncMobileSubscription } from "../lib/subscription";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -93,9 +94,13 @@ export default function LoginScreen() {
 
         const { data: profile } = await supabase
           .from("profiles")
-          .select("role")
+          .select("role, subscription_tier")
           .eq("id", data.user.id)
           .single();
+
+        if (profile?.subscription_tier) {
+          await syncMobileSubscription(profile.subscription_tier);
+        }
 
         if (!profile || !profile.role) {
           router.replace("/onboarding");
@@ -163,9 +168,13 @@ export default function LoginScreen() {
         if (session) {
           const { data: profile } = await supabase
             .from("profiles")
-            .select("role")
+            .select("role, subscription_tier")
             .eq("id", session.user.id)
             .single();
+
+          if (profile?.subscription_tier) {
+            await syncMobileSubscription(profile.subscription_tier);
+          }
 
           if (!profile || !profile.role) {
             router.replace("/onboarding");

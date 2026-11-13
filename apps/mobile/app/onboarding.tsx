@@ -13,6 +13,7 @@ import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getMobileSupabaseClient, withApiFallback } from "../lib/supabase";
 import { ProfileRole, completeOnboarding } from "@recruiting/shared";
+import { syncMobileSubscription } from "../lib/subscription";
 
 interface RoleCard {
   role: ProfileRole;
@@ -74,10 +75,13 @@ export default function OnboardingScreen() {
       // If user already has a role, route to their dashboard
       const { data: profile } = await supabase
         .from("profiles")
-        .select("role")
+        .select("role, subscription_tier")
         .eq("id", session.user.id)
         .single();
       if (profile?.role) {
+        if (profile.subscription_tier) {
+          await syncMobileSubscription(profile.subscription_tier);
+        }
         if (profile.role === "student") {
           router.replace("/(tabs)/home");
         } else {

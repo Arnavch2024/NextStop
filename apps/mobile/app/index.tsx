@@ -3,6 +3,7 @@ import { View, ActivityIndicator, StyleSheet } from "react-native";
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getMobileSupabaseClient } from "../lib/supabase";
+import { syncMobileSubscription } from "../lib/subscription";
 
 export default function IndexScreen() {
   const router = useRouter();
@@ -35,9 +36,13 @@ export default function IndexScreen() {
 
       const { data: profile } = await supabase
         .from("profiles")
-        .select("role")
+        .select("role, subscription_tier")
         .eq("id", session.user.id)
         .single();
+
+      if (profile?.subscription_tier) {
+        await syncMobileSubscription(profile.subscription_tier);
+      }
 
       if (!profile || !profile.role) {
         router.replace("/onboarding");

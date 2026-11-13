@@ -95,7 +95,7 @@ export function ProBadge({
 
     return (
       <Link
-        href="/pricing"
+        href={`/pricing?role=${role}&plan=${plan}`}
         title={title}
         className={`group relative inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold tracking-wide text-white shadow-xs transition-all duration-300 hover:scale-105 hover:shadow-md ${badgeGradient} ${className}`}
       >
@@ -143,6 +143,11 @@ export function ProBadge({
     );
   }
 
+  let upgradePrice = "$3";
+  if (role === "company") upgradePrice = "$39";
+  else if (role === "recruiter") upgradePrice = "$19";
+  else if (role === "placement_officer") upgradePrice = "$15";
+
   // Standard subtle Free pill
   return (
     <button
@@ -152,7 +157,7 @@ export function ProBadge({
     >
       <span>Free</span>
       <span className="text-[9px] text-amber-400 font-semibold">
-        • Upgrade $3
+        • Upgrade {upgradePrice}
       </span>
     </button>
   );

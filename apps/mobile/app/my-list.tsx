@@ -24,6 +24,8 @@ import {
 import { MobileContactCard } from "./components/MobileContactCard";
 import { DraftMessageSheet } from "./components/DraftMessageSheet";
 import { MobileProBadge } from "./components/MobileProBadge";
+import { MobileUpgradeModal } from "./components/MobileUpgradeModal";
+import { syncMobileSubscription } from "../lib/subscription";
 import { Feather } from "@expo/vector-icons";
 
 export default function MyListScreen() {
@@ -48,6 +50,7 @@ export default function MyListScreen() {
   );
 
   // Realtime cross-device toast
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [crossDeviceToast, setCrossDeviceToast] = useState<string | null>(null);
   const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -95,11 +98,13 @@ export default function MyListScreen() {
       setUserId(session.user.id);
       supabase
         .from("profiles")
-        .select("role")
+        .select("role, subscription_tier")
         .eq("id", session.user.id)
         .single()
         .then(({ data }) => {
           if (data?.role) setRole(data.role);
+          if (data?.subscription_tier)
+            syncMobileSubscription(data.subscription_tier);
         });
       fetchSavedList(session.access_token);
     });
@@ -200,7 +205,10 @@ export default function MyListScreen() {
           </TouchableOpacity>
           <View style={{ flexDirection: "row", alignItems: "center" }}>
             <Text style={styles.headerTitle}>My List</Text>
-            <MobileProBadge role={role as any} />
+            <MobileProBadge
+              role={role as any}
+              onPressUpgrade={() => setShowUpgradeModal(true)}
+            />
           </View>
           <TouchableOpacity
             style={styles.refreshBtn}
@@ -305,6 +313,13 @@ export default function MyListScreen() {
           contact={draftingContact}
           token={sessionToken}
           showToast={showToast}
+        />
+
+        {/* Upgrade Modal */}
+        <MobileUpgradeModal
+          visible={showUpgradeModal}
+          onClose={() => setShowUpgradeModal(false)}
+          role={role as any}
         />
       </View>
     </SafeAreaView>

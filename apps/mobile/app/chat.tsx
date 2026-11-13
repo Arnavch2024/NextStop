@@ -54,6 +54,7 @@ import { MobileUpgradeModal } from "./components/MobileUpgradeModal";
 import {
   canMobilePerformAction,
   recordMobileActionUsage,
+  syncMobileSubscription,
   MobileQuotaAction,
 } from "../lib/subscription";
 import { Feather } from "@expo/vector-icons";
@@ -350,6 +351,8 @@ export default function ChatScreen() {
         router.replace("/onboarding");
         return;
       }
+
+      await syncMobileSubscription(profile.subscription_tier);
 
       setRole(profile.role);
       setDisplayName(

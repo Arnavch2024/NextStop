@@ -1,5 +1,6 @@
 import { getSupabaseBrowserClient, API_BASE_URL } from "./supabase";
 import { demoLogin, DemoLoginResponse } from "@recruiting/shared";
+import { syncSubscriptionFromProfile } from "./subscription";
 
 export interface UserSession {
   token: string;
@@ -26,6 +27,10 @@ export async function getCurrentSession(): Promise<UserSession | null> {
     .select("*")
     .eq("id", session.user.id)
     .single();
+
+  if (profile?.subscription_tier) {
+    syncSubscriptionFromProfile(profile.subscription_tier);
+  }
 
   return {
     token: session.access_token,

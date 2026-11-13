@@ -3,6 +3,7 @@ import { View, Text, ActivityIndicator, StyleSheet } from "react-native";
 import { useRouter } from "expo-router";
 import * as Linking from "expo-linking";
 import { getMobileSupabaseClient } from "../../lib/supabase";
+import { syncMobileSubscription } from "../../lib/subscription";
 
 export default function AuthCallback() {
   const router = useRouter();
@@ -49,9 +50,13 @@ export default function AuthCallback() {
 
         const { data: profile } = await supabase
           .from("profiles")
-          .select("role")
+          .select("role, subscription_tier")
           .eq("id", session.user.id)
           .single();
+
+        if (profile?.subscription_tier) {
+          await syncMobileSubscription(profile.subscription_tier);
+        }
 
         if (!isMounted) return;
 
