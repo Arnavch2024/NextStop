@@ -23,6 +23,7 @@ import {
 } from "@recruiting/shared";
 import { MobileContactCard } from "./components/MobileContactCard";
 import { DraftMessageSheet } from "./components/DraftMessageSheet";
+import { Feather } from "@expo/vector-icons";
 
 export default function MyListScreen() {
   const router = useRouter();
@@ -155,13 +156,16 @@ export default function MyListScreen() {
         {/* Realtime Toast */}
         {crossDeviceToast && (
           <View style={styles.toastBanner}>
-            <Text style={styles.toastIcon}>💻</Text>
+            <Feather name="check-circle" size={16} color="#4f46e5" />
             <View style={{ flex: 1 }}>
               <Text style={styles.toastText}>{crossDeviceToast}</Text>
               <Text style={styles.toastSub}>Synced in realtime</Text>
             </View>
-            <TouchableOpacity onPress={() => setCrossDeviceToast(null)}>
-              <Text style={styles.toastClose}>✕</Text>
+            <TouchableOpacity
+              onPress={() => setCrossDeviceToast(null)}
+              accessibilityLabel="Dismiss toast"
+            >
+              <Feather name="x" size={14} color="#64748b" />
             </TouchableOpacity>
           </View>
         )}
@@ -177,7 +181,12 @@ export default function MyListScreen() {
             style={styles.backBtn}
             onPress={() => router.push("/chat")}
           >
-            <Text style={styles.backBtnText}>&larr; Chat</Text>
+            <View
+              style={{ flexDirection: "row", alignItems: "center", gap: 4 }}
+            >
+              <Feather name="arrow-left" size={13} color="#4f46e5" />
+              <Text style={styles.backBtnText}>Chat</Text>
+            </View>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>My List</Text>
           <TouchableOpacity
@@ -185,7 +194,7 @@ export default function MyListScreen() {
             onPress={() => sessionToken && fetchSavedList(sessionToken)}
             disabled={isLoading}
           >
-            <Text style={styles.refreshBtnText}>↻</Text>
+            <Feather name="refresh-cw" size={13} color="#4338ca" />
           </TouchableOpacity>
         </View>
 
@@ -201,7 +210,12 @@ export default function MyListScreen() {
         >
           {/* Privacy Note */}
           <View style={styles.privacyBox}>
-            <Text style={styles.privacyIcon}>🛡</Text>
+            <Feather
+              name="shield"
+              size={13}
+              color="#64748b"
+              style={{ marginTop: 2, marginRight: 6 }}
+            />
             <Text style={styles.privacyText}>
               Public professional contact info only. Source and date shown for
               every record. You can remove any saved contact from My list at any
@@ -234,7 +248,9 @@ export default function MyListScreen() {
           {/* Empty State */}
           {!isLoading && !error && contacts.length === 0 && (
             <View style={styles.emptyBox}>
-              <Text style={styles.emptyIcon}>🔖</Text>
+              <View style={styles.emptyIconBadge}>
+                <Feather name="bookmark" size={24} color="#64748b" />
+              </View>
               <Text style={styles.emptyTitle}>No saved contacts yet</Text>
               <Text style={styles.emptyMessage}>
                 Search for recruiters in chat and save them to your list to
@@ -431,8 +447,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 20,
   },
-  emptyIcon: {
-    fontSize: 32,
+  emptyIconBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: "#f1f5f9",
+    alignItems: "center",
+    justifyContent: "center",
     marginBottom: 10,
   },
   emptyTitle: {

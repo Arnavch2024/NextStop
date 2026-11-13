@@ -6,6 +6,7 @@ import {
   ActivityIndicator,
   StyleSheet,
 } from "react-native";
+import { Feather } from "@expo/vector-icons";
 import {
   ConfirmationCard,
   verifyMock,
@@ -132,9 +133,11 @@ export function MobileChatConfirmationCard({
     <View style={styles.cardContainer}>
       <View style={styles.headerRow}>
         <View style={styles.iconCircle}>
-          <Text style={styles.iconText}>
-            {isRevoke ? "↩️" : isAuth ? "🎖️" : "🛡️"}
-          </Text>
+          <Feather
+            name={isRevoke ? "rotate-ccw" : isAuth ? "award" : "shield"}
+            size={18}
+            color={isRevoke ? "#dc2626" : isAuth ? "#4f46e5" : "#059669"}
+          />
         </View>
         <View style={{ flex: 1 }}>
           <View style={styles.titleRow}>

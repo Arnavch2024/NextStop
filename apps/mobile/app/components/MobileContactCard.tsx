@@ -7,6 +7,7 @@ import {
   Linking,
   ActivityIndicator,
 } from "react-native";
+import { Feather } from "@expo/vector-icons";
 import { ContactCard } from "@recruiting/shared";
 
 interface MobileContactCardProps {
@@ -48,7 +49,15 @@ export function MobileContactCard({
             {contact.college_name ? ` (${contact.college_name})` : ""}
           </Text>
           {contact.location ? (
-            <Text style={styles.location}>📍 {contact.location}</Text>
+            <View style={styles.locationRow}>
+              <Feather
+                name="map-pin"
+                size={11}
+                color="#64748b"
+                style={{ marginRight: 4 }}
+              />
+              <Text style={styles.location}>{contact.location}</Text>
+            </View>
           ) : null}
         </View>
 
@@ -100,8 +109,14 @@ export function MobileContactCard({
       {/* Meta date & source URL */}
       <View style={styles.metaRow}>
         {contact.source_url ? (
-          <TouchableOpacity onPress={handleOpenSource}>
-            <Text style={styles.sourceLink}>🔗 Source</Text>
+          <TouchableOpacity onPress={handleOpenSource} style={styles.sourceBtn}>
+            <Text style={styles.sourceLink}>Source</Text>
+            <Feather
+              name="external-link"
+              size={10}
+              color="#4f46e5"
+              style={{ marginLeft: 3 }}
+            />
           </TouchableOpacity>
         ) : null}
         {contact.source_published_date ? (
@@ -118,7 +133,13 @@ export function MobileContactCard({
           style={styles.draftBtn}
           onPress={() => onDraft(contact)}
         >
-          <Text style={styles.draftBtnText}>✎ Draft message</Text>
+          <Feather
+            name="edit-3"
+            size={12}
+            color="#4338ca"
+            style={{ marginRight: 5 }}
+          />
+          <Text style={styles.draftBtnText}>Draft outreach</Text>
         </TouchableOpacity>
 
         {/* Save / Remove action */}
@@ -131,13 +152,27 @@ export function MobileContactCard({
             {isBusy ? (
               <ActivityIndicator size="small" color="#dc2626" />
             ) : (
-              <Text style={styles.removeBtnText}>🗑 Remove</Text>
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
+                <Feather
+                  name="trash-2"
+                  size={12}
+                  color="#b91c1c"
+                  style={{ marginRight: 4 }}
+                />
+                <Text style={styles.removeBtnText}>Remove</Text>
+              </View>
             )}
           </TouchableOpacity>
         ) : isSaved ? (
           <View style={styles.savedGroup}>
             <View style={styles.savedBadge}>
-              <Text style={styles.savedBadgeText}>✓ Saved</Text>
+              <Feather
+                name="check"
+                size={11}
+                color="#059669"
+                style={{ marginRight: 3 }}
+              />
+              <Text style={styles.savedBadgeText}>Saved</Text>
             </View>
             <TouchableOpacity
               style={styles.removeSmallBtn}
@@ -160,7 +195,15 @@ export function MobileContactCard({
             {isBusy ? (
               <ActivityIndicator size="small" color="#ffffff" />
             ) : (
-              <Text style={styles.saveBtnText}>🔖 Save to my list</Text>
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
+                <Feather
+                  name="bookmark"
+                  size={12}
+                  color="#ffffff"
+                  style={{ marginRight: 4 }}
+                />
+                <Text style={styles.saveBtnText}>Save</Text>
+              </View>
             )}
           </TouchableOpacity>
         )}
@@ -194,10 +237,14 @@ const styles = StyleSheet.create({
     color: "#475569",
     marginTop: 2,
   },
+  locationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 2,
+  },
   location: {
     fontSize: 11,
     color: "#64748b",
-    marginTop: 2,
   },
   badge: {
     paddingHorizontal: 7,
@@ -244,6 +291,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     marginTop: 8,
+  },
+  sourceBtn: {
+    flexDirection: "row",
+    alignItems: "center",
   },
   sourceLink: {
     fontSize: 10,

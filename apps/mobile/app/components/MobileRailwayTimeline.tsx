@@ -1,5 +1,6 @@
 import React from "react";
 import { View, Text, StyleSheet, ActivityIndicator } from "react-native";
+import { Feather } from "@expo/vector-icons";
 import { TimelineStation } from "@recruiting/shared";
 
 interface MobileRailwayTimelineProps {
@@ -23,7 +24,9 @@ export function MobileRailwayTimeline({
   if (!stations || stations.length === 0) {
     return (
       <View style={styles.emptyContainer}>
-        <Text style={styles.emptyIcon}>🧭</Text>
+        <View style={styles.emptyIconBadge}>
+          <Feather name="compass" size={26} color="#4F46E5" />
+        </View>
         <Text style={styles.emptyTitle}>Your Route Has Not Started</Text>
         <Text style={styles.emptySubtitle}>
           Chat with the assistant to record your 10th, 12th, college details,
@@ -33,25 +36,25 @@ export function MobileRailwayTimeline({
     );
   }
 
-  function getStationIcon(kind: string): string {
+  function getStationIconName(kind: string): keyof typeof Feather.glyphMap {
     switch (kind) {
       case "school_10":
       case "school_12":
-        return "🏫";
+        return "book-open";
       case "college":
-        return "🎓";
+        return "award";
       case "internship":
-        return "💼";
+        return "briefcase";
       case "job":
-        return "🏢";
+        return "layers";
       case "pre_verify_done":
       case "pre_verify_pending":
-        return "🛡️";
+        return "shield";
       case "reference_done":
       case "reference_pending":
-        return "🎖️";
+        return "check-circle";
       default:
-        return "📍";
+        return "map-pin";
     }
   }
 
@@ -90,9 +93,11 @@ export function MobileRailwayTimeline({
                     : styles.nodeCirclePast,
               ]}
             >
-              <Text style={styles.stationIcon}>
-                {getStationIcon(station.kind)}
-              </Text>
+              <Feather
+                name={getStationIconName(station.kind)}
+                size={14}
+                color={isCurrent ? "#ffffff" : isFuture ? "#94a3b8" : "#4f46e5"}
+              />
             </View>
 
             {/* Station Content */}
@@ -131,8 +136,14 @@ export function MobileRailwayTimeline({
 
               {/* Station Years / Subtitle */}
               <View style={styles.yearsRow}>
+                <Feather
+                  name="calendar"
+                  size={11}
+                  color="#64748b"
+                  style={{ marginRight: 4 }}
+                />
                 <Text style={styles.yearsText}>
-                  🗓️ {formatStationYears(station)}
+                  {formatStationYears(station)}
                 </Text>
               </View>
             </View>
@@ -299,9 +310,14 @@ const styles = StyleSheet.create({
     borderColor: "#E2E8F0",
     borderStyle: "dashed",
   },
-  emptyIcon: {
-    fontSize: 28,
-    marginBottom: 6,
+  emptyIconBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: "#EEF2FF",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 8,
   },
   emptyTitle: {
     fontSize: 13,

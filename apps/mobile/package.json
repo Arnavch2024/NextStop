@@ -12,6 +12,7 @@
     "build:apk:local": "eas build --platform android --profile preview --local"
   },
   "dependencies": {
+    "@expo/vector-icons": "^14.1.0",
     "@react-native-async-storage/async-storage": "1.23.1",
     "@recruiting/shared": "workspace:*",
     "@supabase/supabase-js": "^2.43.0",

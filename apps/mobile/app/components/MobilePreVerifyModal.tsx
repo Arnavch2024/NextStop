@@ -9,6 +9,7 @@ import {
   StyleSheet,
   ScrollView,
 } from "react-native";
+import { Feather } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import {
   uploadResume,
@@ -178,7 +179,9 @@ export function MobilePreVerifyModal({
             {/* Header */}
             <View style={styles.headerRow}>
               <View style={styles.headerLeft}>
-                <Text style={styles.headerIcon}>🛡️</Text>
+                <View style={styles.headerIconBadge}>
+                  <Feather name="shield" size={16} color="#059669" />
+                </View>
                 <View>
                   <Text style={styles.headerTitle}>
                     Document Pre-Verification
@@ -188,8 +191,12 @@ export function MobilePreVerifyModal({
                   </Text>
                 </View>
               </View>
-              <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-                <Text style={styles.closeBtnText}>✕</Text>
+              <TouchableOpacity
+                onPress={onClose}
+                style={styles.closeBtn}
+                accessibilityLabel="Close"
+              >
+                <Feather name="x" size={16} color="#64748b" />
               </TouchableOpacity>
             </View>
 
@@ -198,9 +205,18 @@ export function MobilePreVerifyModal({
               <Text style={styles.statusLabel}>Current Status:</Text>
               {verifiedDoc ? (
                 <View style={[styles.chip, styles.chipVerified]}>
-                  <Text style={styles.chipVerifiedText}>
-                    ✓ Verified (mocked)
-                  </Text>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 4,
+                    }}
+                  >
+                    <Feather name="check" size={10} color="#059669" />
+                    <Text style={styles.chipVerifiedText}>
+                      Verified (mocked)
+                    </Text>
+                  </View>
                 </View>
               ) : hasUploadedDocs ? (
                 <View style={[styles.chip, styles.chipUploaded]}>
@@ -223,7 +239,17 @@ export function MobilePreVerifyModal({
 
             {/* Warning Banner */}
             <View style={styles.warningBox}>
-              <Text style={styles.warningTitle}>⚠️ Demo only:</Text>
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 5,
+                  marginBottom: 3,
+                }}
+              >
+                <Feather name="alert-triangle" size={12} color="#b45309" />
+                <Text style={styles.warningTitle}>Demo environment:</Text>
+              </View>
               <Text style={styles.warningText}>
                 Please upload sample documents, not your real Aadhaar or PAN.
               </Text>
@@ -235,7 +261,17 @@ export function MobilePreVerifyModal({
 
             {/* Plain-Language Explanation */}
             <View style={styles.infoBox}>
-              <Text style={styles.infoTitle}>📋 Privacy & Data Notice</Text>
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 5,
+                  marginBottom: 6,
+                }}
+              >
+                <Feather name="file-text" size={12} color="#0f172a" />
+                <Text style={styles.infoTitle}>Privacy & Data Notice</Text>
+              </View>
               <Text style={styles.infoItem}>
                 • <Text style={{ fontWeight: "700" }}>What is read:</Text> Only
                 document MIME type (PDF/Word) and file size to ensure valid
@@ -284,7 +320,12 @@ export function MobilePreVerifyModal({
 
             {/* File Picker */}
             <TouchableOpacity style={styles.pickerBox} onPress={handlePickFile}>
-              <Text style={styles.pickerIcon}>📄</Text>
+              <Feather
+                name="upload-cloud"
+                size={24}
+                color="#4f46e5"
+                style={{ marginBottom: 6 }}
+              />
               <Text style={styles.pickerTitle}>
                 {selectedFile ? selectedFile.name : "Choose Sample Document"}
               </Text>
@@ -298,13 +339,31 @@ export function MobilePreVerifyModal({
             {/* Success / Error Messages */}
             {successMessage && (
               <View style={styles.successBox}>
-                <Text style={styles.successText}>✓ {successMessage}</Text>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
+                >
+                  <Feather name="check" size={13} color="#059669" />
+                  <Text style={styles.successText}>{successMessage}</Text>
+                </View>
               </View>
             )}
 
             {error && (
               <View style={styles.errorBox}>
-                <Text style={styles.errorText}>✕ {error}</Text>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
+                >
+                  <Feather name="alert-circle" size={13} color="#dc2626" />
+                  <Text style={styles.errorText}>{error}</Text>
+                </View>
               </View>
             )}
 
@@ -338,9 +397,19 @@ export function MobilePreVerifyModal({
                 {isRevoking ? (
                   <ActivityIndicator size="small" color="#DC2626" />
                 ) : (
-                  <Text style={styles.revokeBtnText}>
-                    🗑️ Remove my documents & revoke verification
-                  </Text>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 6,
+                    }}
+                  >
+                    <Feather name="trash-2" size={13} color="#dc2626" />
+                    <Text style={styles.revokeBtnText}>
+                      Remove my documents & revoke verification
+                    </Text>
+                  </View>
                 )}
               </TouchableOpacity>
             )}
@@ -378,8 +447,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
   },
-  headerIcon: {
-    fontSize: 24,
+  headerIconBadge: {
+    width: 34,
+    height: 34,
+    borderRadius: 8,
+    backgroundColor: "#ecfdf5",
+    borderWidth: 1,
+    borderColor: "#a7f3d0",
+    alignItems: "center",
+    justifyContent: "center",
   },
   headerTitle: {
     fontSize: 16,

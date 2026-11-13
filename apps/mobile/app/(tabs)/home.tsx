@@ -13,6 +13,7 @@ import {
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
+import { Feather } from "@expo/vector-icons";
 import {
   getMobileSupabaseClient,
   API_BASE_URL,
@@ -274,13 +275,16 @@ export default function MobileHomeScreen() {
       {/* Realtime Sync Toast */}
       {syncToast && (
         <View style={styles.toastContainer}>
-          <Text style={styles.toastIcon}>💻</Text>
+          <Feather name="check-circle" size={16} color="#4f46e5" />
           <View style={{ flex: 1 }}>
             <Text style={styles.toastTitle}>{syncToast}</Text>
             <Text style={styles.toastSubtitle}>Synced live from laptop</Text>
           </View>
-          <TouchableOpacity onPress={() => setSyncToast(null)}>
-            <Text style={styles.toastClose}>✕</Text>
+          <TouchableOpacity
+            onPress={() => setSyncToast(null)}
+            accessibilityLabel="Dismiss toast"
+          >
+            <Feather name="x" size={14} color="#64748b" />
           </TouchableOpacity>
         </View>
       )}
@@ -348,7 +352,9 @@ export default function MobileHomeScreen() {
         <View style={styles.sectionCard}>
           <View style={styles.day5HeaderRow}>
             <View style={styles.day5TitleGroup}>
-              <Text style={styles.day5Icon}>🛡️</Text>
+              <View style={styles.day5IconBadge}>
+                <Feather name="shield" size={16} color="#059669" />
+              </View>
               <View>
                 <Text style={styles.sectionTitle}>
                   Document Pre-Verification
@@ -358,7 +364,16 @@ export default function MobileHomeScreen() {
             </View>
             {isPreVerified ? (
               <View style={[styles.statusChip, styles.chipGreen]}>
-                <Text style={styles.chipTextGreen}>✓ Verified (mocked)</Text>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 4,
+                  }}
+                >
+                  <Feather name="check" size={10} color="#059669" />
+                  <Text style={styles.chipTextGreen}>Verified (mocked)</Text>
+                </View>
               </View>
             ) : hasUploadedDocs ? (
               <View style={[styles.statusChip, styles.chipBlue]}>
@@ -402,7 +417,9 @@ export default function MobileHomeScreen() {
         <View style={styles.sectionCard}>
           <View style={styles.day5HeaderRow}>
             <View style={styles.day5TitleGroup}>
-              <Text style={styles.day5Icon}>🎖️</Text>
+              <View style={styles.day5IconBadge}>
+                <Feather name="award" size={16} color="#4f46e5" />
+              </View>
               <View>
                 <Text style={styles.sectionTitle}>Reference Check</Text>
                 <Text style={styles.day5Sub}>Internship employer outreach</Text>
@@ -410,7 +427,16 @@ export default function MobileHomeScreen() {
             </View>
             {isRefAuthorized ? (
               <View style={[styles.statusChip, styles.chipGreen]}>
-                <Text style={styles.chipTextGreen}>✓ Authorized</Text>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 4,
+                  }}
+                >
+                  <Feather name="check" size={10} color="#059669" />
+                  <Text style={styles.chipTextGreen}>Authorized</Text>
+                </View>
               </View>
             ) : (
               <View style={[styles.statusChip, styles.chipGray]}>
@@ -693,8 +719,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
   },
-  day5Icon: {
-    fontSize: 20,
+  day5IconBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: "#F8FAFC",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
   },
   day5Sub: {
     fontSize: 10,

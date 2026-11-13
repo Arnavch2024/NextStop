@@ -49,15 +49,17 @@ import { MobileContactCard } from "./components/MobileContactCard";
 import { DraftMessageSheet } from "./components/DraftMessageSheet";
 import { MobileChatConfirmationCard } from "./components/MobileChatConfirmationCard";
 import { MarkdownText } from "./components/MarkdownText";
+import { Feather } from "@expo/vector-icons";
 
 interface QuickActionItem {
   label: string;
+  iconName?: keyof typeof Feather.glyphMap;
   prompt?: string;
   isResumeUpload?: boolean;
 }
 
 interface RoleChatConfig {
-  icon: string;
+  iconName: keyof typeof Feather.glyphMap;
   title: string;
   subtitle: string;
   placeholder: string;
@@ -149,16 +151,14 @@ export default function ChatScreen() {
       const res = await health(target);
       if (res && res.status === "ok") {
         setServerTestStatus(
-          `✅ Connected successfully! (v${res.version || "1.0"})`
+          `Connected successfully (v${res.version || "1.0"})`
         );
       } else {
-        setServerTestStatus(
-          "⚠️ Server responded but health status was not ok."
-        );
+        setServerTestStatus("Server responded but health status was not ok.");
       }
     } catch (err: any) {
       setServerTestStatus(
-        `❌ Connection failed: ${err.message || "Network request failed"}`
+        `Connection failed: ${err.message || "Network request failed"}`
       );
     } finally {
       setServerTestLoading(false);
@@ -181,53 +181,60 @@ export default function ChatScreen() {
     switch (role) {
       case "placement_officer":
         return {
-          icon: "🏛️",
-          title: "Welcome, Placement Officer!",
+          iconName: "award",
+          title: "Welcome, Placement Officer",
           subtitle:
-            "Import your student list, search students by batch or status, or find companies to invite for campus hiring.",
+            "Import student cohorts, explore campus hiring trends, or discover enterprise recruiters in Mumbai.",
           placeholder: "Search students by batch, find hiring companies...",
           quickActions: [
             {
-              label: "📥 Import student list (CSV)",
+              label: "Import student list (CSV)",
+              iconName: "upload-cloud",
               prompt: "How can I import our student list via CSV?",
             },
             {
-              label: "🏢 Companies to contact for BE Computer Science/IT/AI",
+              label: "Companies for CS / IT / AI",
+              iconName: "briefcase",
               prompt: "Companies to contact for BE Computer Science/IT/AI",
             },
           ],
         };
       case "company":
         return {
-          icon: "🏢",
-          title: "Welcome, Hiring Partner!",
+          iconName: "briefcase",
+          title: "Welcome, Hiring Partner",
           subtitle:
-            "Find colleges and placement officers, import your campus hiring file, or search students.",
+            "Discover engineering colleges, connect with placement officers, and explore student talent.",
           placeholder: "Search colleges, placement officers, or students...",
           quickActions: [
             {
-              label: "📥 Import campus hiring file",
+              label: "Import campus hiring file",
+              iconName: "upload-cloud",
               prompt: "How can I import our campus hiring file?",
             },
             {
-              label: "🏛️ Colleges to contact in Mumbai",
+              label: "Colleges in Mumbai",
+              iconName: "map-pin",
               prompt: "Colleges to contact in Mumbai",
             },
             {
-              label: "🎯 Search students by CGPA",
+              label: "Search students by CGPA",
+              iconName: "search",
               prompt: "Search students by CGPA",
             },
           ],
         };
       case "recruiter":
         return {
-          icon: "💼",
-          title: "Welcome, Campus Recruiter!",
-          subtitle: "Find placement officers at colleges, and draft outreach.",
+          iconName: "users",
+          title: "Welcome, Campus Recruiter",
+          subtitle:
+            "Discover placement officers at colleges and prepare personalized outreach.",
           placeholder: "Find placement officers, draft outreach...",
           quickActions: [
             {
-              label: "🏛️ Placement officers at engineering colleges",
+              label: "Placement officers at colleges",
+              iconName: "search",
               prompt:
                 "Find placement officers at engineering colleges in Mumbai",
             },
@@ -236,14 +243,15 @@ export default function ChatScreen() {
       case "student":
       default:
         return {
-          icon: "🤖",
-          title: "Welcome to your Recruiting Assistant!",
+          iconName: "compass",
+          title: "Recruiting Intelligence",
           subtitle:
-            "Type or speak your details naturally, or tap “Add my resume” to extract your profile without filling forms.",
+            "Type or speak your details naturally, or upload your resume to build your verified profile automatically.",
           placeholder: "Type your details (college, batch)...",
           quickActions: [
             {
-              label: "📄 Add my resume",
+              label: "Add my resume",
+              iconName: "file-text",
               isResumeUpload: true,
             },
           ],
@@ -887,13 +895,16 @@ export default function ChatScreen() {
         {/* Realtime Sync Toast */}
         {crossDeviceToast && (
           <View style={styles.toastContainer}>
-            <Text style={styles.toastIcon}>💻</Text>
+            <Feather name="check-circle" size={18} color="#4f46e5" />
             <View style={{ flex: 1 }}>
               <Text style={styles.toastTitle}>{crossDeviceToast}</Text>
               <Text style={styles.toastSubtitle}>Synced live from laptop</Text>
             </View>
-            <TouchableOpacity onPress={() => setCrossDeviceToast(null)}>
-              <Text style={styles.toastClose}>✕</Text>
+            <TouchableOpacity
+              onPress={() => setCrossDeviceToast(null)}
+              accessibilityLabel="Dismiss toast"
+            >
+              <Feather name="x" size={14} color="#64748b" />
             </TouchableOpacity>
           </View>
         )}
@@ -907,8 +918,9 @@ export default function ChatScreen() {
                 setVoiceError(null);
                 setResumeError(null);
               }}
+              accessibilityLabel="Dismiss error"
             >
-              <Text style={styles.errorClose}>✕</Text>
+              <Feather name="x" size={14} color="#b91c1c" />
             </TouchableOpacity>
           </View>
         )}
@@ -938,7 +950,12 @@ export default function ChatScreen() {
               style={styles.myListHeaderBtn}
               accessibilityLabel="My saved list"
             >
-              <Text style={styles.myListHeaderText}>🔖 List</Text>
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 3 }}
+              >
+                <Feather name="bookmark" size={11} color="#4338ca" />
+                <Text style={styles.myListHeaderText}>Saved</Text>
+              </View>
             </TouchableOpacity>
             {role === "student" && (
               <TouchableOpacity
@@ -954,14 +971,19 @@ export default function ChatScreen() {
               style={styles.serverSettingsHeaderBtn}
               accessibilityLabel="Server connection settings"
             >
-              <Text style={styles.serverSettingsHeaderText}>⚙️</Text>
+              <Feather name="settings" size={13} color="#475569" />
             </TouchableOpacity>
             <TouchableOpacity
               onPress={handleSignOut}
               style={styles.signOutBtn}
               accessibilityLabel="Sign out"
             >
-              <Text style={styles.signOutText}>Exit</Text>
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 3 }}
+              >
+                <Feather name="log-out" size={11} color="#475569" />
+                <Text style={styles.signOutText}>Exit</Text>
+              </View>
             </TouchableOpacity>
           </View>
         </View>
@@ -988,7 +1010,13 @@ export default function ChatScreen() {
           }}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyIcon}>{roleConfig.icon}</Text>
+              <View style={styles.emptyIconBadge}>
+                <Feather
+                  name={roleConfig.iconName || "compass"}
+                  size={26}
+                  color="#4f46e5"
+                />
+              </View>
               <Text style={styles.emptyTitle}>{roleConfig.title}</Text>
               <Text style={styles.emptySubtitle}>{roleConfig.subtitle}</Text>
               <View style={styles.emptyActions}>
@@ -1004,16 +1032,36 @@ export default function ChatScreen() {
                       }
                     }}
                   >
-                    <Text style={styles.emptyBtnText}>{qa.label}</Text>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      {qa.iconName && (
+                        <Feather name={qa.iconName} size={12} color="#4338ca" />
+                      )}
+                      <Text style={styles.emptyBtnText}>{qa.label}</Text>
+                    </View>
                   </TouchableOpacity>
                 ))}
                 <TouchableOpacity
                   style={[styles.emptyBtn, styles.emptyBtnOutline]}
                   onPress={toggleVoiceRecording}
                 >
-                  <Text style={styles.emptyBtnOutlineText}>
-                    🎤 Speak via Voice
-                  </Text>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
+                    <Feather name="mic" size={12} color="#334155" />
+                    <Text style={styles.emptyBtnOutlineText}>
+                      Speak via Voice
+                    </Text>
+                  </View>
                 </TouchableOpacity>
               </View>
             </View>
@@ -1060,9 +1108,18 @@ export default function ChatScreen() {
                       style={styles.retryConfigBtn}
                       onPress={() => setShowServerModal(true)}
                     >
-                      <Text style={styles.retryConfigBtnText}>
-                        ⚙️ Configure Server URL & Retry
-                      </Text>
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 6,
+                        }}
+                      >
+                        <Feather name="settings" size={13} color="#1d4ed8" />
+                        <Text style={styles.retryConfigBtnText}>
+                          Configure Server & Retry
+                        </Text>
+                      </View>
                     </TouchableOpacity>
                   )}
 
@@ -1070,9 +1127,18 @@ export default function ChatScreen() {
                   {summary && (
                     <View style={styles.summaryCard}>
                       <View style={styles.summaryHeader}>
-                        <Text style={styles.summaryTitle}>
-                          📄 Resume Summary Card
-                        </Text>
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            gap: 6,
+                          }}
+                        >
+                          <Feather name="file-text" size={14} color="#1e1b4b" />
+                          <Text style={styles.summaryTitle}>
+                            Resume Readiness Summary
+                          </Text>
+                        </View>
                         <View style={styles.summaryScoreBadge}>
                           <Text style={styles.summaryScoreText}>
                             {summary.score.score}/100
@@ -1101,15 +1167,33 @@ export default function ChatScreen() {
                           style={styles.looksRightBtn}
                           onPress={() => router.push("/(tabs)/home")}
                         >
-                          <Text style={styles.looksRightText}>
-                            ✓ Looks right
-                          </Text>
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              alignItems: "center",
+                              gap: 5,
+                            }}
+                          >
+                            <Feather name="check" size={12} color="#ffffff" />
+                            <Text style={styles.looksRightText}>
+                              Confirm Profile
+                            </Text>
+                          </View>
                         </TouchableOpacity>
                         <TouchableOpacity
                           style={styles.fixBtn}
                           onPress={() => handleFixSomething(summary)}
                         >
-                          <Text style={styles.fixText}>Fix something</Text>
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              alignItems: "center",
+                              gap: 5,
+                            }}
+                          >
+                            <Feather name="edit-2" size={12} color="#475569" />
+                            <Text style={styles.fixText}>Edit Details</Text>
+                          </View>
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -1146,9 +1230,15 @@ export default function ChatScreen() {
 
                       {/* Short Privacy Note on Results */}
                       <View style={styles.privacyNoteBox}>
+                        <Feather
+                          name="shield"
+                          size={12}
+                          color="#64748b"
+                          style={{ marginTop: 2, marginRight: 6 }}
+                        />
                         <Text style={styles.privacyNoteText}>
-                          🛡 Public professional contact info only. Source and
-                          date shown for every record. You can remove any saved
+                          Public professional directory records only. Source and
+                          verification date tracked. You can remove any saved
                           contact from My list at any time.
                         </Text>
                       </View>
@@ -1207,10 +1297,25 @@ export default function ChatScreen() {
                             <View style={styles.stepsDetails}>
                               {item.records?.map(
                                 (rec: RecordRef, i: number) => (
-                                  <Text key={i} style={styles.recText}>
-                                    ✓ {rec.op.toUpperCase()}: {rec.table} (
-                                    {rec.id})
-                                  </Text>
+                                  <View
+                                    key={i}
+                                    style={{
+                                      flexDirection: "row",
+                                      alignItems: "center",
+                                      gap: 4,
+                                      marginBottom: 2,
+                                    }}
+                                  >
+                                    <Feather
+                                      name="check"
+                                      size={10}
+                                      color="#059669"
+                                    />
+                                    <Text style={styles.recText}>
+                                      {rec.op.toUpperCase()}: {rec.table} (
+                                      {rec.id})
+                                    </Text>
+                                  </View>
                                 )
                               )}
                               {item.steps?.map(
@@ -1306,8 +1411,9 @@ export default function ChatScreen() {
               ]}
               onPress={handleOpenResumePicker}
               disabled={isSending || isTranscribing || isUploadingResume}
+              accessibilityLabel="Upload resume"
             >
-              <Text style={styles.resumeActionIcon}>📎</Text>
+              <Feather name="paperclip" size={17} color="#475569" />
             </TouchableOpacity>
           )}
 
@@ -1320,8 +1426,15 @@ export default function ChatScreen() {
             ]}
             onPress={toggleVoiceRecording}
             disabled={isSending || isTranscribing || isUploadingResume}
+            accessibilityLabel={
+              isRecording ? "Stop voice recording" : "Record voice message"
+            }
           >
-            <Text style={styles.voiceBtnText}>{isRecording ? "⏹" : "🎤"}</Text>
+            <Feather
+              name={isRecording ? "square" : "mic"}
+              size={isRecording ? 16 : 18}
+              color={isRecording ? "#dc2626" : "#475569"}
+            />
           </TouchableOpacity>
 
           <TextInput
@@ -1358,8 +1471,9 @@ export default function ChatScreen() {
               }
             }}
             disabled={!inputText.trim() || isSending || isRecording}
+            accessibilityLabel="Send message"
           >
-            <Text style={styles.sendBtnText}>&rarr;</Text>
+            <Feather name="arrow-up" size={18} color="#ffffff" />
           </TouchableOpacity>
         </View>
 
@@ -1373,7 +1487,9 @@ export default function ChatScreen() {
           >
             <View style={styles.modalOverlay}>
               <View style={styles.modalContent}>
-                <Text style={styles.modalIcon}>📄</Text>
+                <View style={styles.modalIconBadge}>
+                  <Feather name="file-text" size={26} color="#4f46e5" />
+                </View>
                 <Text style={styles.modalTitle}>Add your resume</Text>
                 <Text style={styles.modalMessage}>
                   We&rsquo;ll read this file to build your profile.
@@ -1425,11 +1541,23 @@ export default function ChatScreen() {
                 contentContainerStyle={{ paddingBottom: 10 }}
               >
                 <View style={styles.serverModalHeader}>
-                  <Text style={styles.serverModalTitle}>
-                    ⚙️ Backend Connection
-                  </Text>
-                  <TouchableOpacity onPress={() => setShowServerModal(false)}>
-                    <Text style={styles.serverModalClose}>✕</Text>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
+                    <Feather name="server" size={16} color="#0f172a" />
+                    <Text style={styles.serverModalTitle}>
+                      Backend Connection
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => setShowServerModal(false)}
+                    accessibilityLabel="Close"
+                  >
+                    <Feather name="x" size={18} color="#64748b" />
                   </TouchableOpacity>
                 </View>
 
@@ -1458,14 +1586,23 @@ export default function ChatScreen() {
                       handleTestServerConnection(tunnelUrl);
                     }}
                   >
-                    <Text
-                      style={[
-                        styles.presetBtnText,
-                        { color: "#1d4ed8", fontWeight: "700" },
-                      ]}
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 5,
+                      }}
                     >
-                      ☁️ Cloudflare HTTPS Tunnel
-                    </Text>
+                      <Feather name="cloud" size={12} color="#1d4ed8" />
+                      <Text
+                        style={[
+                          styles.presetBtnText,
+                          { color: "#1d4ed8", fontWeight: "700" },
+                        ]}
+                      >
+                        Cloudflare HTTPS Tunnel
+                      </Text>
+                    </View>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.presetBtn}
@@ -1474,9 +1611,18 @@ export default function ChatScreen() {
                       handleTestServerConnection("http://10.0.2.2:8001");
                     }}
                   >
-                    <Text style={styles.presetBtnText}>
-                      📱 Emulator (10.0.2.2)
-                    </Text>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 5,
+                      }}
+                    >
+                      <Feather name="smartphone" size={12} color="#334155" />
+                      <Text style={styles.presetBtnText}>
+                        Emulator (10.0.2.2)
+                      </Text>
+                    </View>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.presetBtn}
@@ -1485,9 +1631,18 @@ export default function ChatScreen() {
                       handleTestServerConnection("http://192.168.29.133:8001");
                     }}
                   >
-                    <Text style={styles.presetBtnText}>
-                      📶 Wi-Fi LAN (192.168.29.133)
-                    </Text>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 5,
+                      }}
+                    >
+                      <Feather name="wifi" size={12} color="#334155" />
+                      <Text style={styles.presetBtnText}>
+                        Wi-Fi LAN (192.168.29.133)
+                      </Text>
+                    </View>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.presetBtn}
@@ -1496,9 +1651,16 @@ export default function ChatScreen() {
                       handleTestServerConnection("http://localhost:8001");
                     }}
                   >
-                    <Text style={styles.presetBtnText}>
-                      💻 Localhost (8001)
-                    </Text>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 5,
+                      }}
+                    >
+                      <Feather name="monitor" size={12} color="#334155" />
+                      <Text style={styles.presetBtnText}>Localhost (8001)</Text>
+                    </View>
                   </TouchableOpacity>
                 </View>
 
@@ -1707,9 +1869,16 @@ const styles = StyleSheet.create({
     marginVertical: 40,
     paddingHorizontal: 24,
   },
-  emptyIcon: {
-    fontSize: 44,
-    marginBottom: 8,
+  emptyIconBadge: {
+    width: 52,
+    height: 52,
+    borderRadius: 14,
+    backgroundColor: "#eef2ff",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#c7d2fe",
   },
   emptyTitle: {
     fontSize: 16,
@@ -1893,6 +2062,8 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   privacyNoteBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
     backgroundColor: "#f8fafc",
     borderWidth: 1,
     borderColor: "#e2e8f0",
@@ -1901,6 +2072,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   privacyNoteText: {
+    flex: 1,
     fontSize: 10,
     color: "#64748b",
     lineHeight: 14,
@@ -2066,9 +2238,14 @@ const styles = StyleSheet.create({
     padding: 24,
     paddingBottom: 36,
   },
-  modalIcon: {
-    fontSize: 32,
-    marginBottom: 8,
+  modalIconBadge: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: "#eef2ff",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
   },
   modalTitle: {
     fontSize: 18,

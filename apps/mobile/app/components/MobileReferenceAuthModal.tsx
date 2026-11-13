@@ -9,6 +9,7 @@ import {
   StyleSheet,
   ScrollView,
 } from "react-native";
+import { Feather } from "@expo/vector-icons";
 import {
   authorizeReferenceCheck,
   revokeReferenceCheck,
@@ -124,7 +125,9 @@ export function MobileReferenceAuthModal({
             {/* Header */}
             <View style={styles.headerRow}>
               <View style={styles.headerLeft}>
-                <Text style={styles.headerIcon}>🎖️</Text>
+                <View style={styles.headerIconBadge}>
+                  <Feather name="award" size={16} color="#4f46e5" />
+                </View>
                 <View>
                   <Text style={styles.headerTitle}>
                     Reference Check Authorization
@@ -134,8 +137,12 @@ export function MobileReferenceAuthModal({
                   </Text>
                 </View>
               </View>
-              <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-                <Text style={styles.closeBtnText}>✕</Text>
+              <TouchableOpacity
+                onPress={onClose}
+                style={styles.closeBtn}
+                accessibilityLabel="Close"
+              >
+                <Feather name="x" size={16} color="#64748b" />
               </TouchableOpacity>
             </View>
 
@@ -152,9 +159,19 @@ export function MobileReferenceAuthModal({
               <View style={styles.activeCard}>
                 <View style={styles.activeCardHeader}>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.activeCardTitle}>
-                      ✓ Active Authorization
-                    </Text>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 5,
+                        marginBottom: 4,
+                      }}
+                    >
+                      <Feather name="check" size={13} color="#059669" />
+                      <Text style={styles.activeCardTitle}>
+                        Active Authorization
+                      </Text>
+                    </View>
                     <Text style={styles.activeCardParty}>
                       Party: {authorizedParty || "Campus Placement Cell"}
                     </Text>
@@ -244,13 +261,31 @@ export function MobileReferenceAuthModal({
             {/* Success / Error Messages */}
             {successMessage && (
               <View style={styles.successBox}>
-                <Text style={styles.successText}>✓ {successMessage}</Text>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
+                >
+                  <Feather name="check" size={13} color="#059669" />
+                  <Text style={styles.successText}>{successMessage}</Text>
+                </View>
               </View>
             )}
 
             {error && (
               <View style={styles.errorBox}>
-                <Text style={styles.errorText}>✕ {error}</Text>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
+                >
+                  <Feather name="alert-circle" size={13} color="#dc2626" />
+                  <Text style={styles.errorText}>{error}</Text>
+                </View>
               </View>
             )}
 
@@ -307,8 +342,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
   },
-  headerIcon: {
-    fontSize: 24,
+  headerIconBadge: {
+    width: 34,
+    height: 34,
+    borderRadius: 8,
+    backgroundColor: "#eef2ff",
+    borderWidth: 1,
+    borderColor: "#c7d2fe",
+    alignItems: "center",
+    justifyContent: "center",
   },
   headerTitle: {
     fontSize: 16,

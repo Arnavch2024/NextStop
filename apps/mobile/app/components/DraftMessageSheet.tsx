@@ -11,6 +11,7 @@ import {
   Linking,
   Platform,
 } from "react-native";
+import { Feather } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import { ContactCard, draftOutreach, ApiError } from "@recruiting/shared";
 import { withApiFallback } from "../../lib/supabase";
@@ -146,8 +147,12 @@ export function DraftMessageSheet({
                 {contact.company_name ? ` at ${contact.company_name}` : ""}
               </Text>
             </View>
-            <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
-              <Text style={styles.closeBtnText}>✕</Text>
+            <TouchableOpacity
+              style={styles.closeBtn}
+              onPress={onClose}
+              accessibilityLabel="Close draft message"
+            >
+              <Feather name="x" size={16} color="#64748b" />
             </TouchableOpacity>
           </View>
 
@@ -160,14 +165,27 @@ export function DraftMessageSheet({
               ]}
               onPress={() => setChannel("email")}
             >
-              <Text
-                style={[
-                  styles.tabBtnText,
-                  channel === "email" && styles.tabBtnTextActive,
-                ]}
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 5,
+                }}
               >
-                ✉ Email Draft
-              </Text>
+                <Feather
+                  name="mail"
+                  size={12}
+                  color={channel === "email" ? "#4f46e5" : "#64748b"}
+                />
+                <Text
+                  style={[
+                    styles.tabBtnText,
+                    channel === "email" && styles.tabBtnTextActive,
+                  ]}
+                >
+                  Email Draft
+                </Text>
+              </View>
             </TouchableOpacity>
             <TouchableOpacity
               style={[
@@ -176,21 +194,39 @@ export function DraftMessageSheet({
               ]}
               onPress={() => setChannel("linkedin")}
             >
-              <Text
-                style={[
-                  styles.tabBtnText,
-                  channel === "linkedin" && styles.tabBtnTextActive,
-                ]}
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 5,
+                }}
               >
-                in LinkedIn Note
-              </Text>
+                <Feather
+                  name="linkedin"
+                  size={12}
+                  color={channel === "linkedin" ? "#4f46e5" : "#64748b"}
+                />
+                <Text
+                  style={[
+                    styles.tabBtnText,
+                    channel === "linkedin" && styles.tabBtnTextActive,
+                  ]}
+                >
+                  LinkedIn Note
+                </Text>
+              </View>
             </TouchableOpacity>
           </View>
 
           <ScrollView style={styles.scrollArea}>
             {/* Mandatory Safety Notice */}
             <View style={styles.warningBox}>
-              <Text style={styles.warningIcon}>🛡</Text>
+              <Feather
+                name="shield"
+                size={14}
+                color="#92400e"
+                style={{ marginRight: 6 }}
+              />
               <Text style={styles.warningText}>
                 Review before sending. Nothing is sent for you.
               </Text>
@@ -264,9 +300,19 @@ export function DraftMessageSheet({
                     style={styles.linkedInLinkBtn}
                     onPress={handleOpenLinkedIn}
                   >
-                    <Text style={styles.linkedInLinkText}>
-                      🔗 Open LinkedIn profile in browser
-                    </Text>
+                    <View
+                      style={{ flexDirection: "row", alignItems: "center" }}
+                    >
+                      <Feather
+                        name="external-link"
+                        size={12}
+                        color="#4f46e5"
+                        style={{ marginRight: 6 }}
+                      />
+                      <Text style={styles.linkedInLinkText}>
+                        Open LinkedIn profile in browser
+                      </Text>
+                    </View>
                   </TouchableOpacity>
                 )}
               </View>
@@ -288,9 +334,23 @@ export function DraftMessageSheet({
                 onPress={handleCopy}
                 disabled={!body || isLoading}
               >
-                <Text style={styles.copyBtnText}>
-                  {isCopied ? "✓ Copied!" : "📋 Copy"}
-                </Text>
+                <View
+                  style={{ flexDirection: "row", alignItems: "center", gap: 5 }}
+                >
+                  <Feather
+                    name={isCopied ? "check" : "copy"}
+                    size={12}
+                    color={isCopied ? "#059669" : "#1e293b"}
+                  />
+                  <Text
+                    style={[
+                      styles.copyBtnText,
+                      isCopied && { color: "#059669" },
+                    ]}
+                  >
+                    {isCopied ? "Copied" : "Copy"}
+                  </Text>
+                </View>
               </TouchableOpacity>
 
               {channel === "email" && (
@@ -302,7 +362,16 @@ export function DraftMessageSheet({
                   onPress={handleMailto}
                   disabled={!body || isLoading}
                 >
-                  <Text style={styles.mailtoBtnText}>✉ mailto</Text>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 5,
+                    }}
+                  >
+                    <Feather name="mail" size={12} color="#ffffff" />
+                    <Text style={styles.mailtoBtnText}>Open Mail</Text>
+                  </View>
                 </TouchableOpacity>
               )}
             </View>
