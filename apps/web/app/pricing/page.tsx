@@ -66,18 +66,53 @@ function PricingContent() {
     }
   }, [searchParams]);
 
+  const sessionId = searchParams?.get("session_id");
+
+  // Immediate subscription activation upon returning from Stripe
   useEffect(() => {
-    if (
-      isSuccess &&
-      successPlan &&
-      ["student_pro", "recruiter_pro", "officer_pro", "company_pro"].includes(
-        successPlan
-      )
-    ) {
-      setProSubscription(successPlan as any);
-      setCurrentTier(successPlan);
+    async function activateSubscription() {
+      if (!isSuccess) return;
+
+      const activePlan =
+        successPlan ||
+        (activeRoleTab === "placement_officer"
+          ? "officer_pro"
+          : activeRoleTab === "company"
+            ? "company_pro"
+            : activeRoleTab === "recruiter"
+              ? "recruiter_pro"
+              : "student_pro");
+
+      // Optimistically set client pro tier immediately
+      setProSubscription(activePlan as any);
+      setCurrentTier(activePlan);
+
+      try {
+        const session = await getCurrentSession();
+        const userId = session?.user?.id;
+
+        const res = await fetch("/api/stripe/activate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId: sessionId || null,
+            plan: activePlan,
+            userId: userId || null,
+          }),
+        });
+
+        const data = await res.json();
+        if (data?.tier) {
+          setProSubscription(data.tier);
+          setCurrentTier(data.tier);
+        }
+      } catch (err) {
+        console.warn("Could not reach activation API, using local state:", err);
+      }
     }
-  }, [isSuccess, successPlan]);
+
+    activateSubscription();
+  }, [isSuccess, successPlan, sessionId, activeRoleTab]);
 
   useEffect(() => {
     getCurrentSession().then((session) => {
@@ -98,7 +133,10 @@ function PricingContent() {
         fetch(`/api/stripe/status?userId=${session.user.id}`)
           .then((res) => res.json())
           .then((data) => {
-            if (data?.tier) setCurrentTier(data.tier);
+            if (data?.tier && data.tier !== "free") {
+              setProSubscription(data.tier);
+              setCurrentTier(data.tier);
+            }
           })
           .catch(() => {});
       }

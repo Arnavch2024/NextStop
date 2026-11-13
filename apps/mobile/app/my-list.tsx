@@ -105,6 +105,8 @@ export default function MyListScreen() {
           if (data?.role) setRole(data.role);
           if (data?.subscription_tier)
             syncMobileSubscription(data.subscription_tier);
+          if (data?.subscription_tier)
+            syncMobileSubscription(data.subscription_tier);
         });
       fetchSavedList(session.access_token);
     });
