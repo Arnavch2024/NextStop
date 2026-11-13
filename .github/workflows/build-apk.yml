@@ -46,8 +46,17 @@ jobs:
           distribution: "temurin"
           java-version: 17
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Verify Android SDK (pre-installed on ubuntu-latest)
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          # Accept all SDK licenses non-interactively
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+          # Ensure build-tools and platform are present
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
+            "build-tools;34.0.0" \
+            "platforms;android-34" \
+            --no_https || true
 
       - name: Install Monorepo Dependencies
         run: pnpm install --frozen-lockfile || pnpm install
