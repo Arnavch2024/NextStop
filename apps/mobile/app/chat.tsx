@@ -1452,7 +1452,7 @@ export default function ChatScreen() {
                     ]}
                     onPress={() => {
                       const tunnelUrl =
-                        "https://characteristics-minds-compute-friends.trycloudflare.com";
+                        "https://towards-interference-paths-mag.trycloudflare.com";
                       setCustomServerUrlInput(tunnelUrl);
                       handleTestServerConnection(tunnelUrl);
                     }}
