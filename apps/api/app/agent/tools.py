@@ -331,6 +331,15 @@ def handle_upsert(
 
     user_id = str(user.id)
 
+    def _record_success(t: str, rid: str, op_name: str) -> Dict[str, Any]:
+        try:
+            from app.cache import invalidate_llm_cache
+
+            invalidate_llm_cache(reason=f"tool_upsert_{t}_{op_name}")
+        except Exception:
+            pass
+        return {"table": t, "id": rid, "op": op_name}
+
     try:
         if table == "students":
             # Natural key: profile_id
@@ -342,14 +351,14 @@ def handle_upsert(
             if existing.data and len(existing.data) > 0:
                 rec_id = str(existing.data[0]["id"])
                 supabase_client.table("students").update(clean_data).eq("id", rec_id).execute()
-                return {"table": table, "id": rec_id, "op": "updated"}
+                return _record_success(table, rec_id, "updated")
             else:
                 rec_id = str(uuid.uuid4())
                 clean_data["id"] = rec_id
                 res = supabase_client.table("students").insert(clean_data).execute()
                 if res.data and len(res.data) > 0:
                     rec_id = str(res.data[0].get("id", rec_id))
-                return {"table": table, "id": rec_id, "op": "created"}
+                return _record_success(table, rec_id, "created")
 
         elif table == "colleges":
             from app.auth.college_resolution import fuzzy_match_college
@@ -368,7 +377,7 @@ def handle_upsert(
                         user.college_id = rec_id
                     except Exception:
                         pass
-                return {"table": table, "id": rec_id, "op": "updated"}
+                return _record_success(table, rec_id, "updated")
 
             existing = (
                 supabase_client.table("colleges")
@@ -386,7 +395,7 @@ def handle_upsert(
                         user.college_id = rec_id
                     except Exception:
                         pass
-                return {"table": table, "id": rec_id, "op": "updated"}
+                return _record_success(table, rec_id, "updated")
             else:
                 rec_id = str(uuid.uuid4())
                 clean_data["id"] = rec_id
@@ -399,7 +408,7 @@ def handle_upsert(
                         user.college_id = rec_id
                     except Exception:
                         pass
-                return {"table": table, "id": rec_id, "op": "created"}
+                return _record_success(table, rec_id, "created")
 
         elif table == "companies":
             # Natural key: lower(name)
@@ -410,14 +419,14 @@ def handle_upsert(
             if existing.data and len(existing.data) > 0:
                 rec_id = str(existing.data[0]["id"])
                 supabase_client.table("companies").update(clean_data).eq("id", rec_id).execute()
-                return {"table": table, "id": rec_id, "op": "updated"}
+                return _record_success(table, rec_id, "updated")
             else:
                 rec_id = str(uuid.uuid4())
                 clean_data["id"] = rec_id
                 res = supabase_client.table("companies").insert(clean_data).execute()
                 if res.data and len(res.data) > 0:
                     rec_id = str(res.data[0].get("id", rec_id))
-                return {"table": table, "id": rec_id, "op": "created"}
+                return _record_success(table, rec_id, "created")
 
         elif table == "contacts":
             from app.search.dedupe import upsert_contact
@@ -425,7 +434,7 @@ def handle_upsert(
             source = clean_data.get("source", "user_said")
             source_url = clean_data.get("source_url")
             res = upsert_contact(supabase_client, clean_data, user, source=source, source_url=source_url)
-            return {"table": table, "id": res["contact_id"], "op": res["op"]}
+            return _record_success(table, res["contact_id"], res["op"])
 
         elif table in ("education", "internships", "jobs", "skills"):
             # Ownership enforcement: find student_id where profile_id = user.id
@@ -552,7 +561,7 @@ def handle_upsert(
                 except Exception as exc:
                     logger.warning(f"Could not recompute score after upsert on {table}: {exc}")
 
-            return {"table": table, "id": rec_id, "op": op}
+            return _record_success(table, rec_id, op)
 
     except Exception as exc:
         logger.error(f"Error handling upsert for table {table}: {exc}")

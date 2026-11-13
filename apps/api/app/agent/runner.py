@@ -23,6 +23,7 @@ from app.agent.tools import (
     handle_propose_verify,
     handle_upsert,
 )
+from app.cache import invalidate_llm_cache, llm_reply_cache
 from app.config import settings
 from app.db.supabase import (
     close_agent_run,
@@ -148,6 +149,50 @@ def run_agent_loop(
     5. Writes the final reply to raw_events and updates agent_runs to completed.
     """
     sb = supabase_client or get_supabase_client()
+
+    # 0. Check LLM Reply Cache before calling Gemini
+    cached_response = llm_reply_cache.get_cached_reply(
+        message=message,
+        role=user.role.value if hasattr(user.role, "value") else str(user.role),
+        college_id=user.college_id,
+        company_id=getattr(user, "company_id", None),
+        is_demo=getattr(user, "is_demo", False),
+        client=sb,
+    )
+    if cached_response is not None:
+        logger.info(f"Serving cached LLM reply for user {user.id} (query: '{message[:40]}...')")
+        run_id = create_agent_run(user.id, sb)
+        write_raw_event(user.id, source="user_message", payload={"message": message}, client=sb)
+        write_raw_event(
+            user.id,
+            source="agent_message",
+            payload={"message": cached_response.reply, "cached": True},
+            client=sb,
+        )
+        cached_steps = list(cached_response.steps)
+        if not any(getattr(s, "summary", None) == "Cached from central data lake" for s in cached_steps):
+            cached_steps.append(
+                AgentStep(
+                    type=AgentStepType.FINAL_REPLY,
+                    summary="Cached from central data lake",
+                    output={"message": cached_response.reply, "cached": True},
+                    at=datetime.now(timezone.utc),
+                )
+            )
+        close_agent_run(
+            run_id,
+            status="completed",
+            steps=[s.model_dump(mode="json") for s in cached_steps],
+            client=sb,
+        )
+        return ChatResponse(
+            reply=cached_response.reply,
+            steps=cached_steps,
+            records_created=[],
+            contacts=cached_response.contacts,
+            cards=cached_response.cards,
+        )
+
     gm = gemini_client or get_gemini_client()
     if llm_provider:
         provider = llm_provider
@@ -680,13 +725,28 @@ def run_agent_loop(
             client=sb,
         )
 
-        return ChatResponse(
+        chat_response = ChatResponse(
             reply=reply_text,
             steps=steps,
             records_created=records_created,
             contacts=response_contacts,
             cards=cards,
         )
+
+        # 7. Update LLM cache: cache read responses; invalidate cache on data mutations
+        if records_created and len(records_created) > 0:
+            invalidate_llm_cache(reason=f"agent_loop_records_created_{len(records_created)}")
+        else:
+            llm_reply_cache.set_cached_reply(
+                message=message,
+                role=user.role.value if hasattr(user.role, "value") else str(user.role),
+                response=chat_response,
+                college_id=user.college_id,
+                company_id=getattr(user, "company_id", None),
+                is_demo=getattr(user, "is_demo", False),
+            )
+
+        return chat_response
 
     except Exception as exc:
         logger.error(f"Agent loop error for user {user.id}: {exc}")

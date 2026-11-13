@@ -232,6 +232,14 @@ async def upload_resume(
     # 10. Compute missing fields
     missing_fields = compute_missing_fields(supabase, student_id)
 
+    if records_created:
+        try:
+            from app.cache import invalidate_llm_cache
+
+            invalidate_llm_cache(reason=f"resume_parsed_records_{len(records_created)}")
+        except Exception as e_cache:
+            logger.debug(f"Cache invalidation note: {e_cache}")
+
     return ResumeResponse(
         document_id=doc_id,
         signed_url=signed_url,

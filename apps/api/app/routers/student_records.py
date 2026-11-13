@@ -261,6 +261,15 @@ async def import_student_records(
         imported_count += 1
 
     logger.info(f"Imported {imported_count} student records, skipped {skipped_count} for college {college_id}")
+
+    if imported_count > 0:
+        try:
+            from app.cache import invalidate_llm_cache
+
+            invalidate_llm_cache(reason=f"student_records_imported_{imported_count}")
+        except Exception as e_cache:
+            logger.debug(f"Cache invalidation note: {e_cache}")
+
     return ImportReport(imported=imported_count, skipped=skipped_count, reasons=reasons)
 
 

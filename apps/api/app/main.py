@@ -11,6 +11,7 @@ from app.llm.check_models import check_configured_models, should_skip_model_chec
 from app.logger import logger
 from app.routers import (
     agent_runs_router,
+    cache_router,
     campus_hiring_router,
     chat_router,
     contacts_router,
@@ -88,6 +89,7 @@ app.include_router(scores_router)
 app.include_router(demo_auth_router)
 app.include_router(student_records_router)
 app.include_router(campus_hiring_router)
+app.include_router(cache_router)
 
 
 def custom_openapi():

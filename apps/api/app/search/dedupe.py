@@ -440,4 +440,13 @@ def upsert_contact(
         logger.debug(f"Could not record raw_events contact_metadata: {e_meta}")
 
     logger.info(f"upsert_contact {op}: id={contact_id}, source={source}")
+
+    # Invalidate cached LLM responses since central lake contacts have been added or updated
+    try:
+        from app.cache import invalidate_llm_cache
+
+        invalidate_llm_cache(reason=f"contact_{op}_{source}")
+    except Exception as e_inv:
+        logger.debug(f"Cache invalidation note: {e_inv}")
+
     return {"contact_id": contact_id, "op": op}
